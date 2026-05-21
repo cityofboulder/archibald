@@ -1,4 +1,3 @@
-# tests/helpers.py
 from __future__ import annotations
 
 import httpx
@@ -7,7 +6,10 @@ from unittest.mock import AsyncMock
 
 from archie.auth.base import ArcGISAuth
 from archie.auth.user_token import UserTokenAuth
+from archie.client import ArchieClient
 from archie.errors import handle_esri_errors
+
+AnyClient = UserTokenAuth | ArchieClient
 
 
 class StaticTokenAuth(ArcGISAuth):
@@ -24,9 +26,11 @@ class StaticTokenAuth(ArcGISAuth):
         """No-op: static token never needs refreshing."""
 
 
-def make_response(body: dict) -> httpx.Response:
+def make_response(body: dict, *, status_code: int = 200) -> httpx.Response:
     """Create a minimal httpx.Response with a JSON body for use in tests."""
-    return httpx.Response(200, json=body)
+    response = httpx.Response(status_code, json=body)
+    response.request = httpx.Request("GET", "https://example.com")
+    return response
 
 
 def make_decorated_call(body: dict):
@@ -40,15 +44,17 @@ def make_decorated_call(body: dict):
 
 
 def inject_mock_client(
-    target: UserTokenAuth,
+    target: AnyClient,
     response: httpx.Response,
     mocker: MockerFixture,
 ) -> AsyncMock:
-    """Inject a mock httpx.AsyncClient onto target._client that returns response on post().
+    """Inject a mock httpx.AsyncClient onto target._client.
 
-    Returns the mock client so callers can make assertions against it.
+    The mock returns *response* for any call to request() or post().
+    Returns the mock so callers can make assertions against it.
     """
     mock_client = mocker.AsyncMock(spec=httpx.AsyncClient)
+    mock_client.request.return_value = response
     mock_client.post.return_value = response
     target._client = mock_client
     return mock_client
