@@ -9,7 +9,16 @@ from tests.helpers import StaticTokenAuth
 class TestArcGISAuthContract:
     def test_cannot_instantiate_without_get_token(self):
         class IncompleteAuth(ArcGISAuth):
-            pass
+            async def force_refresh(self) -> None:
+                pass
+
+        with pytest.raises(TypeError):
+            IncompleteAuth()  # type: ignore
+
+    def test_cannot_instantiate_without_force_refresh(self):
+        class IncompleteAuth(ArcGISAuth):
+            async def get_token(self) -> str:
+                return "token"
 
         with pytest.raises(TypeError):
             IncompleteAuth()  # type: ignore

@@ -20,6 +20,9 @@ class StaticTokenAuth(ArcGISAuth):
         """Return the static token provided at construction."""
         return self._token
 
+    async def force_refresh(self) -> None:
+        """No-op: static token never needs refreshing."""
+
 
 def make_response(body: dict) -> httpx.Response:
     """Create a minimal httpx.Response with a JSON body for use in tests."""

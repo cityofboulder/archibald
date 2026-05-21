@@ -24,6 +24,14 @@ class ArcGISAuth(httpx.Auth, ABC):
         Implementations are responsible for caching, refresh, and expiry.
         This method must always return a token that is ready to use.
         """
+    
+    @abstractmethod
+    async def force_refresh(self) -> None:
+        """Unconditionally refresh the access token.
+
+        Called by ArchieClient when a 498/499 response is received. Implementations
+        must fetch a fresh token regardless of any cached state.
+        """
 
     async def async_auth_flow(
         self, request: httpx.Request
