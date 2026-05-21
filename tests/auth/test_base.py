@@ -3,7 +3,7 @@ import httpx
 
 from archie.auth.base import ArcGISAuth
 
-from ..helpers import StaticTokenAuth
+from tests.helpers import StaticTokenAuth
 
 
 class TestArcGISAuthContract:

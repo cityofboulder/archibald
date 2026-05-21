@@ -8,7 +8,7 @@ from archie.exceptions import (
     TokenExpiredError,
     TokenMissingError,
 )
-from .helpers import make_decorated_call, make_response
+from tests.helpers import make_decorated_call, make_response
 
 
 class TestParseEsriError:
