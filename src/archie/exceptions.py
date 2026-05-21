@@ -62,3 +62,7 @@ class TokenRefreshError(ArchieClientError):
 
 class ConfigurationError(ArchieClientError):
     """The client or auth object was configured incorrectly."""
+
+
+class InvalidServiceURL(ArchieClientError):
+    """The provided URL does not match the expected service type."""
