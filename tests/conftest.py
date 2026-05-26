@@ -3,6 +3,7 @@ import pytest
 from archie.auth.user_token import ARCGIS_ONLINE_BASE_URL, UserTokenAuth
 from archie.client import ArchieClient
 from archie.services.base import BaseService
+from archie.services.feature_service import FeatureService
 from tests.helpers import SERVICE_PATH, StaticTokenAuth, MinimalService
 
 
@@ -35,3 +36,8 @@ def mock_client(mocker):
 def service(mock_client) -> BaseService:
     """A default BaseService instance for use in tests."""
     return MinimalService(client=mock_client, service_path=SERVICE_PATH)
+
+@pytest.fixture
+def feature_service(mock_client) -> FeatureService:
+    """A default FeatureService instance backed by a mock client."""
+    return FeatureService(client=mock_client, service_path=SERVICE_PATH)
