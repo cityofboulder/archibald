@@ -1,40 +1,40 @@
 import pytest
 
 from archie.exceptions import InvalidServiceURL
-from tests.helpers import BASE_URL, MinimalService, make_response
+from tests.helpers import SERVICE_PATH, MinimalService, make_response
 
 
-class TestValidateURL:
+class TestValidatePath:
     @pytest.mark.parametrize(
-        "url,expected_url",
+        "path,expected_path",
         [
-            (BASE_URL, BASE_URL),
-            (BASE_URL + "/", BASE_URL),
+            (SERVICE_PATH, SERVICE_PATH),
+            (SERVICE_PATH + "/", SERVICE_PATH),
         ],
-        ids=["valid_url", "trailing_slash_stripped"],
+        ids=["valid_path", "trailing_slash_stripped"],
     )
-    def test_valid_url(self, mock_client, url, expected_url):
-        service = MinimalService(client=mock_client, url=url)
+    def test_valid_path(self, mock_client, path, expected_path):
+        service = MinimalService(client=mock_client, service_path=path)
 
-        assert service._url == expected_url
+        assert service._service_path == expected_path
 
     @pytest.mark.parametrize(
-        "url,match",
+        "path,match",
         [
             (
-                "https://example.com/arcgis/rest/services/MyService/MapServer",
+                "services/MyService/MapServer",
                 "FeatureServer",
             ),
             (
-                "https://example.com/arcgis/rest/services/MyService/MapServer",
+                "services/MyService/MapServer",
                 "MapServer",
             ),
         ],
-        ids=["error_contains_expected_type", "error_contains_provided_url"],
+        ids=["error_contains_expected_type", "error_contains_provided_path"],
     )
-    def test_invalid_url_raises(self, mock_client, url, match):
+    def test_invalid_path_raises(self, mock_client, path, match):
         with pytest.raises(InvalidServiceURL, match=match):
-            MinimalService(client=mock_client, url=url)
+            MinimalService(client=mock_client, service_path=path)
 
 
 class TestGetServiceMetadata:
@@ -57,9 +57,9 @@ class TestGetServiceMetadata:
         mock_client.get.assert_called_once()
 
     @pytest.mark.anyio
-    async def test_calls_client_with_service_url(self, service, mock_client):
+    async def test_calls_client_with_service_path(self, service, mock_client):
         mock_client.get.return_value = make_response({"type": "FeatureServer"})
 
         await service._get_service_metadata()
 
-        mock_client.get.assert_called_once_with(url=BASE_URL)
+        mock_client.get.assert_called_once_with(endpoint=SERVICE_PATH)

@@ -11,6 +11,7 @@ from archie.errors import handle_esri_errors
 from archie.services.base import BaseService
 
 BASE_URL = "https://example.com/arcgis/rest/services/MyService/FeatureServer"
+SERVICE_PATH = "services/MyService/FeatureServer"
 
 AnyClient = UserTokenAuth | ArchieClient
 
