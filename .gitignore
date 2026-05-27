@@ -8,3 +8,9 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Tests
+.pytest*
+
+# Claude-specific files
+.claude/*.local.*
