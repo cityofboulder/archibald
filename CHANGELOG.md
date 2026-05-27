@@ -15,5 +15,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - User token auth flows, where a user supplies a username and password in exchange for a token from ESRI's generateToken endpoint. Implemented as `UserTokenAuth`.
 - Base httpx client that handles authentication, enforces response formatting, and routes get and post requests from any endpoint. Implemented as `ArchieClient`.
 - Base service class that handles service metadata retreival, url validation, and client injection, implemented as `BaseService`.
+- `QueryResult` data class will be returned from all feature layer queries. Has attributes for features returned, field names, whether features are geojson, and the output crs if geometries are returned.
 
 [Unreleased]: https://github.com/cityofboulder/archie

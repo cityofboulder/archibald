@@ -2,6 +2,7 @@ import pytest
 
 from archie.auth.user_token import ARCGIS_ONLINE_BASE_URL, UserTokenAuth
 from archie.client import ArchieClient
+from archie.models.query_result import QueryResult
 from archie.services.base import BaseService
 from archie.services.feature_service import FeatureService
 from tests.helpers import SERVICE_PATH, StaticTokenAuth, MinimalService
@@ -37,7 +38,29 @@ def service(mock_client) -> BaseService:
     """A default BaseService instance for use in tests."""
     return MinimalService(client=mock_client, service_path=SERVICE_PATH)
 
+
 @pytest.fixture
 def feature_service(mock_client) -> FeatureService:
     """A default FeatureService instance backed by a mock client."""
     return FeatureService(client=mock_client, service_path=SERVICE_PATH)
+
+
+@pytest.fixture
+def geojson_query_result():
+    return QueryResult(
+        features=[
+            {
+                "type": "Feature",
+                "properties": {"OBJECTID": 1, "Name": "Feature1"},
+                "geometry": {"type": "Point", "coordinates": [0, 0]},
+            },
+            {
+                "type": "Feature",
+                "properties": {"OBJECTID": 2, "Name": "Feature2"},
+                "geometry": {"type": "Point", "coordinates": [1, 1]},
+            },
+        ],
+        fields=["OBJECTID", "Name"],
+        geojson=True,
+        crs=4326,
+    )
