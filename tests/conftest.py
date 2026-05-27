@@ -2,6 +2,7 @@ import pytest
 
 from archie.auth.user_token import ARCGIS_ONLINE_BASE_URL, UserTokenAuth
 from archie.client import ArchieClient
+from archie.models.fields_result import FieldsResult
 from archie.models.query_result import QueryResult
 from archie.services.base import BaseService
 from archie.services.feature_service import FeatureService
@@ -43,6 +44,18 @@ def service(mock_client) -> BaseService:
 def feature_service(mock_client) -> FeatureService:
     """A default FeatureService instance backed by a mock client."""
     return FeatureService(client=mock_client, service_path=SERVICE_PATH)
+
+
+@pytest.fixture
+def fields_result() -> FieldsResult:
+    """A FieldsResult with a mix of editable and non-editable fields."""
+    return FieldsResult(
+        fields=[
+            {"name": "OBJECTID", "type": "esriFieldTypeOID", "editable": False},
+            {"name": "Name", "type": "esriFieldTypeString", "editable": True},
+            {"name": "Status", "type": "esriFieldTypeInteger", "editable": True},
+        ]
+    )
 
 
 @pytest.fixture

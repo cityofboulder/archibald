@@ -16,5 +16,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Base httpx client that handles authentication, enforces response formatting, and routes get and post requests from any endpoint. Implemented as `ArchieClient`.
 - Base service class that handles service metadata retreival, url validation, and client injection, implemented as `BaseService`.
 - `QueryResult` data class will be returned from all feature layer queries. Has attributes for features returned, field names, whether features are geojson, and the output crs if geometries are returned.
+- `FieldsResult` data class returned from querying a feature layer for field names, types, etc.
 
 [Unreleased]: https://github.com/cityofboulder/archie
