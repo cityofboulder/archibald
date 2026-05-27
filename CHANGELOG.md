@@ -17,5 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Base service class that handles service metadata retreival, url validation, and client injection, implemented as `BaseService`.
 - `QueryResult` data class will be returned from all feature layer queries. Has attributes for features returned, field names, whether features are geojson, and the output crs if geometries are returned.
 - `FieldsResult` data class returned from querying a feature layer for field names, types, etc.
+- `QueryOperation` executes queries against a feature layer with automatic pagination. Validates requested field names against the layer's field metadata, builds ESRI REST query parameters with deterministic `OBJECTID ASC` ordering by default, and fans out remaining pages in parallel via `anyio` task groups when `exceededTransferLimit` is returned. Geometry output is always encoded as GeoJSON; CRS defaults to the layer's native spatial reference when `out_sr` is not provided.
 
 [Unreleased]: https://github.com/cityofboulder/archie

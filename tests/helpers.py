@@ -36,6 +36,20 @@ class StaticTokenAuth(ArcGISAuth):
         """No-op: static token never needs refreshing."""
 
 
+def make_feature(
+    objectid: int,
+    name: str = "Feature",
+    x: float = 0.0,
+    y: float = 0.0,
+) -> dict:
+    """Create a minimal GeoJSON Feature dict for use in tests."""
+    return {
+        "type": "Feature",
+        "properties": {"OBJECTID": objectid, "Name": name},
+        "geometry": {"type": "Point", "coordinates": [x, y]},
+    }
+
+
 def make_response(body: dict, *, status_code: int = 200) -> httpx.Response:
     """Create a minimal httpx.Response with a JSON body for use in tests."""
     response = httpx.Response(status_code, json=body)
