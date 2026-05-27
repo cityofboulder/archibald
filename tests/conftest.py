@@ -84,6 +84,12 @@ def query_op(mock_layer) -> QueryOperation:
 
 
 @pytest.fixture
+def feature_layer(mock_client) -> FeatureLayer:
+    """A real FeatureLayer backed by mock_client, at layer 0."""
+    return FeatureLayer(client=mock_client, service_path=SERVICE_PATH, layer_id=0)
+
+
+@pytest.fixture
 def geojson_query_result():
     return QueryResult(
         features=[
