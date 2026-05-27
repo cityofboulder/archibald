@@ -31,3 +31,6 @@ dev = [
 
 [tool.pytest.ini_options]
 anyio_mode = "auto"
+markers = [
+    "integration: full-stack tests with mocked HTTP transport",
+]
