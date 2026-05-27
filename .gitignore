@@ -14,3 +14,7 @@ wheels/
 
 # Claude-specific files
 .claude/*.local.*
+
+# Code editors
+.vscode/
+.idea/
