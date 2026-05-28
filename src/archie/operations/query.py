@@ -51,12 +51,14 @@ class QueryOperation:
         normalized_fields = await self._normalize_out_fields(out_fields)
         normalized_fields = await self._validate_fields(normalized_fields)
 
+        crs = (out_sr or await self._layer.crs()) if return_geometry else None
+
         # Build initial params
         params = await self._build_params(
             where=where,
             out_fields=normalized_fields,
             return_geometry=return_geometry,
-            out_sr=out_sr,
+            out_sr=crs,
             **kwargs,
         )
 
@@ -80,7 +82,7 @@ class QueryOperation:
             features=features,
             fields=normalized_fields.split(","),
             geojson=return_geometry,
-            crs=(out_sr or await self._layer.crs()) if return_geometry else None,
+            crs=crs,
         )
 
     async def _normalize_out_fields(self, out_fields: list[str] | str | None) -> str:
