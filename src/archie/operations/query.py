@@ -69,7 +69,9 @@ class QueryOperation:
         features = first_data.get("features", [])
 
         # Paginate the rest if needed
-        exceeded = first_data.get("exceededTransferLimit", False)
+        exceeded = (first_data.get("exceededTransferLimit", False)) or (
+            first_data.get("properties", {}).get("exceededTransferLimit", False)
+        )
         if exceeded:
             additional_features = await self._fetch_remaining_pages(params, first_data)
             features.extend(additional_features)
