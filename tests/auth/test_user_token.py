@@ -214,7 +214,8 @@ class TestFetchToken:
             data={
                 "username": "testuser",
                 "password": "pass",
-                "client": "requestip",
+                "client": "referer",
+                "referer": ARCGIS_ONLINE_BASE_URL,
                 "expiration": 120,
                 "f": "json",
             },

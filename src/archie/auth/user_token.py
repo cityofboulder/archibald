@@ -43,9 +43,10 @@ class UserTokenAuth(ArcGISAuth):
         if expiration < 1:
             raise ConfigurationError("expiration must be at least 1 minute.")
 
+        self._base_url = base_url.rstrip("/")
         self._username = username
         self._password = SecretStr(password)
-        self._token_url = base_url.rstrip("/") + TOKEN_PATH
+        self._token_url = self._base_url + TOKEN_PATH
         self._expiration = expiration
 
         self._token: str | None = None
@@ -86,7 +87,8 @@ class UserTokenAuth(ArcGISAuth):
                 data={
                     "username": self._username,
                     "password": self._password.get_secret_value(),
-                    "client": "requestip",
+                    "client": "referer",
+                    "referer": self._base_url,
                     "expiration": self._expiration,
                     "f": "json",
                 },
