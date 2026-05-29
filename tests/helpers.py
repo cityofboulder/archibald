@@ -4,13 +4,11 @@ import httpx
 from pytest_mock import MockerFixture
 from unittest.mock import AsyncMock
 
-from archie.auth.base import ArcGISAuth
-from archie.auth.user_token import UserTokenAuth
+from archie.auth import ArcGISAuth, UserTokenAuth
 from archie.client import ArchieClient
 from archie.errors import handle_esri_errors
-from archie.models.fields_result import FieldsResult
-from archie.models.query_result import QueryResult
-from archie.services.base import BaseService
+from archie.models import FieldsResult, QueryResult
+from archie.services import BaseService
 
 BASE_URL = "https://example.com/arcgis/rest/services/MyService/FeatureServer"
 SERVICE_PATH = "services/MyService/FeatureServer"

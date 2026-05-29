@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import httpx
 
-from archie.auth.base import ArcGISAuth
+from archie.auth import ArcGISAuth
 from archie.errors import handle_esri_errors
 from archie.exceptions import TokenExpiredError, TokenMissingError
 

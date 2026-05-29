@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 from archie.exceptions import ArcGISError
-from archie.models.query_result import QueryResult
+from archie.models import QueryResult
 from tests.integration.conftest import (
     FEATURES,
     LAYER_METADATA,

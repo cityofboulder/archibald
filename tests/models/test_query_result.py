@@ -4,7 +4,7 @@ import pytest
 import pandas as pd
 import geopandas as gpd
 
-from archie.models.fields_result import FieldsResult
+from archie.models import FieldsResult
 from tests.helpers import make_query_result
 
 

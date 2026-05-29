@@ -3,7 +3,7 @@
 import pytest
 import pandas as pd
 
-from archie.models.fields_result import FieldsResult
+from archie.models import FieldsResult
 
 
 class TestNames:

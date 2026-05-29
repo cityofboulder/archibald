@@ -1,7 +1,7 @@
 import pytest
 import httpx
 
-from archie.auth.base import ArcGISAuth
+from archie.auth import ArcGISAuth
 
 from tests.helpers import StaticTokenAuth
 

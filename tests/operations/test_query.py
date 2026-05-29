@@ -2,7 +2,7 @@
 
 import pytest
 
-from archie.models.query_result import QueryResult
+from archie.models import QueryResult
 from tests.helpers import make_feature, make_response
 
 

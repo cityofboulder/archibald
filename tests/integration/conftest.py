@@ -5,7 +5,7 @@ import pytest
 import respx
 
 from archie.client import ArchieClient
-from archie.services.feature_layer import FeatureLayer
+from archie.services import FeatureLayer
 from tests.helpers import SERVICE_PATH, StaticTokenAuth
 
 # ---------------------------------------------------------------------------

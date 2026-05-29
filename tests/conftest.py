@@ -1,13 +1,10 @@
 import pytest
 
-from archie.auth.user_token import ARCGIS_ONLINE_BASE_URL, UserTokenAuth
+from archie.auth import ARCGIS_ONLINE_BASE_URL, UserTokenAuth
 from archie.client import ArchieClient
-from archie.models.fields_result import FieldsResult
-from archie.models.query_result import QueryResult
-from archie.operations.query import QueryOperation
-from archie.services.base import BaseService
-from archie.services.feature_layer import FeatureLayer
-from archie.services.feature_service import FeatureService
+from archie.models import FieldsResult, QueryResult
+from archie.operations import QueryOperation
+from archie.services import BaseService, FeatureLayer, FeatureService
 from tests.helpers import SERVICE_PATH, StaticTokenAuth, MinimalService
 
 

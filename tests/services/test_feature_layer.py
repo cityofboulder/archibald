@@ -2,8 +2,8 @@
 
 import pytest
 
-from archie.models.fields_result import FieldsResult
-from archie.services.feature_layer import FeatureLayer
+from archie.models import FieldsResult
+from archie.services import FeatureLayer
 from tests.helpers import SERVICE_PATH, make_response
 
 

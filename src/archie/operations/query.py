@@ -6,10 +6,10 @@ from typing import TYPE_CHECKING
 
 import anyio
 
-from archie.models.query_result import QueryResult
+from archie.models import QueryResult
 
 if TYPE_CHECKING:
-    from archie.services.feature_layer import FeatureLayer
+    from archie.services import FeatureLayer
 
 
 class QueryOperation:
