@@ -8,6 +8,8 @@ from archie.auth.base import ArcGISAuth
 from archie.auth.user_token import UserTokenAuth
 from archie.client import ArchieClient
 from archie.errors import handle_esri_errors
+from archie.models.fields_result import FieldsResult
+from archie.models.query_result import QueryResult
 from archie.services.base import BaseService
 
 BASE_URL = "https://example.com/arcgis/rest/services/MyService/FeatureServer"
@@ -34,6 +36,17 @@ class StaticTokenAuth(ArcGISAuth):
 
     async def force_refresh(self) -> None:
         """No-op: static token never needs refreshing."""
+
+
+def make_query_result(
+    features: list[dict],
+    fields: FieldsResult,
+    *,
+    geojson: bool = True,
+    crs: int | None = None,
+) -> QueryResult:
+    """Create a QueryResult for use in tests."""
+    return QueryResult(features=features, fields=fields, geojson=geojson, crs=crs)
 
 
 def make_feature(
