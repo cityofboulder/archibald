@@ -1,4 +1,5 @@
 """QueryOperation: execute queries against a feature layer with pagination support."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -78,9 +79,12 @@ class QueryOperation:
             additional_features = await self._fetch_remaining_pages(params, first_data)
             features.extend(additional_features)
 
+        fields_result = await self._layer.fields()
+        fields_result = fields_result.filter(names=normalized_fields.split(","))
+
         return QueryResult(
             features=features,
-            fields=normalized_fields.split(","),
+            fields=fields_result,
             geojson=return_geometry,
             crs=crs,
         )
@@ -117,7 +121,7 @@ class QueryOperation:
                 f"Unknown field names: {', '.join(sorted(unknown))}. "
                 f"Valid fields: {', '.join(sorted(valid_names))}"
             )
-        
+
         return out_fields
 
     async def _build_params(
@@ -145,11 +149,13 @@ class QueryOperation:
         """
         params = kwargs.copy()
 
-        params.update({
-            "where": where,
-            "outFields": out_fields,
-            "returnGeometry": "true" if return_geometry else "false",
-        })
+        params.update(
+            {
+                "where": where,
+                "outFields": out_fields,
+                "returnGeometry": "true" if return_geometry else "false",
+            }
+        )
 
         if out_sr is not None:
             params["outSR"] = str(out_sr)
