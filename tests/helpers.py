@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 from archie.auth import ArcGISAuth, UserTokenAuth
 from archie.client import ArchieClient
 from archie.errors import handle_esri_errors
-from archie.models import FieldsResult, QueryResult
+from archie.models import ApplyEditsResult, EditResultItem, FieldsResult, QueryResult
 from archie.services import BaseService
 
 BASE_URL = "https://example.com/arcgis/rest/services/MyService/FeatureServer"
@@ -66,6 +66,35 @@ def make_response(body: dict, *, status_code: int = 200) -> httpx.Response:
     response = httpx.Response(status_code, json=body)
     response.request = httpx.Request("GET", "https://example.com")
     return response
+
+
+def make_edit_result_item(
+    object_id: int,
+    *,
+    success: bool = True,
+    global_id: str | None = None,
+    error: dict | None = None,
+) -> EditResultItem:
+    """Create an EditResultItem for use in tests."""
+    return EditResultItem(
+        object_id=object_id,
+        global_id=global_id,
+        success=success,
+        error=error,
+    )
+
+
+def make_apply_edits_result(
+    adds: list[EditResultItem] | None = None,
+    updates: list[EditResultItem] | None = None,
+    deletes: list[EditResultItem] | None = None,
+) -> ApplyEditsResult:
+    """Create an ApplyEditsResult for use in tests."""
+    return ApplyEditsResult(
+        add_results=adds or [],
+        update_results=updates or [],
+        delete_results=deletes or [],
+    )
 
 
 def make_decorated_call(body: dict):
