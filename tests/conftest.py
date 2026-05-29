@@ -50,12 +50,12 @@ def feature_service(mock_client) -> FeatureService:
 
 @pytest.fixture
 def fields_result() -> FieldsResult:
-    """A FieldsResult with a mix of editable and non-editable fields."""
+    """A FieldsResult with a mix of editable, non-editable, and nullable fields."""
     return FieldsResult(
         fields=[
-            {"name": "OBJECTID", "type": "esriFieldTypeOID", "editable": False},
-            {"name": "Name", "type": "esriFieldTypeString", "editable": True},
-            {"name": "Status", "type": "esriFieldTypeInteger", "editable": True},
+            {"name": "OBJECTID", "type": "esriFieldTypeOID",     "editable": False, "nullable": False},
+            {"name": "Name",     "type": "esriFieldTypeString",  "editable": True,  "nullable": True},
+            {"name": "Status",   "type": "esriFieldTypeInteger", "editable": True},  # nullable absent → defaults True
         ]
     )
 
@@ -90,7 +90,7 @@ def feature_layer(mock_client) -> FeatureLayer:
 
 
 @pytest.fixture
-def geojson_query_result():
+def geojson_query_result(fields_result):
     return QueryResult(
         features=[
             {
@@ -104,7 +104,7 @@ def geojson_query_result():
                 "geometry": {"type": "Point", "coordinates": [1, 1]},
             },
         ],
-        fields=["OBJECTID", "Name"],
+        fields=fields_result.filter(names=["OBJECTID", "Name"]),
         geojson=True,
         crs=4326,
     )

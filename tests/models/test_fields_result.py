@@ -56,3 +56,110 @@ class TestToFrame:
 
         assert isinstance(result, pd.DataFrame)
         assert result.empty
+
+
+class TestFilter:
+    @pytest.mark.parametrize(
+        "names, expected",
+        [
+            (["OBJECTID"], ["OBJECTID"]),
+            (["OBJECTID", "Name"], ["OBJECTID", "Name"]),
+            (["Unknown"], []),
+            ([], []),
+        ],
+        ids=["single", "multiple", "unknown", "empty-list"],
+    )
+    def test_filter_by_names_returns_matching_fields(
+        self, fields_result, names, expected
+    ):
+        result = fields_result.filter(names=names)
+
+        assert result.names() == expected
+
+    @pytest.mark.parametrize(
+        "types, expected",
+        [
+            ("esriFieldTypeOID", ["OBJECTID"]),
+            (["esriFieldTypeOID", "esriFieldTypeInteger"], ["OBJECTID", "Status"]),
+            ("esriFieldTypeDate", []),
+        ],
+        ids=["single-string", "list-of-types", "unknown-type"],
+    )
+    def test_filter_by_types_returns_matching_fields(
+        self, fields_result, types, expected
+    ):
+        result = fields_result.filter(types=types)
+
+        assert result.names() == expected
+
+    @pytest.mark.parametrize(
+        "editable, expected",
+        [
+            (True, ["Name", "Status"]),
+            (False, ["OBJECTID"]),
+        ],
+        ids=["editable-only", "non-editable-only"],
+    )
+    def test_filter_by_editable_returns_matching_fields(
+        self, fields_result, editable, expected
+    ):
+        result = fields_result.filter(editable=editable)
+
+        assert result.names() == expected
+
+    @pytest.mark.parametrize(
+        "nullable, expected",
+        [
+            (True, ["Name", "Status"]),  # explicit True + absent key (defaults True)
+            (False, ["OBJECTID"]),
+        ],
+        ids=["nullable-only", "non-nullable-only"],
+    )
+    def test_filter_by_nullable_returns_matching_fields(
+        self, fields_result, nullable, expected
+    ):
+        result = fields_result.filter(nullable=nullable)
+
+        assert result.names() == expected
+
+    @pytest.mark.parametrize(
+        "kwargs, expected",
+        [
+            ({"names": ["OBJECTID", "Name"], "editable": True}, ["Name"]),
+            ({"types": "esriFieldTypeInteger", "editable": True}, ["Status"]),
+            ({"editable": True, "nullable": True}, ["Name", "Status"]),
+        ],
+        ids=["names-and-editable", "types-and-editable", "editable-and-nullable"],
+    )
+    def test_filter_combines_criteria(self, fields_result, kwargs, expected):
+        result = fields_result.filter(**kwargs)
+
+        assert result.names() == expected
+
+    def test_filter_with_no_args_returns_all_fields(self, fields_result):
+        result = fields_result.filter()
+
+        assert result.names() == fields_result.names()
+
+    def test_filter_returns_new_instance(self, fields_result):
+        assert fields_result.filter() is not fields_result
+
+    def test_filter_raises_when_names_and_types_both_given(self, fields_result):
+        with pytest.raises(
+            ValueError, match="names and types cannot be specified together"
+        ):
+            fields_result.filter(names=["OBJECTID"], types="esriFieldTypeOID")
+
+    @pytest.mark.parametrize(
+        "types",
+        [
+            "InvalidType",
+            ["esriFieldTypeOID", "NotAnEsriType"],
+        ],
+        ids=["single-invalid", "mixed-valid-and-invalid"],
+    )
+    def test_filter_raises_when_types_are_not_valid_esri_field_types(
+        self, fields_result, types
+    ):
+        with pytest.raises(ValueError, match="Invalid ESRI type"):
+            fields_result.filter(types=types)
