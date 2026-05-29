@@ -7,24 +7,11 @@ from archie.models.fields_result import FieldsResult
 
 
 class TestNames:
-    @pytest.mark.parametrize(
-        "editable_only, expected",
-        [
-            (False, ["OBJECTID", "Name", "Status"]),
-            (True, ["Name", "Status"]),
-        ],
-        ids=["all", "editable-only"],
-    )
-    def test_returns_correct_names(self, fields_result, editable_only, expected):
-        result = fields_result.names(editable_only=editable_only)
+    def test_names_returns_all_field_names(self, fields_result):
+        assert fields_result.names == ["OBJECTID", "Name", "Status"]
 
-        assert result == expected
-
-    def test_returns_empty_list_when_no_fields(self):
-        qr = FieldsResult(fields=[])
-
-        assert qr.names() == []
-        assert qr.names(editable_only=True) == []
+    def test_names_returns_empty_list_when_no_fields(self):
+        assert FieldsResult(fields=[]).names == []
 
 
 class TestTypes:
@@ -74,7 +61,7 @@ class TestFilter:
     ):
         result = fields_result.filter(names=names)
 
-        assert result.names() == expected
+        assert result.names == expected
 
     @pytest.mark.parametrize(
         "types, expected",
@@ -90,7 +77,7 @@ class TestFilter:
     ):
         result = fields_result.filter(types=types)
 
-        assert result.names() == expected
+        assert result.names == expected
 
     @pytest.mark.parametrize(
         "editable, expected",
@@ -105,7 +92,7 @@ class TestFilter:
     ):
         result = fields_result.filter(editable=editable)
 
-        assert result.names() == expected
+        assert result.names == expected
 
     @pytest.mark.parametrize(
         "nullable, expected",
@@ -120,7 +107,7 @@ class TestFilter:
     ):
         result = fields_result.filter(nullable=nullable)
 
-        assert result.names() == expected
+        assert result.names == expected
 
     @pytest.mark.parametrize(
         "kwargs, expected",
@@ -134,12 +121,12 @@ class TestFilter:
     def test_filter_combines_criteria(self, fields_result, kwargs, expected):
         result = fields_result.filter(**kwargs)
 
-        assert result.names() == expected
+        assert result.names == expected
 
     def test_filter_with_no_args_returns_all_fields(self, fields_result):
         result = fields_result.filter()
 
-        assert result.names() == fields_result.names()
+        assert result.names == fields_result.names
 
     def test_filter_returns_new_instance(self, fields_result):
         assert fields_result.filter() is not fields_result

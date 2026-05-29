@@ -34,17 +34,9 @@ class FieldsResult:
 
     fields: list[dict]
 
-    def names(self, *, editable_only: bool = False) -> list[str]:
-        """Return field names, optionally filtered to editable fields only.
-
-        Args:
-            editable_only: If True, only return names of fields where editable=True.
-
-        Returns:
-            List of field names.
-        """
-        if editable_only:
-            return [f["name"] for f in self.fields if f.get("editable", False)]
+    @property
+    def names(self) -> list[str]:
+        """All field names in definition order."""
         return [f["name"] for f in self.fields]
 
     def esri_field_types(self) -> dict[str, str]:

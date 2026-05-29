@@ -99,7 +99,7 @@ class QueryOperation:
             Comma-separated field string.
         """
         if out_fields is None or out_fields == "*":
-            return ",".join((await self._layer.fields()).names())
+            return ",".join((await self._layer.fields()).names)
         if isinstance(out_fields, str):
             return out_fields.strip()
         return ",".join(f.strip() for f in out_fields)
@@ -111,7 +111,7 @@ class QueryOperation:
             ValueError: If any field name is not found (case-sensitive).
         """
         fields_result = await self._layer.fields()
-        valid_names = set(fields_result.names())
+        valid_names = set(fields_result.names)
 
         requested = set(out_fields.split(","))
         unknown = requested - valid_names

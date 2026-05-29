@@ -126,8 +126,8 @@ class QueryResult:
     ) -> pd.DataFrame | gpd.GeoDataFrame:
         """Construct an empty DataFrame or GeoDataFrame with appropriate columns."""
         if type == "dataframe":
-            return pd.DataFrame(columns=self.fields.names())
+            return pd.DataFrame(columns=self.fields.names)
         return gpd.GeoDataFrame(
-            {col: pd.Series([], dtype=object) for col in self.fields.names()},
+            {col: pd.Series([], dtype=object) for col in self.fields.names},
             geometry=gpd.GeoSeries([], crs=self.crs),
         )

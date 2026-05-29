@@ -132,7 +132,7 @@ class TestFields:
         result = await feature_layer.fields()
 
         assert isinstance(result, FieldsResult)
-        assert result.names() == ["OBJECTID", "Name"]
+        assert result.names == ["OBJECTID", "Name"]
 
     @pytest.mark.anyio
     async def test_returns_empty_fields_result_when_key_absent(
@@ -143,7 +143,7 @@ class TestFields:
         result = await feature_layer.fields()
 
         assert isinstance(result, FieldsResult)
-        assert result.names() == []
+        assert result.names == []
 
 
 class TestQuery:
