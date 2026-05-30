@@ -111,7 +111,7 @@ class QueryResult:
         Returns:
             DataFrame with converted columns.
         """
-        field_types = self.fields.esri_field_types()
+        field_types = self.fields.field_type_map
         conversions = {
             col: _ESRI_TYPE_CONVERTERS[field_types[col]](df[col])
             for col in df.columns

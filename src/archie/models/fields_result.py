@@ -39,8 +39,9 @@ class FieldsResult:
         """All field names in definition order."""
         return [f["name"] for f in self.fields]
 
-    def esri_field_types(self) -> dict[str, str]:
-        """Return a mapping of field names to their types."""
+    @property
+    def field_type_map(self) -> dict[str, str]:
+        """Mapping of field names to their ESRI type strings."""
         return {f["name"]: f["type"] for f in self.fields}
 
     def filter(

@@ -16,7 +16,7 @@ class TestNames:
 
 class TestTypes:
     def test_returns_name_to_type_mapping(self, fields_result):
-        result = fields_result.esri_field_types()
+        result = fields_result.field_type_map
 
         assert result == {
             "OBJECTID": "esriFieldTypeOID",
@@ -25,7 +25,7 @@ class TestTypes:
         }
 
     def test_returns_empty_dict_when_no_fields(self):
-        result = FieldsResult(fields=[]).esri_field_types()
+        result = FieldsResult(fields=[]).field_type_map
 
         assert result == {}
 
