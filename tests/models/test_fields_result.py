@@ -8,7 +8,7 @@ from archie.models import FieldsResult
 
 class TestNames:
     def test_names_returns_all_field_names(self, fields_result):
-        assert fields_result.names == ["OBJECTID", "Name", "Status"]
+        assert fields_result.names == ["OBJECTID", "Name", "Status", "Score", "EventDate"]
 
     def test_names_returns_empty_list_when_no_fields(self):
         assert FieldsResult(fields=[]).names == []
@@ -22,6 +22,8 @@ class TestTypes:
             "OBJECTID": "esriFieldTypeOID",
             "Name": "esriFieldTypeString",
             "Status": "esriFieldTypeInteger",
+            "Score": "esriFieldTypeDouble",
+            "EventDate": "esriFieldTypeDate",
         }
 
     def test_returns_empty_dict_when_no_fields(self):
@@ -35,8 +37,8 @@ class TestToFrame:
         result = fields_result.to_frame()
 
         assert isinstance(result, pd.DataFrame)
-        assert len(result) == 3
-        assert result["name"].tolist() == ["OBJECTID", "Name", "Status"]
+        assert len(result) == 5
+        assert result["name"].tolist() == ["OBJECTID", "Name", "Status", "Score", "EventDate"]
 
     def test_returns_empty_dataframe_when_no_fields(self):
         result = FieldsResult(fields=[]).to_frame()
@@ -68,9 +70,9 @@ class TestFilter:
         [
             ("esriFieldTypeOID", ["OBJECTID"]),
             (["esriFieldTypeOID", "esriFieldTypeInteger"], ["OBJECTID", "Status"]),
-            ("esriFieldTypeDate", []),
+            ("esriFieldTypeBlob", []),
         ],
-        ids=["single-string", "list-of-types", "unknown-type"],
+        ids=["single-string", "list-of-types", "unmatched-type"],
     )
     def test_filter_by_types_returns_matching_fields(
         self, fields_result, types, expected
@@ -82,7 +84,7 @@ class TestFilter:
     @pytest.mark.parametrize(
         "editable, expected",
         [
-            (True, ["Name", "Status"]),
+            (True, ["Name", "Status", "Score", "EventDate"]),
             (False, ["OBJECTID"]),
         ],
         ids=["editable-only", "non-editable-only"],
@@ -97,7 +99,7 @@ class TestFilter:
     @pytest.mark.parametrize(
         "nullable, expected",
         [
-            (True, ["Name", "Status"]),  # explicit True + absent key (defaults True)
+            (True, ["Name", "Status", "Score", "EventDate"]),  # explicit True + absent key (defaults True)
             (False, ["OBJECTID"]),
         ],
         ids=["nullable-only", "non-nullable-only"],
@@ -114,7 +116,7 @@ class TestFilter:
         [
             ({"names": ["OBJECTID", "Name"], "editable": True}, ["Name"]),
             ({"types": "esriFieldTypeInteger", "editable": True}, ["Status"]),
-            ({"editable": True, "nullable": True}, ["Name", "Status"]),
+            ({"editable": True, "nullable": True}, ["Name", "Status", "Score", "EventDate"]),
         ],
         ids=["names-and-editable", "types-and-editable", "editable-and-nullable"],
     )

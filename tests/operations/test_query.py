@@ -11,8 +11,8 @@ class TestNormalizeOutFields:
     @pytest.mark.parametrize(
         "out_fields,expected",
         [
-            (None, "OBJECTID,Name,Status"),
-            ("*", "OBJECTID,Name,Status"),
+            (None, "OBJECTID,Name,Status,Score,EventDate"),
+            ("*", "OBJECTID,Name,Status,Score,EventDate"),
             (["OBJECTID", "Name"], "OBJECTID,Name"),
             ([" OBJECTID ", " Name "], "OBJECTID,Name"),
             ("  OBJECTID,Name  ", "OBJECTID,Name"),

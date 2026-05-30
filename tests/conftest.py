@@ -47,12 +47,43 @@ def feature_service(mock_client) -> FeatureService:
 
 @pytest.fixture
 def fields_result() -> FieldsResult:
-    """A FieldsResult with a mix of editable, non-editable, and nullable fields."""
+    """Layer field definitions covering a range of ESRI types used across tests.
+
+    Non-editable: OBJECTID (OID).
+    Editable: Name (String, length=10), Status (Integer), Score (Double), EventDate (Date).
+    """
     return FieldsResult(
         fields=[
-            {"name": "OBJECTID", "type": "esriFieldTypeOID",     "editable": False, "nullable": False},
-            {"name": "Name",     "type": "esriFieldTypeString",  "editable": True,  "nullable": True},
-            {"name": "Status",   "type": "esriFieldTypeInteger", "editable": True},  # nullable absent → defaults True
+            {
+                "name": "OBJECTID",
+                "type": "esriFieldTypeOID",
+                "editable": False,
+                "nullable": False,
+            },
+            {
+                "name": "Name",
+                "type": "esriFieldTypeString",
+                "editable": True,
+                "nullable": True,
+                "length": 10,
+            },
+            {
+                "name": "Status",
+                "type": "esriFieldTypeInteger",
+                "editable": True,
+            },  # nullable absent → defaults True
+            {
+                "name": "Score",
+                "type": "esriFieldTypeDouble",
+                "editable": True,
+                "nullable": True,
+            },
+            {
+                "name": "EventDate",
+                "type": "esriFieldTypeDate",
+                "editable": True,
+                "nullable": True,
+            },
         ]
     )
 

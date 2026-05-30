@@ -47,7 +47,7 @@ class TestToFrame:
 
         assert isinstance(result, pd.DataFrame)
         assert result.empty
-        assert list(result.columns) == ["OBJECTID", "Name", "Status"]
+        assert list(result.columns) == ["OBJECTID", "Name", "Status", "Score", "EventDate"]
 
 
 class TestToGeoDataFrame:
