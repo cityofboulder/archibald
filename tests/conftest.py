@@ -3,7 +3,7 @@ import pytest
 from archie.auth import ARCGIS_ONLINE_BASE_URL, UserTokenAuth
 from archie.client import ArchieClient
 from archie.models import FieldsResult, QueryResult
-from archie.operations import QueryOperation
+from archie.operations import ApplyEditsOperation, QueryOperation
 from archie.services import BaseService, FeatureLayer, FeatureService
 from tests.helpers import SERVICE_PATH, StaticTokenAuth, MinimalService
 
@@ -100,9 +100,18 @@ def mock_layer(mocker, fields_result):
     layer._client = mocker.create_autospec(ArchieClient)
     layer.fields.return_value = fields_result
     layer.objectid_field.return_value = "OBJECTID"
+    layer.globalid_field.return_value = None
     layer.max_record_count.return_value = 1000
     layer.crs.return_value = 3857
+    layer.supports_rollback_on_failure.return_value = True
+    layer.supports_async_apply_edits.return_value = False
     return layer
+
+
+@pytest.fixture
+def apply_edits_op(mock_layer) -> ApplyEditsOperation:
+    """An ApplyEditsOperation instance backed by mock_layer."""
+    return ApplyEditsOperation(mock_layer)
 
 
 @pytest.fixture

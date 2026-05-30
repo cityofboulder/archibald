@@ -97,6 +97,41 @@ def make_apply_edits_result(
     )
 
 
+def make_esri_apply_edits_response(
+    add_ids: list[int] | None = None,
+    update_ids: list[int] | None = None,
+    delete_ids: list[int] | None = None,
+) -> dict:
+    """Build a raw ESRI applyEdits response dict for use in tests.
+
+    Each ID list is expanded into success=True result dicts in the format
+    expected by ApplyEditsResult.from_esri_response.
+
+    Args:
+        add_ids: OBJECTIDs for simulated add results.
+        update_ids: OBJECTIDs for simulated update results.
+        delete_ids: OBJECTIDs for simulated delete results.
+
+    Returns:
+        Dict with addResults, updateResults, and deleteResults keys.
+    """
+
+    def _items(ids: list[int]) -> list[dict]:
+        return [
+            {"objectId": oid, "success": True, "globalId": None, "error": None}
+            for oid in ids
+        ]
+
+    body: dict = {}
+    if add_ids:
+        body["addResults"] = _items(add_ids)
+    if update_ids:
+        body["updateResults"] = _items(update_ids)
+    if delete_ids:
+        body["deleteResults"] = _items(delete_ids)
+    return body
+
+
 def make_small_feature(i: int = 1) -> dict:
     """Create a minimal ESRI feature dict for batch packing tests."""
     return {"attributes": {"id": i}}
