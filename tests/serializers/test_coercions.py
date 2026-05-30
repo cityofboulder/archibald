@@ -42,9 +42,15 @@ class TestCoerceDatetime:
         assert result.iloc[0] is None
 
     def test_tz_naive_warns(self):
-        series = pd.Series([pd.Timestamp("2024-01-01")], name="col")
+        series = pd.Series([pd.Timestamp("2024-01-01")], name="EventDate")
 
-        with pytest.warns(UserWarning):
+        with pytest.warns(UserWarning, match="EventDate"):
+            _coerce_datetime(series)
+
+    def test_tz_naive_warning_includes_fix_hint(self):
+        series = pd.Series([pd.Timestamp("2024-01-01")], name="EventDate")
+
+        with pytest.warns(UserWarning, match="tz_localize"):
             _coerce_datetime(series)
 
     def test_tz_naive_still_produces_correct_ms(self):
@@ -54,6 +60,20 @@ class TestCoerceDatetime:
             result = _coerce_datetime(series)
 
         assert result.iloc[0] == 1000
+
+    @pytest.mark.parametrize(
+        "tz",
+        ["UTC", "US/Mountain", "Europe/London"],
+        ids=["utc", "mountain", "london"],
+    )
+    def test_tz_aware_does_not_warn(self, tz):
+        series = pd.Series(
+            [pd.to_datetime("2024-01-01").tz_localize(tz)], name="col"
+        )
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            _coerce_datetime(series)
 
 
 class TestCoerceInteger:
