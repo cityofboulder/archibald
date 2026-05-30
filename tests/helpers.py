@@ -97,6 +97,11 @@ def make_apply_edits_result(
     )
 
 
+def make_small_feature(i: int = 1) -> dict:
+    """Create a minimal ESRI feature dict for batch packing tests."""
+    return {"attributes": {"id": i}}
+
+
 def make_decorated_call(body: dict):
     """Return a handle_esri_errors-decorated coroutine that responds with body."""
 
