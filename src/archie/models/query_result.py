@@ -9,22 +9,7 @@ import pandas as pd
 import geopandas as gpd
 
 from archie.models.fields_result import FieldsResult
-
-_ESRI_TYPE_CONVERTERS = {
-    "esriFieldTypeSmallInteger": lambda s: s.astype("Int16"),
-    "esriFieldTypeInteger": lambda s: s.astype("Int32"),
-    "esriFieldTypeBigInteger": lambda s: s.astype("Int64"),
-    "esriFieldTypeOID": lambda s: s.astype("Int64"),
-    "esriFieldTypeSingle": lambda s: s.astype("float32"),
-    "esriFieldTypeDouble": lambda s: s.astype("float64"),
-    "esriFieldTypeDate": lambda s: pd.to_datetime(s, unit="ms", utc=True),
-    "esriFieldTypeGUID": lambda s: s.astype(str),
-    "esriFieldTypeGlobalID": lambda s: s.astype(str),
-    "esriFieldTypeXML": lambda s: s.astype(str),
-    "esriFieldTypeString": lambda s: s.astype(str),
-    # esriFieldTypeGeometry: handled by geopandas
-    # esriFieldTypeBlob, esriFieldTypeRaster: not returned in standard REST queries
-}
+from archie.serializers._coercions import ESRI_TO_PANDAS
 
 
 @dataclass
@@ -113,9 +98,9 @@ class QueryResult:
         """
         field_types = self.fields.field_type_map
         conversions = {
-            col: _ESRI_TYPE_CONVERTERS[field_types[col]](df[col])
+            col: ESRI_TO_PANDAS[field_types[col]](df[col])
             for col in df.columns
-            if field_types.get(col) in _ESRI_TYPE_CONVERTERS
+            if field_types.get(col) in ESRI_TO_PANDAS
         }
         if not conversions:
             return df
