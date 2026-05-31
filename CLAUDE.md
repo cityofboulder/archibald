@@ -56,6 +56,7 @@ pyproject.toml
 - Helper functions and globals should go in the `tests/helpers.py` file
 - Prioritize parametrizing tests where logical
 - Parametrized tests always include `ids=`
+- Leverage existing fixtures and helpers wherever possible; if either need tweaks in order to make new tests work, prefer updating and verify that they will still work elsewhere.
 
 ## Architectural decisions
 
