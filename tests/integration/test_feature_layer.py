@@ -3,7 +3,7 @@
 import httpx
 import pytest
 
-from archie.exceptions import ArcGISError
+from archie.exceptions import ArcGISError, LayerCapabilityError
 from archie.models import QueryResult
 from tests.integration.conftest import (
     FEATURES,
@@ -103,7 +103,7 @@ class TestQueryErrors:
             return_value=httpx.Response(200, json={"features": []})
         )
 
-        with pytest.raises(ValueError, match="does not support query"):
+        with pytest.raises(LayerCapabilityError, match="does not support query"):
             await layer.query()
 
         assert not query_route.called
