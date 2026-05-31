@@ -10,6 +10,10 @@ from archie.exceptions import (
     ArchieClientError,
     TokenRefreshError,
     ConfigurationError,
+    InvalidServiceURL,
+    LayerCapabilityError,
+    InvalidParameterError,
+    MissingGeometryError,
 )
 
 
@@ -67,6 +71,10 @@ class TestHierarchy:
         [
             TokenRefreshError,
             ConfigurationError,
+            InvalidServiceURL,
+            LayerCapabilityError,
+            InvalidParameterError,
+            MissingGeometryError,
         ],
     )
     def test_client_subclasses_inherit_from_archie_client_error(self, exc_class):
@@ -103,3 +111,15 @@ class TestCatchability:
     def test_token_refresh_caught_as_archie_error(self):
         with pytest.raises(ArchieError):
             raise TokenRefreshError("Refresh failed after retry.")
+
+    def test_layer_capability_error_caught_as_archie_client_error(self):
+        with pytest.raises(ArchieClientError):
+            raise LayerCapabilityError("Layer does not support query.")
+
+    def test_invalid_parameter_error_caught_as_archie_client_error(self):
+        with pytest.raises(ArchieClientError):
+            raise InvalidParameterError("key_fields must not be empty.")
+
+    def test_missing_geometry_error_caught_as_archie_client_error(self):
+        with pytest.raises(ArchieClientError):
+            raise MissingGeometryError("No geometry present.")

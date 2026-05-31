@@ -66,3 +66,15 @@ class ConfigurationError(ArchieClientError):
 
 class InvalidServiceURL(ArchieClientError):
     """The provided URL does not match the expected service type."""
+
+
+class LayerCapabilityError(ArchieClientError):
+    """The layer does not support the requested operation."""
+
+
+class InvalidParameterError(ArchieClientError):
+    """A parameter supplied by the caller is invalid."""
+
+
+class MissingGeometryError(ArchieClientError):
+    """A geometry-dependent operation was requested but geometry is unavailable."""
