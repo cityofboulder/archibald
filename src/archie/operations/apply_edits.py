@@ -67,27 +67,14 @@ class ApplyEditsOperation:
         """
         fields = await self._layer.fields()
         objectid_field = await self._layer.objectid_field()
-        globalid_field = await self._layer.globalid_field()
 
         serialized_adds = (
-            serialize_features(
-                adds,
-                fields,
-                objectid_field=objectid_field,
-                globalid_field=globalid_field,
-                include_objectid=False,
-            )
+            serialize_features(adds, fields, objectid_field=None)
             if adds is not None
             else []
         )
         serialized_updates = (
-            serialize_features(
-                updates,
-                fields,
-                objectid_field=objectid_field,
-                globalid_field=globalid_field,
-                include_objectid=True,
-            )
+            serialize_features(updates, fields, objectid_field=objectid_field)
             if updates is not None
             else []
         )

@@ -13,57 +13,42 @@ from tests.helpers import make_small_feature
 
 
 class TestSelectAttrColumns:
-    def test_objectid_included_when_include_objectid_true(self, fields_result):
+    def test_objectid_included_when_objectid_field_provided(self, fields_result):
         df = pd.DataFrame({"OBJECTID": [1], "Name": ["Alice"]})
 
-        result = serialize_features(
-            df, fields_result, objectid_field="OBJECTID", globalid_field=None
-        )
+        result = serialize_features(df, fields_result, objectid_field="OBJECTID")
 
         assert "OBJECTID" in result[0]["attributes"]
 
-    def test_objectid_excluded_when_include_objectid_false(self, fields_result):
+    def test_objectid_excluded_when_objectid_field_none(self, fields_result):
         df = pd.DataFrame({"Name": ["Alice"]})
 
-        result = serialize_features(
-            df,
-            fields_result,
-            objectid_field="OBJECTID",
-            globalid_field=None,
-            include_objectid=False,
-        )
+        result = serialize_features(df, fields_result, objectid_field=None)
 
         assert "OBJECTID" not in result[0]["attributes"]
 
-    def test_globalid_included_when_present_in_df(self):
+    def test_globalid_dropped_as_non_editable(self):
         fields = FieldsResult(
             fields=[
                 {"name": "OBJECTID", "type": "esriFieldTypeOID", "editable": False},
                 {"name": "Name", "type": "esriFieldTypeString", "editable": True},
-                {
-                    "name": "GlobalID",
-                    "type": "esriFieldTypeGlobalID",
-                    "editable": False,
-                },
+                {"name": "GlobalID", "type": "esriFieldTypeGlobalID", "editable": False},
             ]
         )
         df = pd.DataFrame(
             {"OBJECTID": [1], "Name": ["Alice"], "GlobalID": ["{abc-123}"]}
         )
 
-        result = serialize_features(
-            df, fields, objectid_field="OBJECTID", globalid_field="GlobalID"
-        )
+        with pytest.warns(UserWarning, match="GlobalID"):
+            result = serialize_features(df, fields, objectid_field="OBJECTID")
 
-        assert "GlobalID" in result[0]["attributes"]
+        assert "GlobalID" not in result[0]["attributes"]
 
     def test_non_editable_column_dropped_with_warning(self, fields_result):
         df = pd.DataFrame({"OBJECTID": [1], "Name": ["Alice"], "ExtraCol": ["x"]})
 
         with pytest.warns(UserWarning, match="ExtraCol"):
-            result = serialize_features(
-                df, fields_result, objectid_field="OBJECTID", globalid_field=None
-            )
+            result = serialize_features(df, fields_result, objectid_field="OBJECTID")
 
         assert "ExtraCol" not in result[0]["attributes"]
 
@@ -73,9 +58,7 @@ class TestSelectAttrColumns:
             crs=4326,
         )
 
-        result = serialize_features(
-            gdf, fields_result, objectid_field="OBJECTID", globalid_field=None
-        )
+        result = serialize_features(gdf, fields_result, objectid_field="OBJECTID")
 
         assert "geometry" not in result[0]["attributes"]
 
@@ -84,9 +67,7 @@ class TestSerializeFeatures:
     def test_plain_dataframe_returns_attributes_dicts(self, fields_result):
         df = pd.DataFrame({"OBJECTID": [1, 2], "Name": ["Alice", "Bob"]})
 
-        result = serialize_features(
-            df, fields_result, objectid_field="OBJECTID", globalid_field=None
-        )
+        result = serialize_features(df, fields_result, objectid_field="OBJECTID")
 
         assert len(result) == 2
         assert all("attributes" in feat for feat in result)
@@ -98,9 +79,7 @@ class TestSerializeFeatures:
             crs=4326,
         )
 
-        result = serialize_features(
-            gdf, fields_result, objectid_field="OBJECTID", globalid_field=None
-        )
+        result = serialize_features(gdf, fields_result, objectid_field="OBJECTID")
 
         assert "geometry" in result[0]
         assert result[0]["geometry"] == {"x": 1.0, "y": 2.0}
@@ -115,23 +94,15 @@ class TestSerializeFeatures:
             crs=4326,
         )
 
-        result = serialize_features(
-            gdf, fields_result, objectid_field="OBJECTID", globalid_field=None
-        )
+        result = serialize_features(gdf, fields_result, objectid_field="OBJECTID")
 
         assert "geometry" in result[0]
         assert "geometry" not in result[1]
 
-    def test_include_objectid_false_omits_objectid(self, fields_result):
+    def test_objectid_field_none_omits_objectid(self, fields_result):
         df = pd.DataFrame({"Name": ["Alice"]})
 
-        result = serialize_features(
-            df,
-            fields_result,
-            objectid_field="OBJECTID",
-            globalid_field=None,
-            include_objectid=False,
-        )
+        result = serialize_features(df, fields_result, objectid_field=None)
 
         assert "OBJECTID" not in result[0]["attributes"]
 

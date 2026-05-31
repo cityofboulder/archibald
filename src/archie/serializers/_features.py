@@ -19,21 +19,17 @@ if TYPE_CHECKING:
 def _select_attr_columns(
     df: pd.DataFrame,
     fields: FieldsResult,
-    objectid_field: str,
-    globalid_field: str | None,
-    include_objectid: bool,
+    objectid_field: str | None,
     geo_col: str | None,
 ) -> list[str]:
     """Return the list of attribute columns to include in serialization.
 
-    Builds the keep-set from editable fields plus any identity fields that
-    should travel with the payload, then emits a warning for every df column
-    that falls outside that set (excluding the geometry column).
+    Builds the keep-set from editable fields plus the OBJECTID when provided,
+    then emits a warning for every df column that falls outside that set
+    (excluding the geometry column).
     """
     editables = set(fields.filter(editable=True).names)
-    ids: set[str] = set(
-        filter(None, [objectid_field if include_objectid else None, globalid_field])
-    )
+    ids: set[str] = {objectid_field} if objectid_field else set()
     attrs = set(c for c in df.columns if c != geo_col)
     final_attrs = (ids & attrs) | (editables & attrs)
     dropped = sorted(attrs - final_attrs)
@@ -95,9 +91,7 @@ def serialize_features(
     df: pd.DataFrame | gpd.GeoDataFrame,
     fields: FieldsResult,
     *,
-    objectid_field: str,
-    globalid_field: str | None,
-    include_objectid: bool = True,
+    objectid_field: str | None = None,
 ) -> list[dict]:
     """Convert a DataFrame (or GeoDataFrame) to a list of ESRI feature dicts.
 
@@ -108,9 +102,8 @@ def serialize_features(
 
     Field selection:
         - Start from ``fields.filter(editable=True)`` for the writable set.
-        - Include ``objectid_field`` when ``include_objectid=True`` (required
-          for updates; omit for adds so the server assigns a new OID).
-        - Include ``globalid_field`` if not None and present in ``df.columns``.
+        - Include ``objectid_field`` when provided (required for updates; pass
+          None for adds so the server assigns a new OID).
         - DataFrame columns outside the selected set are dropped; a
           ``warnings.warn`` is emitted for each so callers know their data
           was not sent.
@@ -129,10 +122,8 @@ def serialize_features(
         df: Source DataFrame or GeoDataFrame.
         fields: Layer field definitions used for type metadata and editable
             field selection.
-        objectid_field: Name of the layer's OBJECTID field.
-        globalid_field: Name of the layer's GlobalID field, or None.
-        include_objectid: If True (default), include the OBJECTID column in
-            the attributes dict. Pass False for add operations.
+        objectid_field: Name of the layer's OBJECTID field, or None to exclude
+            it. Pass None for add operations; pass the field name for updates.
 
     Returns:
         List of ``{"attributes": {...}}`` dicts, with an additional
@@ -141,9 +132,7 @@ def serialize_features(
     is_geo = isinstance(df, gpd.GeoDataFrame)
     geo_col: str | None = str(df.geometry.name) if is_geo else None
 
-    attr_cols = _select_attr_columns(
-        df, fields, objectid_field, globalid_field, include_objectid, geo_col
-    )
+    attr_cols = _select_attr_columns(df, fields, objectid_field, geo_col)
     attrs = _coerce_columns(df[attr_cols].copy(), fields)
     records: list[dict] = attrs.to_dict(orient="records")
 
