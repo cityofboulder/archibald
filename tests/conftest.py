@@ -23,7 +23,7 @@ def auth() -> UserTokenAuth:
 def client() -> ArchieClient:
     """A default ArchieClient instance for use in tests."""
     return ArchieClient(
-        base_url="https://services.arcgis.com/instance",
+        base_url="https://example.com/arcgis/rest/services",
         auth=StaticTokenAuth("test-token"),
     )
 

@@ -5,8 +5,36 @@ import pytest
 from unittest.mock import AsyncMock
 
 from archie.client import ArchieClient
-from archie.exceptions import ServiceError, TokenExpiredError, TokenMissingError
+from archie.exceptions import InvalidServiceURL, ServiceError, TokenExpiredError, TokenMissingError
 from tests.helpers import StaticTokenAuth, inject_mock_client, make_response
+
+
+class TestValidateBaseUrl:
+    @pytest.mark.parametrize(
+        "base_url",
+        [
+            "https://example.com/arcgis/rest/services",
+            "https://example.com/arcgis/rest/services/",
+        ],
+        ids=["exact-match", "trailing-slash-stripped"],
+    )
+    def test_accepts_valid_base_url(self, base_url):
+        client = ArchieClient(base_url=base_url, auth=StaticTokenAuth("token"))
+
+        assert client._base_url == "https://example.com/arcgis/rest/services"
+
+    @pytest.mark.parametrize(
+        "base_url",
+        [
+            "https://example.com/arcgis",
+            "https://example.com/arcgis/rest",
+            "https://example.com/arcgis/rest/services/MyService/FeatureServer",
+        ],
+        ids=["missing-rest-services", "missing-services-segment", "too-specific"],
+    )
+    def test_raises_for_invalid_base_url(self, base_url):
+        with pytest.raises(InvalidServiceURL, match="rest/services"):
+            ArchieClient(base_url=base_url, auth=StaticTokenAuth("token"))
 
 
 class TestBuildUrl:
@@ -14,28 +42,28 @@ class TestBuildUrl:
         "base_url, url, endpoint, expected",
         [
             (
-                "https://example.com/arcgis",
+                "https://example.com/arcgis/rest/services",
                 None,
                 "FeatureServer/0/query",
-                "https://example.com/arcgis/FeatureServer/0/query",
+                "https://example.com/arcgis/rest/services/FeatureServer/0/query",
             ),
             (
-                "https://example.com/arcgis",
+                "https://example.com/arcgis/rest/services",
                 "https://other.com/service",
                 "query",
                 "https://other.com/service/query",
             ),
             (
-                "https://example.com/arcgis/",
+                "https://example.com/arcgis/rest/services/",
                 None,
                 "/FeatureServer/0",
-                "https://example.com/arcgis/FeatureServer/0",
+                "https://example.com/arcgis/rest/services/FeatureServer/0",
             ),
             (
-                "https://example.com/arcgis",
+                "https://example.com/arcgis/rest/services",
                 None,
                 None,
-                "https://example.com/arcgis",
+                "https://example.com/arcgis/rest/services",
             ),
         ],
         ids=[
@@ -118,7 +146,8 @@ class TestGet:
     @pytest.mark.anyio
     async def test_sends_to_constructed_url(self, mocker):
         client = ArchieClient(
-            base_url="https://example.com/arcgis", auth=StaticTokenAuth("token")
+            base_url="https://example.com/arcgis/rest/services",
+            auth=StaticTokenAuth("token"),
         )
         mock = inject_mock_client(client, make_response({}), mocker)
 
@@ -126,7 +155,7 @@ class TestGet:
 
         assert (
             mock.request.call_args[0][1]
-            == "https://example.com/arcgis/FeatureServer/0/query"
+            == "https://example.com/arcgis/rest/services/FeatureServer/0/query"
         )
 
 
@@ -277,7 +306,8 @@ class TestLifecycle:
     @pytest.mark.anyio
     async def test_context_manager_closes_on_exit(self, mocker):
         async with ArchieClient(
-            base_url="https://example.com", auth=StaticTokenAuth("token")
+            base_url="https://example.com/arcgis/rest/services",
+            auth=StaticTokenAuth("token"),
         ) as client:
             mock = inject_mock_client(client, make_response({}), mocker)
 

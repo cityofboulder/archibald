@@ -4,7 +4,7 @@ import httpx
 
 from archie.auth import ArcGISAuth
 from archie.errors import handle_esri_errors
-from archie.exceptions import TokenExpiredError, TokenMissingError
+from archie.exceptions import InvalidServiceURL, TokenExpiredError, TokenMissingError
 
 
 class ArchieClient:
@@ -20,9 +20,21 @@ class ArchieClient:
     """
 
     def __init__(self, base_url: str, auth: ArcGISAuth) -> None:
-        self._base_url = base_url.rstrip("/")
+        self._base_url = self._validate_base_url(base_url.rstrip("/"))
         self._auth = auth
         self._client: httpx.AsyncClient | None = None
+
+    def _validate_base_url(self, url: str) -> str:
+        """Validate that url ends with 'rest/services' and return it.
+
+        Raises:
+            InvalidServiceURL: If the url does not end with 'rest/services'.
+        """
+        if not url.endswith("rest/services"):
+            raise InvalidServiceURL(
+                f"Expected base_url ending in 'rest/services', got: {url}"
+            )
+        return url
 
     async def _get_client(self) -> httpx.AsyncClient:
         """Return the shared httpx.AsyncClient, creating it lazily on first call."""

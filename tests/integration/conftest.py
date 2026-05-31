@@ -12,7 +12,7 @@ from tests.helpers import SERVICE_PATH, StaticTokenAuth
 # URL constants
 # ---------------------------------------------------------------------------
 
-BASE_URL = "https://services.arcgis.com/test"
+BASE_URL = "https://services.arcgis.com/test/arcgis/rest/services"
 SERVICE_URL = f"{BASE_URL}/{SERVICE_PATH}"
 LAYER_URL = f"{SERVICE_URL}/0"
 QUERY_URL = f"{LAYER_URL}/query"
