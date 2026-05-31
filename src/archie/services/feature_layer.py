@@ -6,6 +6,7 @@ import geopandas as gpd
 import pandas as pd
 
 from archie.client import ArchieClient
+from archie.exceptions import InvalidParameterError, LayerCapabilityError
 from archie.models.apply_edits_result import ApplyEditsResult
 from archie.models.fields_result import FieldsResult
 from archie.models.query_result import QueryResult
@@ -142,11 +143,11 @@ class FeatureLayer(FeatureService):
             QueryResult with aggregated features, field definitions, and geometry type.
 
         Raises:
-            ValueError: If out_fields contains unknown field names.
-            ValueError: If the layer does not support query operations.
+            InvalidParameterError: If out_fields contains unknown field names.
+            LayerCapabilityError: If the layer does not support query operations.
         """
         if not await self.supports_query():
-            raise ValueError(
+            raise LayerCapabilityError(
                 f"Layer {self._layer_path} does not support query operations."
             )
 
@@ -183,10 +184,10 @@ class FeatureLayer(FeatureService):
             ApplyEditsResult with all add, update, and delete results merged.
 
         Raises:
-            ValueError: If the layer does not support edit operations.
+            LayerCapabilityError: If the layer does not support edit operations.
         """
         if not await self.supports_apply_edits():
-            raise ValueError(
+            raise LayerCapabilityError(
                 f"Layer {self._layer_path} does not support edit operations."
             )
 
@@ -203,8 +204,8 @@ class FeatureLayer(FeatureService):
     ) -> ApplyEditsResult:
         """Add all rows in df as new features.
 
-        Convenience wrapper around apply_edits(adds=df). Raises ValueError if the
-        layer does not support applyEdits.
+        Convenience wrapper around apply_edits(adds=df). Raises LayerCapabilityError
+        if the layer does not support applyEdits.
 
         Args:
             df: Rows to add. OBJECTIDs are excluded from the payload.
@@ -234,7 +235,8 @@ class FeatureLayer(FeatureService):
             ApplyEditsResult with add and update results.
 
         Raises:
-            ValueError: If the layer does not support applyEdits or query operations.
+            LayerCapabilityError: If the layer does not support applyEdits or query operations.
+            InvalidParameterError: If key_fields is invalid.
         """
         adds_df, updates_df, _ = await self._diff(df, key_fields)
         return await self.apply_edits(
@@ -262,7 +264,8 @@ class FeatureLayer(FeatureService):
             ApplyEditsResult with add, update, and delete results.
 
         Raises:
-            ValueError: If the layer does not support applyEdits or query operations.
+            LayerCapabilityError: If the layer does not support applyEdits or query operations.
+            InvalidParameterError: If key_fields is invalid.
         """
         adds_df, updates_df, delete_oids = await self._diff(df, key_fields)
         return await self.apply_edits(
@@ -283,23 +286,23 @@ class FeatureLayer(FeatureService):
             key_fields: Column names that jointly identify a feature.
 
         Raises:
-            ValueError: If key_fields is empty, contains unknown column names,
+            InvalidParameterError: If key_fields is empty, contains unknown column names,
                 or produces non-unique composite keys.
         """
         if not key_fields:
-            raise ValueError("key_fields must not be empty.")
+            raise InvalidParameterError("key_fields must not be empty.")
 
         missing = [f for f in key_fields if f not in df.columns]
         if missing:
             missing_repr = ", ".join(repr(f) for f in missing)
-            raise ValueError(
+            raise InvalidParameterError(
                 f"key_fields contains columns not present in df: {missing_repr}."
             )
 
         composite = df[key_fields].astype(str).agg("||".join, axis=1)
         dupes = composite[composite.duplicated()].unique().tolist()
         if dupes:
-            raise ValueError(
+            raise InvalidParameterError(
                 f"key_fields {key_fields!r} do not uniquely identify rows in df. "
                 f"Duplicate key examples: {dupes[:5]}"
             )
@@ -329,7 +332,7 @@ class FeatureLayer(FeatureService):
                 delete_oids: OIDs in the layer whose composite key is absent from df.
 
         Raises:
-            ValueError: If key_fields fails the uniqueness gate (see _validate_key_fields).
+            InvalidParameterError: If key_fields fails the uniqueness gate (see _validate_key_fields).
         """
         self._validate_key_fields(df, key_fields)
         objectid_field = await self.objectid_field()

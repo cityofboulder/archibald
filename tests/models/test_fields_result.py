@@ -3,6 +3,7 @@
 import pytest
 import pandas as pd
 
+from archie.exceptions import InvalidParameterError
 from archie.models import FieldsResult
 
 
@@ -135,7 +136,7 @@ class TestFilter:
 
     def test_filter_raises_when_names_and_types_both_given(self, fields_result):
         with pytest.raises(
-            ValueError, match="names and types cannot be specified together"
+            InvalidParameterError, match="names and types cannot be specified together"
         ):
             fields_result.filter(names=["OBJECTID"], types="esriFieldTypeOID")
 
@@ -150,5 +151,5 @@ class TestFilter:
     def test_filter_raises_when_types_are_not_valid_esri_field_types(
         self, fields_result, types
     ):
-        with pytest.raises(ValueError, match="Invalid ESRI type"):
+        with pytest.raises(InvalidParameterError, match="Invalid ESRI type"):
             fields_result.filter(types=types)

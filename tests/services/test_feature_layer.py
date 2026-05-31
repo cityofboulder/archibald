@@ -3,6 +3,7 @@
 import pandas as pd
 import pytest
 
+from archie.exceptions import InvalidParameterError, LayerCapabilityError
 from archie.models import FieldsResult
 from archie.services import FeatureLayer
 from tests.helpers import SERVICE_PATH, make_apply_edits_result, make_response
@@ -152,7 +153,7 @@ class TestQuery:
     async def test_raises_when_query_not_supported(self, feature_layer, mock_client):
         mock_client.get.return_value = make_response({"capabilities": "Create,Update"})
 
-        with pytest.raises(ValueError, match="does not support query"):
+        with pytest.raises(LayerCapabilityError, match="does not support query"):
             await feature_layer.query()
 
     @pytest.mark.anyio
@@ -247,7 +248,7 @@ class TestValidateKeyFields:
         ],
     )
     def test_raises_on_invalid_key_fields(self, key_fields, df, match):
-        with pytest.raises(ValueError, match=match):
+        with pytest.raises(InvalidParameterError, match=match):
             FeatureLayer._validate_key_fields(df, key_fields)
 
     def test_passes_for_valid_unique_keys(self):
@@ -260,7 +261,7 @@ class TestApplyEdits:
     async def test_raises_when_not_supported(self, feature_layer, mocker):
         mocker.patch.object(feature_layer, "supports_apply_edits", return_value=False)
 
-        with pytest.raises(ValueError, match="does not support edit operations"):
+        with pytest.raises(LayerCapabilityError, match="does not support edit operations"):
             await feature_layer.apply_edits()
 
     @pytest.mark.anyio

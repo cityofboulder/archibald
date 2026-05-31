@@ -4,6 +4,7 @@ import pytest
 import pandas as pd
 import geopandas as gpd
 
+from archie.exceptions import MissingGeometryError
 from archie.models import FieldsResult
 from tests.helpers import make_query_result
 
@@ -77,7 +78,7 @@ class TestToGeoDataFrame:
     def test_raises_when_cannot_convert(self, geojson, crs, match):
         qr = make_query_result([], FieldsResult(fields=[]), geojson=geojson, crs=crs)
 
-        with pytest.raises(ValueError, match=match):
+        with pytest.raises(MissingGeometryError, match=match):
             qr.to_geodataframe()
 
 

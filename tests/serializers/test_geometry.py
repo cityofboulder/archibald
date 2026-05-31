@@ -16,6 +16,7 @@ from shapely.geometry import (
     Polygon,
 )
 
+from archie.exceptions import InvalidParameterError
 from archie.serializers._geometry import geometry_to_esri
 
 
@@ -30,16 +31,16 @@ class TestNullInputs:
 
 
 class TestUnsupportedType:
-    def test_raises_type_error_for_geometry_collection(self):
+    def test_raises_for_geometry_collection(self):
         gc = GeometryCollection([Point(0, 0)])
 
-        with pytest.raises(TypeError):
+        with pytest.raises(InvalidParameterError):
             geometry_to_esri(gc)
 
-    def test_raises_type_error_message_contains_type_name(self):
+    def test_raises_message_contains_type_name(self):
         gc = GeometryCollection([Point(0, 0)])
 
-        with pytest.raises(TypeError, match="GeometryCollection"):
+        with pytest.raises(InvalidParameterError, match="GeometryCollection"):
             geometry_to_esri(gc)
 
 

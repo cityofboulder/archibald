@@ -2,6 +2,7 @@
 
 import pytest
 
+from archie.exceptions import InvalidParameterError
 from archie.models import QueryResult
 from tests.helpers import make_feature, make_response
 
@@ -58,7 +59,7 @@ class TestValidateFields:
         ],
     )
     async def test_raises_for_unknown_fields(self, query_op, out_fields, match):
-        with pytest.raises(ValueError, match=match):
+        with pytest.raises(InvalidParameterError, match=match):
             await query_op._validate_fields(out_fields)
 
 

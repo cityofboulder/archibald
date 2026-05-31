@@ -6,6 +6,8 @@ from dataclasses import dataclass
 
 import pandas as pd
 
+from archie.exceptions import InvalidParameterError
+
 _ESRI_FIELD_TYPES = [
     "esriFieldTypeSmallInteger",
     "esriFieldTypeInteger",
@@ -74,17 +76,17 @@ class FieldsResult:
             supplied criterion.
 
         Raises:
-            ValueError: If both ``names`` and ``types`` are provided.
-            ValueError: If any value in ``types`` is not a valid ESRI field type.
+            InvalidParameterError: If both ``names`` and ``types`` are provided.
+            InvalidParameterError: If any value in ``types`` is not a valid ESRI field type.
         """
         if names is not None and types is not None:
-            raise ValueError("names and types cannot be specified together.")
+            raise InvalidParameterError("names and types cannot be specified together.")
 
         if types is not None:
             type_values = [types] if isinstance(types, str) else list(types)
             invalid = [t for t in type_values if t not in _ESRI_FIELD_TYPES]
             if invalid:
-                raise ValueError(
+                raise InvalidParameterError(
                     f"Invalid ESRI type(s): {', '.join(sorted(invalid))}. "
                     "Field types must match standard ESRI types found here: "
                     "https://developers.arcgis.com/enterprise-sdk/api-reference/net/esriFieldType/"

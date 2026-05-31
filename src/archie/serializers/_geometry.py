@@ -6,6 +6,8 @@ import math
 
 import pandas as pd
 
+from archie.exceptions import InvalidParameterError
+
 
 def geometry_to_esri(geom) -> dict | None:
     """Convert a shapely geometry (or None/NaN) to an ESRI JSON geometry dict.
@@ -30,7 +32,7 @@ def geometry_to_esri(geom) -> dict | None:
         omits the ``"geometry"`` key from the feature dict in that case).
 
     Raises:
-        TypeError: If geom is a non-null, unsupported geometry type.
+        InvalidParameterError: If geom is a non-null, unsupported geometry type.
     """
     if geom is None or geom is pd.NA:
         return None
@@ -49,7 +51,7 @@ def geometry_to_esri(geom) -> dict | None:
         "MultiPolygon",
     }
     if gtype not in _SUPPORTED:
-        raise TypeError(
+        raise InvalidParameterError(
             f"Unsupported geometry type: {gtype!r}. "
             "Supported: Point, MultiPoint, LineString, MultiLineString, Polygon, MultiPolygon."
         )

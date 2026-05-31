@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import anyio
 
+from archie.exceptions import InvalidParameterError
 from archie.models import QueryResult
 
 if TYPE_CHECKING:
@@ -46,7 +47,7 @@ class QueryOperation:
             QueryResult with aggregated features, field definitions, and geometry type.
 
         Raises:
-            ValueError: If out_fields contains unknown field names.
+            InvalidParameterError: If out_fields contains unknown field names.
         """
         # Normalize out_fields and validate against available fields on the layer
         normalized_fields = await self._normalize_out_fields(out_fields)
@@ -108,7 +109,7 @@ class QueryOperation:
         """Validate that requested field names exist on the layer.
 
         Raises:
-            ValueError: If any field name is not found (case-sensitive).
+            InvalidParameterError: If any field name is not found (case-sensitive).
         """
         fields_result = await self._layer.fields()
         valid_names = set(fields_result.names)
@@ -117,7 +118,7 @@ class QueryOperation:
         unknown = requested - valid_names
 
         if unknown:
-            raise ValueError(
+            raise InvalidParameterError(
                 f"Unknown field names: {', '.join(sorted(unknown))}. "
                 f"Valid fields: {', '.join(sorted(valid_names))}"
             )

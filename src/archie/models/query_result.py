@@ -8,6 +8,7 @@ from typing import Literal
 import pandas as pd
 import geopandas as gpd
 
+from archie.exceptions import MissingGeometryError
 from archie.models.fields_result import FieldsResult
 from archie.serializers._coercions import ESRI_TO_PANDAS
 
@@ -61,16 +62,16 @@ class QueryResult:
             GeoDataFrame with one row per feature.
 
         Raises:
-            ValueError: If the query returned no geometries.
+            MissingGeometryError: If the query returned no geometries.
         """
         if not self.geojson:
-            raise ValueError(
+            raise MissingGeometryError(
                 "Cannot convert to GeoDataFrame: no geometry present. "
                 "Re-run query with return_geometry=True."
             )
 
         if not self.crs:
-            raise ValueError(
+            raise MissingGeometryError(
                 "Cannot convert to GeoDataFrame: no spatial reference (crs) provided. "
                 "Re-run query with return_geometry=True and out_sr specified."
             )
