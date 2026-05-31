@@ -48,3 +48,22 @@ class BaseService(ABC):
             response = await self._client.get(endpoint=self._service_path)
             self._service_metadata = response.json()
         return self._service_metadata  # type: ignore[return-value]
+
+    async def crs(self) -> int:
+        """Well-known ID of the service's spatial reference system.
+
+        Defaults to 3857, Web Mercator.
+        """
+        return (
+            (await self._get_service_metadata())
+            .get("spatialReference", {})
+            .get("latestWkid", 3857)
+        )
+
+    async def description(self) -> str:
+        """Human-readable service description."""
+        return (await self._get_service_metadata()).get("serviceDescription", "")
+
+    async def max_record_count(self) -> int:
+        """Maximum number of records the service returns per request."""
+        return (await self._get_service_metadata()).get("maxRecordCount", 1000)
