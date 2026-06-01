@@ -37,6 +37,7 @@ class ApplyEditsOperation:
         *,
         rollback_on_failure: bool = False,
         apply_coded_values: bool = False,
+        poll_timeout: float = 300.0,
     ) -> ApplyEditsResult:
         """Serialize inputs, pack into batches, POST, and return aggregated results.
 
@@ -55,12 +56,16 @@ class ApplyEditsOperation:
                 only (a warning is emitted).
             apply_coded_values: When True, translate human-readable domain names
                 in the DataFrame back to their raw codes before serialization.
+            poll_timeout: Maximum seconds to wait for an async job to complete
+                before raising TimeoutError. Applies per batch when the layer
+                uses server-side async editing. Defaults to 300 seconds.
 
         Returns:
             ApplyEditsResult with all add, update, and delete results merged.
 
         Raises:
             ValueError: If rollback_on_failure=True but the layer does not support it.
+            TimeoutError: If an async job does not complete within poll_timeout seconds.
 
         Warns:
             UserWarning: If rollback_on_failure=True and > 1 batch is produced
@@ -115,12 +120,13 @@ class ApplyEditsOperation:
                 stacklevel=2,
             )
 
-        use_async = await self._layer.supports_async_apply_edits()
+        use_async = len(batches) > 1 and await self._layer.supports_async_apply_edits()
 
         return await self._post_batches(
             batches,
             rollback_on_failure=rollback_on_failure,
             use_async=use_async,
+            poll_timeout=poll_timeout,
         )
 
     async def _normalize_deletes(
@@ -152,6 +158,7 @@ class ApplyEditsOperation:
         *,
         rollback_on_failure: bool,
         use_async: bool,
+        poll_timeout: float,
     ) -> ApplyEditsResult:
         """POST a single batch and return its ApplyEditsResult.
 
@@ -164,6 +171,7 @@ class ApplyEditsOperation:
                 updates, and/or deletes keys).
             rollback_on_failure: Include rollbackOnFailure=true in the POST body.
             use_async: Include async=true in the POST body and poll for results.
+            poll_timeout: Forwarded to _poll_status as the per-job timeout.
 
         Returns:
             ApplyEditsResult parsed from the applyEdits response.
@@ -185,39 +193,52 @@ class ApplyEditsOperation:
 
         if use_async:
             status_url = response_body["statusUrl"]
-            response_body = await self._poll_status(status_url)
+            response_body = await self._poll_status(status_url, timeout=poll_timeout)
 
         return ApplyEditsResult.from_esri_response(response_body)
 
-    async def _poll_status(self, status_url: str) -> dict:
+    async def _poll_status(self, status_url: str, *, timeout: float) -> dict:
         """Poll an async job status URL until the job completes.
 
         Uses exponential backoff starting at 0.5 s, doubling each retry up to
         a 5 s cap. The url= kwarg on client.get bypasses the base URL so the
         full status URL is used as-is.
 
+        When status is "COMPLETED", fetches the resultUrl from the status body
+        and returns that response body (which contains addResults/updateResults/
+        deleteResults).
+
         Args:
             status_url: Full URL of the async job status endpoint.
+            timeout: Maximum seconds to wait before raising TimeoutError.
 
         Returns:
-            Final response body dict when the job status is esriJobSucceeded.
+            Edit results body dict fetched from the resultUrl on completion.
 
         Raises:
-            ServiceError: If the job status is esriJobFailed.
+            ServiceError: If the status response contains an error object.
+            TimeoutError: If the job does not complete within timeout seconds.
         """
         delay = 0.5
         max_delay = 5.0
-        while True:
-            response = await self._layer._client.get(url=status_url)
-            body = response.json()
-            status = body.get("status")
-            if status == "esriJobSucceeded":
-                return body
-            if status == "esriJobFailed":
-                message = body.get("statusMessage", "Async applyEdits job failed.")
-                raise ServiceError(code=-1, message=message, raw_response=body)
-            await anyio.sleep(delay)
-            delay = min(delay * 2, max_delay)
+        with anyio.fail_after(timeout):
+            while True:
+                response = await self._layer._client.get(url=status_url)
+                body = response.json()
+                if "error" in body:
+                    error = body["error"]
+                    raise ServiceError(
+                        code=error.get("code", -1),
+                        message=error.get("message", "Async applyEdits job failed."),
+                        raw_response=body,
+                    )
+                if body.get("status") == "COMPLETED":
+                    result_response = await self._layer._client.get(
+                        url=body["resultUrl"]
+                    )
+                    return result_response.json()
+                await anyio.sleep(delay)
+                delay = min(delay * 2, max_delay)
 
     async def _post_batches(
         self,
@@ -225,6 +246,7 @@ class ApplyEditsOperation:
         *,
         rollback_on_failure: bool,
         use_async: bool,
+        poll_timeout: float,
     ) -> ApplyEditsResult:
         """Fan out batch POSTs in parallel via anyio.create_task_group and merge results.
 
@@ -232,6 +254,7 @@ class ApplyEditsOperation:
             batches: List of batch body dicts from pack_batches.
             rollback_on_failure: Passed through to each _post_batch call.
             use_async: Passed through to each _post_batch call.
+            poll_timeout: Passed through to each _post_batch call.
 
         Returns:
             Merged ApplyEditsResult from all batches in posting order.
@@ -243,6 +266,7 @@ class ApplyEditsOperation:
                 batch,
                 rollback_on_failure=rollback_on_failure,
                 use_async=use_async,
+                poll_timeout=poll_timeout,
             )
 
         async with anyio.create_task_group() as tg:
