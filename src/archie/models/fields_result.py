@@ -46,6 +46,27 @@ class FieldsResult:
         """Mapping of field names to their ESRI type strings."""
         return {f["name"]: f["type"] for f in self.fields}
 
+    @property
+    def domain_maps(self) -> dict[str, dict]:
+        """Return code↔name lookup tables for all coded-value domain fields.
+
+        Returns a dict keyed by field name. Each value contains:
+        - ``"to_name"``: maps raw domain codes to human-readable names.
+        - ``"to_code"``: maps human-readable names back to raw codes.
+
+        Fields without a ``codedValue`` domain are omitted.
+        """
+        result: dict[str, dict] = {}
+        for f in self.fields:
+            domain = f.get("domain")
+            if domain and domain.get("type") == "codedValue":
+                cvs = domain.get("codedValues", [])
+                result[f["name"]] = {
+                    "to_name": {cv["code"]: cv["name"] for cv in cvs},
+                    "to_code": {cv["name"]: cv["code"] for cv in cvs},
+                }
+        return result
+
     def filter(
         self,
         *,

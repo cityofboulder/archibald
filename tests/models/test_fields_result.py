@@ -48,6 +48,39 @@ class TestToFrame:
         assert result.empty
 
 
+class TestDomainMaps:
+    def test_returns_empty_dict_when_no_fields_have_domains(self, fields_result):
+        result = fields_result.domain_maps
+
+        assert result == {}
+
+    def test_returns_to_name_and_to_code_maps_for_coded_value_field(
+        self, fields_result_with_domains
+    ):
+        result = fields_result_with_domains.domain_maps
+
+        assert result["Status"]["to_name"] == {0: "Inactive", 1: "Active", 2: "Pending"}
+        assert result["Status"]["to_code"] == {"Active": 1, "Inactive": 0, "Pending": 2}
+
+    def test_non_domain_fields_excluded_from_result(self, fields_result_with_domains):
+        result = fields_result_with_domains.domain_maps
+
+        assert "OBJECTID" not in result
+        assert "Name" not in result
+
+    def test_non_coded_value_domain_type_excluded(self):
+        fr = FieldsResult(fields=[{
+            "name": "Score",
+            "type": "esriFieldTypeDouble",
+            "domain": {"type": "range", "name": "ScoreRange", "range": [0, 100]},
+        }])
+
+        assert fr.domain_maps == {}
+
+    def test_returns_empty_dict_when_no_fields(self):
+        assert FieldsResult(fields=[]).domain_maps == {}
+
+
 class TestFilter:
     @pytest.mark.parametrize(
         "names, expected",
