@@ -10,7 +10,7 @@ import geopandas as gpd
 
 from archie.exceptions import MissingGeometryError
 from archie.models.fields_result import FieldsResult
-from archie.serializers._coercions import ESRI_TO_PANDAS
+from archie.serializers._coercions import enforce_types
 
 
 @dataclass
@@ -47,7 +47,11 @@ class QueryResult:
         records = [f.get(key, {}) for f in self.features]
         df = pd.DataFrame(records)
 
-        return self._apply_esri_types(df) if parse_dtypes else df
+        return (
+            enforce_types(df, self.fields, direction="from_esri")
+            if parse_dtypes
+            else df
+        )
 
     def to_geodataframe(self, *, parse_dtypes: bool = False) -> gpd.GeoDataFrame:
         """Return attributes + geometry as a geopandas GeoDataFrame.
@@ -81,31 +85,11 @@ class QueryResult:
 
         gdf = gpd.GeoDataFrame.from_features(self.features, crs=self.crs)
 
-        return self._apply_esri_types(gdf) if parse_dtypes else gdf  # type: ignore
-
-    def _apply_esri_types(self, df: pd.DataFrame) -> pd.DataFrame | gpd.GeoDataFrame:
-        """Apply ESRI field type conversions to DataFrame columns.
-
-        Iterates over registered converters in _ESRI_TYPE_CONVERTERS and
-        applies each to any matching column. Columns whose ESRI type has no
-        registered converter are left unchanged. Uses ``assign`` to return a
-        copy rather than mutating in place.
-
-        Args:
-            df: DataFrame (or GeoDataFrame) to convert.
-
-        Returns:
-            DataFrame with converted columns.
-        """
-        field_types = self.fields.field_type_map
-        conversions = {
-            col: ESRI_TO_PANDAS[field_types[col]](df[col])
-            for col in df.columns
-            if field_types.get(col) in ESRI_TO_PANDAS
-        }
-        if not conversions:
-            return df
-        return df.assign(**conversions)
+        return (
+            enforce_types(gdf, self.fields, direction="from_esri")
+            if parse_dtypes
+            else gdf
+        )  # type: ignore
 
     def _construct_empty(
         self, type: Literal["dataframe", "geodataframe"]

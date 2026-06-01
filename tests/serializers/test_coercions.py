@@ -12,6 +12,7 @@ from archie.serializers._coercions import (
     _coerce_float,
     _coerce_integer,
     _coerce_string,
+    enforce_types,
 )
 
 
@@ -32,7 +33,10 @@ class TestCoerceDatetime:
             [pd.Timestamp("2024-01-15 00:00:00", tz="US/Mountain")], name="col"
         )
 
-        assert _coerce_datetime(utc_series).iloc[0] == _coerce_datetime(mountain_series).iloc[0]
+        assert (
+            _coerce_datetime(utc_series).iloc[0]
+            == _coerce_datetime(mountain_series).iloc[0]
+        )
 
     def test_nat_becomes_none(self):
         series = pd.Series([pd.NaT], name="col", dtype="datetime64[ns, UTC]")
@@ -67,9 +71,7 @@ class TestCoerceDatetime:
         ids=["utc", "mountain", "london"],
     )
     def test_tz_aware_does_not_warn(self, tz):
-        series = pd.Series(
-            [pd.to_datetime("2024-01-01").tz_localize(tz)], name="col"
-        )
+        series = pd.Series([pd.to_datetime("2024-01-01").tz_localize(tz)], name="col")
 
         with warnings.catch_warnings():
             warnings.simplefilter("error", UserWarning)
@@ -288,3 +290,66 @@ class TestCoerceString:
         result = _coerce_string(series)
 
         assert result.tolist() == ["1", "2", "3"]
+
+
+class TestEnforceTypes:
+    def test_from_esri_converts_integer_to_nullable_dtype(self, fields_result):
+        df = pd.DataFrame({"OBJECTID": [1, 2, 3]})
+
+        result = enforce_types(df, fields_result, direction="from_esri")
+
+        assert result["OBJECTID"].dtype == pd.Int64Dtype()
+
+    def test_from_esri_converts_date_to_utc_datetime(self, fields_result):
+        ms = 1_704_067_200_000  # 2024-01-01 00:00:00 UTC
+        df = pd.DataFrame({"EventDate": [ms]})
+
+        result = enforce_types(df, fields_result, direction="from_esri")
+
+        assert str(result["EventDate"].dtype) == "datetime64[ms, UTC]"
+        assert result["EventDate"].iloc[0] == pd.Timestamp("2024-01-01", tz="UTC")
+
+    def test_to_esri_converts_datetime_to_ms_int(self, fields_result):
+        df = pd.DataFrame(
+            {"EventDate": pd.to_datetime(["2024-01-01"]).tz_localize("UTC")}
+        )
+
+        result = enforce_types(df, fields_result, direction="to_esri")
+
+        assert result["EventDate"].iloc[0] == 1_704_067_200_000
+
+    def test_to_esri_truncates_string_to_field_length(self, fields_result):
+        # fields_result.Name has length=10; use an 11-char string to trigger truncation
+        df = pd.DataFrame({"Name": ["way_too_long"]})
+
+        with pytest.warns(UserWarning, match="truncated"):
+            result = enforce_types(df, fields_result, direction="to_esri")
+
+        assert result["Name"].iloc[0] == "way_too_lo"
+
+    def test_leaves_unregistered_type_column_unchanged(self, fields_result):
+        df = pd.DataFrame({"Unknown": [1, 2, 3]})
+
+        result = enforce_types(df, fields_result, direction="from_esri")
+
+        assert result["Unknown"].tolist() == [1, 2, 3]
+
+    @pytest.mark.parametrize(
+        "direction", ["from_esri", "to_esri"], ids=["from_esri", "to_esri"]
+    )
+    def test_returns_copy_not_inplace(self, fields_result, direction):
+        df = pd.DataFrame({"OBJECTID": [1]})
+
+        result = enforce_types(df, fields_result, direction=direction)
+
+        assert result is not df
+
+    @pytest.mark.parametrize(
+        "direction", ["from_esri", "to_esri"], ids=["from_esri", "to_esri"]
+    )
+    def test_empty_dataframe_returns_empty(self, fields_result, direction):
+        df = pd.DataFrame({"OBJECTID": pd.Series([], dtype="int64")})
+
+        result = enforce_types(df, fields_result, direction=direction)
+
+        assert result.empty

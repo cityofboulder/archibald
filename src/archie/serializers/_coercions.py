@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import warnings
-from typing import Callable
+from typing import TYPE_CHECKING, Callable, Literal
 
 import numpy as np
 import pandas as pd
+
+if TYPE_CHECKING:
+    from archie.models.fields_result import FieldsResult
 
 
 # ─── Inbound: ESRI JSON → pandas ──────────────────────────────────────────────
@@ -191,3 +194,38 @@ PANDAS_TO_ESRI: dict[str, Callable[[pd.Series, dict | None], pd.Series]] = {
     # esriFieldTypeGeometry: handled by geopandas, not in the editable field set
     # esriFieldTypeBlob, esriFieldTypeRaster: not editable
 }
+
+
+def enforce_types(
+    df: pd.DataFrame,
+    fields: FieldsResult,
+    *,
+    direction: Literal["from_esri", "to_esri"] = "from_esri",
+) -> pd.DataFrame:
+    """Apply ESRI ↔ pandas type coercions to df based on field metadata.
+
+    Args:
+        df: DataFrame to coerce (returned as a new object; never mutated).
+        fields: Layer field definitions providing type and length metadata.
+        direction: ``"from_esri"`` converts ESRI JSON → pandas types (e.g.
+            ``Int32``, ``datetime64[ms, UTC]``); ``"to_esri"`` converts pandas
+            → ESRI JSON types suitable for serialization.
+
+    Returns:
+        New DataFrame with coerced columns; columns whose ESRI type has no
+        registered coercer are left unchanged.
+    """
+    cols = set(df.columns)
+    if direction == "from_esri":
+        conversions = {
+            f["name"]: ESRI_TO_PANDAS[f["type"]](df[f["name"]])
+            for f in fields.fields
+            if f["name"] in cols and f.get("type") in ESRI_TO_PANDAS
+        }
+    else:
+        conversions = {
+            f["name"]: PANDAS_TO_ESRI[f["type"]](df[f["name"]], f)
+            for f in fields.fields
+            if f["name"] in cols and f.get("type") in PANDAS_TO_ESRI
+        }
+    return df.assign(**conversions) if conversions else df
