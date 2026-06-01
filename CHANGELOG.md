@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `enforce_types(df, fields, *, direction)` added to `archie.serializers._coercions` as a unified ESRI ↔ pandas type-coercion function. `direction="from_esri"` applies `ESRI_TO_PANDAS` conversions (integer fields → nullable dtype, dates → UTC-aware datetime); `direction="to_esri"` applies `PANDAS_TO_ESRI` conversions for serialization. `QueryResult._apply_esri_types` and `_coerce_columns` both delegate to it internally.
 - `FeatureLayer` now inherits from both `FeatureService` and `BaseLayer` via cooperative MRO; previously it inherited directly from `BaseService`.
 - Layer classes (`FeatureLayer`, `MapLayer`, `BaseLayer`) moved to a `services/layers/` sub-package.
 - `FieldsResult.names` is now a computed property (was a plain attribute). The `editable_only` parameter is removed; use `FieldsResult.filter(editable=True)` instead.

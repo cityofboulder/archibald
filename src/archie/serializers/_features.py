@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import geopandas as gpd
 import pandas as pd
 
-from archie.serializers._coercions import PANDAS_TO_ESRI
+from archie.serializers._coercions import enforce_types
 from archie.serializers._geometry import geometry_to_esri
 
 if TYPE_CHECKING:
@@ -53,20 +53,12 @@ def _coerce_columns(
 ) -> pd.DataFrame:
     """Apply per-column type coercions then replace remaining NA/NaN with None.
 
-    Dispatches each column to its ESRI-type-specific coercion function via
-    PANDAS_TO_ESRI. Columns whose ESRI type has no registered coercer are left
-    unchanged. The final where() call is a safety net for any unregistered types
-    that may still carry numpy NA sentinels.
+    Delegates coercions to enforce_types(direction="to_esri"). The final
+    where() call is a safety net for any unregistered types that may still
+    carry numpy NA sentinels.
     """
-    field_types = fields.field_type_map
-    field_defs = {f["name"]: f for f in fields.fields}
-
-    for col in attrs.columns:
-        coercer = PANDAS_TO_ESRI.get(field_types.get(col, ""))
-        if coercer is not None:
-            attrs[col] = coercer(attrs[col], field_defs.get(col))
-
-    return attrs.astype(object).where(pd.notna(attrs), other=None)
+    coerced = enforce_types(attrs, fields, direction="to_esri")
+    return coerced.astype(object).where(pd.notna(coerced), other=None)
 
 
 def _pair_geometry(
