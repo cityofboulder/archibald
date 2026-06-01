@@ -196,6 +196,67 @@ PANDAS_TO_ESRI: dict[str, Callable[[pd.Series, dict | None], pd.Series]] = {
 }
 
 
+def recode_domains(
+    df: pd.DataFrame,
+    fields: FieldsResult,
+    *,
+    direction: Literal["from_esri", "to_esri"] = "from_esri",
+) -> pd.DataFrame:
+    """Translate coded domain values between codes and human-readable names.
+
+    ``from_esri``: replaces domain codes with their names (e.g. ``1`` → ``"Active"``).
+    ``to_esri``: replaces names with their codes (e.g. ``"Active"`` → ``1``).
+    Unmapped values (codes absent from the domain) pass through unchanged.
+    Null values are preserved as-is.
+
+    Args:
+        df: DataFrame to translate (returned as a new object; never mutated).
+        fields: Layer field definitions providing coded-value domain metadata.
+        direction: ``"from_esri"`` expands codes to names; ``"to_esri"`` collapses
+            names back to codes.
+
+    Returns:
+        New DataFrame with translated columns; columns without a coded-value
+        domain are left unchanged.
+    """
+    domain_maps = fields.domain_maps
+    if not domain_maps:
+        return df
+
+    map_key = "to_name" if direction == "from_esri" else "to_code"
+    cols = set(df.columns)
+    replacements = {}
+    for col_name, maps in domain_maps.items():
+        if col_name not in cols:
+            continue
+        null_mask = df[col_name].isna()
+        lookup = maps[map_key]
+        mapped = df[col_name].map(lookup)
+        # Warn when only some non-null values appear in the domain: translated
+        # and untranslated values will coexist in the output column, producing
+        # mixed types (e.g. int + str). This is fine when ALL values are
+        # unmapped (passthrough, uniform type) or all are mapped.
+        unmapped_mask = ~null_mask & mapped.isna()
+        if unmapped_mask.any() and (~null_mask & mapped.notna()).any():
+            examples = df[col_name][unmapped_mask].unique().tolist()[:5]
+            warnings.warn(
+                f"Column '{col_name}': {int(unmapped_mask.sum())} value(s) were not "
+                f"found in the domain and will remain unchanged, producing a "
+                f"mixed-type column. Examples: {examples}",
+                UserWarning,
+                stacklevel=4,
+            )
+        # map() returns NaN for keys absent from the lookup; fall back to the
+        # original value so unmapped codes pass through. Cast to object so the
+        # result can hold mixed types, then restore nulls to None explicitly
+        # (where() dtype promotion turns None → NaN on float results).
+        result = mapped.where(mapped.notna(), df[col_name]).astype(object)
+        result[null_mask] = None
+        replacements[col_name] = result
+
+    return df.assign(**replacements) if replacements else df
+
+
 def enforce_types(
     df: pd.DataFrame,
     fields: FieldsResult,
