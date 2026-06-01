@@ -36,6 +36,7 @@ class ApplyEditsOperation:
         deletes: pd.DataFrame | pd.Series | list[int] | None = None,
         *,
         rollback_on_failure: bool = False,
+        apply_coded_values: bool = False,
     ) -> ApplyEditsResult:
         """Serialize inputs, pack into batches, POST, and return aggregated results.
 
@@ -52,6 +53,8 @@ class ApplyEditsOperation:
                 layer must support this capability; a ValueError is raised if it
                 does not. When batching produces > 1 POST, rollback is per-batch
                 only (a warning is emitted).
+            apply_coded_values: When True, translate human-readable domain names
+                in the DataFrame back to their raw codes before serialization.
 
         Returns:
             ApplyEditsResult with all add, update, and delete results merged.
@@ -69,12 +72,19 @@ class ApplyEditsOperation:
         objectid_field = await self._layer.objectid_field()
 
         serialized_adds = (
-            serialize_features(adds, fields, objectid_field=None)
+            serialize_features(
+                adds, fields, objectid_field=None, apply_coded_values=apply_coded_values
+            )
             if adds is not None
             else []
         )
         serialized_updates = (
-            serialize_features(updates, fields, objectid_field=objectid_field)
+            serialize_features(
+                updates,
+                fields,
+                objectid_field=objectid_field,
+                apply_coded_values=apply_coded_values,
+            )
             if updates is not None
             else []
         )
@@ -89,8 +99,10 @@ class ApplyEditsOperation:
 
         if rollback_on_failure and not await self._layer.supports_rollback_on_failure():
             warnings.warn(
-                (f"Layer {self._layer._layer_path} does not support rollbackOnFailure. "
-                 "The applyEdits operation will proceed without rollback on failure."),
+                (
+                    f"Layer {self._layer._layer_path} does not support rollbackOnFailure. "
+                    "The applyEdits operation will proceed without rollback on failure."
+                ),
                 stacklevel=2,
             )
             rollback_on_failure = False
