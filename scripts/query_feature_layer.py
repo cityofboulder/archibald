@@ -50,6 +50,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--return-geometry", action="store_true", help="Include geometry in the result."
     )
+    parser.add_argument(
+        "--apply-coded-values",
+        action="store_true",
+        help="Apply coded value domains to the result attributes.",
+    )
 
     return parser.parse_args()
 
@@ -69,7 +74,9 @@ async def main(args: argparse.Namespace) -> None:
         print()
 
         result = await layer.query(
-            where=args.where, return_geometry=args.return_geometry
+            where=args.where,
+            return_geometry=args.return_geometry,
+            apply_coded_values=args.apply_coded_values,
         )
         print(f"features returned : {len(result.features)}")
         print(f"crs               : {result.crs}")
