@@ -71,6 +71,7 @@ class FeatureLayer(FeatureService, BaseLayer):
         deletes: pd.DataFrame | pd.Series | list[int] | None = None,
         *,
         rollback_on_failure: bool = False,
+        apply_coded_values: bool = False,
     ) -> ApplyEditsResult:
         """Add, update, and/or delete features in a single batched operation.
 
@@ -84,6 +85,8 @@ class FeatureLayer(FeatureService, BaseLayer):
                 column, or a Series of integer OBJECTIDs.
             rollback_on_failure: Request server-side rollback on failure. Silently
                 degraded to False with a warning if the layer does not support it.
+            apply_coded_values: When True, translate human-readable domain names
+                in the DataFrame back to their raw codes before serialization.
 
         Returns:
             ApplyEditsResult with all add, update, and delete results merged.
@@ -100,11 +103,14 @@ class FeatureLayer(FeatureService, BaseLayer):
             updates=updates,
             deletes=deletes,
             rollback_on_failure=rollback_on_failure,
+            apply_coded_values=apply_coded_values,
         )
 
     async def append(
         self,
         df: pd.DataFrame | gpd.GeoDataFrame,
+        *,
+        apply_coded_values: bool = False,
     ) -> ApplyEditsResult:
         """Add all rows in df as new features.
 
@@ -113,16 +119,20 @@ class FeatureLayer(FeatureService, BaseLayer):
 
         Args:
             df: Rows to add. OBJECTIDs are excluded from the payload.
+            apply_coded_values: When True, translate human-readable domain names
+                back to their raw codes before serialization.
 
         Returns:
             ApplyEditsResult with add results for each row.
         """
-        return await self.apply_edits(adds=df)
+        return await self.apply_edits(adds=df, apply_coded_values=apply_coded_values)
 
     async def upsert(
         self,
         df: pd.DataFrame | gpd.GeoDataFrame,
         key_fields: list[str],
+        *,
+        apply_coded_values: bool = False,
     ) -> ApplyEditsResult:
         """Add new features and update existing features matched by key_fields.
 
@@ -134,6 +144,8 @@ class FeatureLayer(FeatureService, BaseLayer):
             df: Source DataFrame or GeoDataFrame.
             key_fields: Column names whose combined values uniquely identify a
                 feature. Used to match rows in df against existing layer features.
+            apply_coded_values: When True, translate human-readable domain names
+                back to their raw codes before serialization.
 
         Returns:
             ApplyEditsResult with add and update results.
@@ -146,12 +158,15 @@ class FeatureLayer(FeatureService, BaseLayer):
         return await self.apply_edits(
             adds=adds_df if not adds_df.empty else None,
             updates=updates_df if not updates_df.empty else None,
+            apply_coded_values=apply_coded_values,
         )
 
     async def sync(
         self,
         df: pd.DataFrame | gpd.GeoDataFrame,
         key_fields: list[str],
+        *,
+        apply_coded_values: bool = False,
     ) -> ApplyEditsResult:
         """Full sync: add new features, update existing features, delete removed features.
 
@@ -163,6 +178,8 @@ class FeatureLayer(FeatureService, BaseLayer):
             df: Source DataFrame or GeoDataFrame representing the desired state.
             key_fields: Column names whose combined values uniquely identify a
                 feature. Used to match rows in df against existing layer features.
+            apply_coded_values: When True, translate human-readable domain names
+                back to their raw codes before serialization.
 
         Returns:
             ApplyEditsResult with add, update, and delete results.
@@ -176,6 +193,7 @@ class FeatureLayer(FeatureService, BaseLayer):
             adds=adds_df if not adds_df.empty else None,
             updates=updates_df if not updates_df.empty else None,
             deletes=delete_oids if delete_oids else None,
+            apply_coded_values=apply_coded_values,
         )
 
     @staticmethod

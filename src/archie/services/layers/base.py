@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 from archie.client import ArchieClient
 from archie.exceptions import LayerCapabilityError
 from archie.models.fields_result import FieldsResult
@@ -85,6 +87,7 @@ class BaseLayer(BaseService):
         out_fields: list[str] | str | None = None,
         return_geometry: bool = True,
         out_sr: int | None = None,
+        apply_coded_values: bool = False,
         **kwargs,
     ) -> QueryResult:
         """Execute a query on this layer.
@@ -95,6 +98,9 @@ class BaseLayer(BaseService):
                 a comma-separated string.
             return_geometry: Include feature geometries in the response.
             out_sr: Output spatial reference (EPSG code) for geometries.
+            apply_coded_values: When True, ``to_frame()`` and
+                ``to_geodataframe()`` methods in the QueryResult will replace coded
+                domain values with their human-readable names automatically.
             **kwargs: Additional query parameters (e.g., orderByFields, resultType).
 
         Returns:
@@ -108,10 +114,15 @@ class BaseLayer(BaseService):
             raise LayerCapabilityError(
                 f"Layer {self._layer_path} does not support query operations."
             )
-        return await self._query_op.execute(
+
+        result = await self._query_op.execute(
             where=where,
             out_fields=out_fields,
             return_geometry=return_geometry,
             out_sr=out_sr,
             **kwargs,
         )
+
+        if apply_coded_values:
+            result = dataclasses.replace(result, apply_coded_values=True)
+        return result
