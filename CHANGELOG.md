@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `serialize_features()` converts a `DataFrame` or `GeoDataFrame` to ESRI feature dicts, applying outbound type coercions and optionally pairing geometry. Issues a `UserWarning` for columns that are skipped (non-editable or absent from field metadata). Accepts `apply_coded_values=True` to translate human-readable domain names back to their codes before type coercion.
 - `pack_batches()` greedy-packs serialized features and delete IDs into POST body dicts capped at a configurable byte limit (default 1.8 MB).
 - `recode_domains(df, fields, *, direction)` added to `archie.serializers._coercions`. Translates coded domain values bidirectionally: `from_esri` maps codes to names, `to_esri` maps names to codes. Unmapped values pass through unchanged. Emits a `UserWarning` when mapped and unmapped non-null values coexist in the same column, as the result will be mixed-type.
+- `ApplyEditsOperation.execute()` accepts a `poll_timeout` keyword argument (default 300 s) that caps how long the async polling loop will wait for a server-side job to complete before raising `TimeoutError`.
 
 ### Changed
 
@@ -49,6 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `FieldsResult.field_type_map` replaces the former `esri_field_types` attribute.
 - Custom exception classes from `archie.errors` are now used consistently throughout the package in place of built-in Python exceptions.
 - Import paths simplified: all public symbols are re-exported from their respective sub-package `__init__.py` files.
+- `ApplyEditsOperation` now uses server-side async editing only when the payload spans multiple batches. Single-batch payloads always use the synchronous path to avoid unnecessary polling round-trips.
 
 ### Fixed
 
@@ -57,5 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CRS defaults correctly to the layer's native spatial reference when `out_sr` is not supplied to `QueryOperation`.
 - `LayerCapabilityError` is raised (instead of a generic exception) when a caller attempts to query a layer that lacks query capability.
 - `UserTokenAuth` token request now sends `referer` instead of `requestip` in the POST body, matching the ESRI `generateToken` API contract.
+- Async `applyEdits` polling now uses the correct ESRI status strings (`"COMPLETED"` / `"PROCESSING"`) instead of the geoprocessing-task strings (`esriJobSucceeded` / `esriJobFailed`) that were previously used and caused the polling loop to never exit.
+- When an async `applyEdits` job completes, the operation now follows the `resultUrl` returned in the status body to fetch the actual edit results (`addResults`, `updateResults`, `deleteResults`). Previously the status body itself was parsed as the result, which always produced empty result sets.
+- Async polling loop is now bounded by `anyio.fail_after`; previously it could spin indefinitely if the server never returned a terminal status.
 
 [Unreleased]: https://github.com/cityofboulder/archie
