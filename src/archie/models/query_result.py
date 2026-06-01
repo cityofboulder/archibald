@@ -10,7 +10,7 @@ import geopandas as gpd
 
 from archie.exceptions import MissingGeometryError
 from archie.models.fields_result import FieldsResult
-from archie.serializers._coercions import enforce_types
+from archie.serializers._coercions import enforce_types, recode_domains
 
 
 @dataclass
@@ -27,6 +27,7 @@ class QueryResult:
     fields: FieldsResult
     geojson: bool
     crs: int | None = None
+    apply_coded_values: bool = False
 
     def to_frame(self, *, parse_dtypes: bool = False) -> pd.DataFrame:
         """Return attributes only as a pandas DataFrame.
@@ -47,11 +48,7 @@ class QueryResult:
         records = [f.get(key, {}) for f in self.features]
         df = pd.DataFrame(records)
 
-        return (
-            enforce_types(df, self.fields, direction="from_esri")
-            if parse_dtypes
-            else df
-        )
+        return self._parse_and_decode(df, parse_dtypes=parse_dtypes)
 
     def to_geodataframe(self, *, parse_dtypes: bool = False) -> gpd.GeoDataFrame:
         """Return attributes + geometry as a geopandas GeoDataFrame.
@@ -85,11 +82,24 @@ class QueryResult:
 
         gdf = gpd.GeoDataFrame.from_features(self.features, crs=self.crs)
 
-        return (
-            enforce_types(gdf, self.fields, direction="from_esri")
-            if parse_dtypes
-            else gdf
-        )  # type: ignore
+        return self._parse_and_decode(gdf, parse_dtypes=parse_dtypes)  # type: ignore
+
+    def _parse_and_decode(
+        self, df: pd.DataFrame | gpd.GeoDataFrame, parse_dtypes: bool
+    ) -> pd.DataFrame | gpd.GeoDataFrame:
+        """Parse data types and apply coded-value domain translation if enabled.
+
+        Type coercion always runs before domain lookup when apply_coded_values is
+        True and the fields actually carry domain maps — domain codes must be typed
+        consistently for the mapping to match. When apply_coded_values is True but
+        no fields have domains, coercion is skipped unless parse_dtypes is also True.
+        """
+        apply_domains = self.apply_coded_values and bool(self.fields.domain_maps)
+        if parse_dtypes or apply_domains:
+            df = enforce_types(df, self.fields, direction="from_esri")
+        if apply_domains:
+            return recode_domains(df, self.fields, direction="from_esri")
+        return df
 
     def _construct_empty(
         self, type: Literal["dataframe", "geodataframe"]

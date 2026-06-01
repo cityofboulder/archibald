@@ -107,6 +107,30 @@ def fields_result() -> FieldsResult:
 
 
 @pytest.fixture
+def fields_result_with_domains(fields_result) -> FieldsResult:
+    """fields_result with a coded-value domain added to the Status field.
+
+    Domain: 0 → Inactive, 1 → Active, 2 → Pending.
+    All other fields are inherited unchanged from fields_result.
+    """
+    domain = {
+        "type": "codedValue",
+        "name": "StatusDomain",
+        "codedValues": [
+            {"name": "Active", "code": 1},
+            {"name": "Inactive", "code": 0},
+            {"name": "Pending", "code": 2},
+        ],
+    }
+    return FieldsResult(
+        fields=[
+            {**f, "domain": domain} if f["name"] == "Status" else f
+            for f in fields_result.fields
+        ]
+    )
+
+
+@pytest.fixture
 def mock_layer(mocker, fields_result):
     """A mock FeatureLayer with sensible async method defaults.
 

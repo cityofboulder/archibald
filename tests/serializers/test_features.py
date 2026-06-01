@@ -32,7 +32,11 @@ class TestSelectAttrColumns:
             fields=[
                 {"name": "OBJECTID", "type": "esriFieldTypeOID", "editable": False},
                 {"name": "Name", "type": "esriFieldTypeString", "editable": True},
-                {"name": "GlobalID", "type": "esriFieldTypeGlobalID", "editable": False},
+                {
+                    "name": "GlobalID",
+                    "type": "esriFieldTypeGlobalID",
+                    "editable": False,
+                },
             ]
         )
         df = pd.DataFrame(
@@ -105,6 +109,44 @@ class TestSerializeFeatures:
         result = serialize_features(df, fields_result, objectid_field=None)
 
         assert "OBJECTID" not in result[0]["attributes"]
+
+    def test_translates_domain_names_to_codes_when_flag_set(
+        self, fields_result_with_domains
+    ):
+        df = pd.DataFrame({"Status": ["Active", "Inactive"]})
+
+        result = serialize_features(
+            df, fields_result_with_domains, apply_coded_values=True
+        )
+
+        assert result[0]["attributes"]["Status"] == 1
+        assert result[1]["attributes"]["Status"] == 0
+
+    def test_leaves_values_unchanged_when_apply_coded_values_false(
+        self, fields_result_with_domains
+    ):
+        df = pd.DataFrame({"Status": [1, 0]})
+
+        result = serialize_features(df, fields_result_with_domains)
+
+        assert result[0]["attributes"]["Status"] == 1
+        assert result[1]["attributes"]["Status"] == 0
+
+    def test_warns_and_nulls_unmapped_names_when_mixed_to_esri(
+        self, fields_result_with_domains
+    ):
+        # "Active" maps to 1; "Unknown" has no domain entry → recode_domains
+        # emits a mixed-type warning, and the leftover str "Unknown" cannot be
+        # coerced to an integer by _coerce_columns, so it is sent as null.
+        df = pd.DataFrame({"Status": ["Active", "Unknown"]})
+
+        with pytest.warns(UserWarning, match="mixed-type"):
+            result = serialize_features(
+                df, fields_result_with_domains, apply_coded_values=True
+            )
+
+        assert result[0]["attributes"]["Status"] == 1
+        assert result[1]["attributes"]["Status"] is None
 
 
 class TestPackBatches:

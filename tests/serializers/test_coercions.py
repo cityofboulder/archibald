@@ -13,6 +13,7 @@ from archie.serializers._coercions import (
     _coerce_integer,
     _coerce_string,
     enforce_types,
+    recode_domains,
 )
 
 
@@ -353,3 +354,129 @@ class TestEnforceTypes:
         result = enforce_types(df, fields_result, direction=direction)
 
         assert result.empty
+
+
+class TestRecodeDomains:
+    @pytest.mark.parametrize(
+        "direction, input_val, expected_val",
+        [
+            ("from_esri", 1, "Active"),
+            ("from_esri", 0, "Inactive"),
+            ("from_esri", 2, "Pending"),
+            ("to_esri", "Active", 1),
+            ("to_esri", "Inactive", 0),
+            ("to_esri", "Pending", 2),
+        ],
+        ids=[
+            "from-esri-code-1",
+            "from-esri-code-0",
+            "from-esri-code-2",
+            "to-esri-active",
+            "to-esri-inactive",
+            "to-esri-pending",
+        ],
+    )
+    def test_translates_domain_values(
+        self, fields_result_with_domains, direction, input_val, expected_val
+    ):
+        df = pd.DataFrame({"Status": [input_val]})
+
+        result = recode_domains(df, fields_result_with_domains, direction=direction)
+
+        assert result["Status"].iloc[0] == expected_val
+
+    @pytest.mark.parametrize(
+        "direction, value",
+        [("from_esri", 99), ("to_esri", "Unknown")],
+        ids=["code-from-esri", "name-to-esri"],
+    )
+    def test_unmapped_value_passes_through_unchanged(
+        self, fields_result_with_domains, direction, value
+    ):
+        df = pd.DataFrame({"Status": [value]})
+
+        result = recode_domains(df, fields_result_with_domains, direction=direction)
+
+        assert result["Status"].iloc[0] == value
+
+    @pytest.mark.parametrize(
+        "direction",
+        ["from_esri", "to_esri"],
+        ids=["from-esri", "to-esri"],
+    )
+    def test_null_value_preserved(self, fields_result_with_domains, direction):
+        df = pd.DataFrame({"Status": [None]}, dtype=object)
+
+        result = recode_domains(df, fields_result_with_domains, direction=direction)
+
+        assert result["Status"].iloc[0] is None
+
+    def test_non_domain_column_left_unchanged(self, fields_result_with_domains):
+        df = pd.DataFrame({"Status": [1], "Name": ["Alice"]})
+
+        result = recode_domains(df, fields_result_with_domains, direction="from_esri")
+
+        assert result["Name"].iloc[0] == "Alice"
+
+    def test_returns_original_df_when_no_domain_fields(self, fields_result):
+        df = pd.DataFrame({"Status": [1]})
+
+        result = recode_domains(df, fields_result, direction="from_esri")
+
+        assert result is df
+
+    def test_leaves_df_unchanged_when_domain_field_not_queried(
+        self, fields_result_with_domains
+    ):
+        # Status has a domain but isn't in the DataFrame (e.g. out_fields omitted it).
+        df = pd.DataFrame({"Name": ["Alice"]})
+
+        result = recode_domains(df, fields_result_with_domains, direction="from_esri")
+
+        assert list(result.columns) == ["Name"]
+
+    def test_returns_copy_not_inplace(self, fields_result_with_domains):
+        df = pd.DataFrame({"Status": [1]})
+
+        result = recode_domains(df, fields_result_with_domains, direction="from_esri")
+
+        assert result is not df
+
+    @pytest.mark.parametrize(
+        "direction, values",
+        [
+            ("from_esri", [1, 99]),
+            ("to_esri", ["Active", "Unknown"]),
+        ],
+        ids=["from-esri-mixed", "to-esri-mixed"],
+    )
+    def test_warns_when_unmapped_values_mix_with_mapped(
+        self, fields_result_with_domains, direction, values
+    ):
+        df = pd.DataFrame({"Status": values})
+
+        with pytest.warns(UserWarning, match="Status"):
+            recode_domains(df, fields_result_with_domains, direction=direction)
+
+    def test_warning_includes_unmapped_example_values(
+        self, fields_result_with_domains
+    ):
+        df = pd.DataFrame({"Status": [1, 99, 100]})
+
+        with pytest.warns(UserWarning, match="99"):
+            recode_domains(df, fields_result_with_domains, direction="from_esri")
+
+    def test_no_warning_when_all_values_mapped(self, fields_result_with_domains):
+        df = pd.DataFrame({"Status": [0, 1, 2]})
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            recode_domains(df, fields_result_with_domains, direction="from_esri")
+
+    def test_no_warning_when_all_values_unmapped(self, fields_result_with_domains):
+        # All unmapped → uniform passthrough, no mixed types, no warning.
+        df = pd.DataFrame({"Status": [99, 100]})
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            recode_domains(df, fields_result_with_domains, direction="from_esri")

@@ -215,3 +215,29 @@ class TestQuery:
             out_sr=None,
             orderByFields="Name DESC",
         )
+
+    @pytest.mark.anyio
+    async def test_sets_apply_coded_values_on_result_when_true(
+        self, base_layer, mocker, geojson_query_result
+    ):
+        mocker.patch.object(base_layer, "supports_query", return_value=True)
+        mocker.patch.object(
+            base_layer._query_op, "execute", return_value=geojson_query_result
+        )
+
+        result = await base_layer.query(apply_coded_values=True)
+
+        assert result.apply_coded_values is True
+
+    @pytest.mark.anyio
+    async def test_apply_coded_values_false_returns_result_unchanged(
+        self, base_layer, mocker, geojson_query_result
+    ):
+        mocker.patch.object(base_layer, "supports_query", return_value=True)
+        mocker.patch.object(
+            base_layer._query_op, "execute", return_value=geojson_query_result
+        )
+
+        result = await base_layer.query(apply_coded_values=False)
+
+        assert result is geojson_query_result

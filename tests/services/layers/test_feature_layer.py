@@ -51,7 +51,9 @@ class TestApplyEdits:
     async def test_raises_when_not_supported(self, feature_layer, mocker):
         mocker.patch.object(feature_layer, "supports_apply_edits", return_value=False)
 
-        with pytest.raises(LayerCapabilityError, match="does not support edit operations"):
+        with pytest.raises(
+            LayerCapabilityError, match="does not support edit operations"
+        ):
             await feature_layer.apply_edits()
 
     @pytest.mark.anyio
@@ -66,9 +68,34 @@ class TestApplyEdits:
         result = await feature_layer.apply_edits(adds=df, rollback_on_failure=True)
 
         mock_execute.assert_called_once_with(
-            adds=df, updates=None, deletes=None, rollback_on_failure=True
+            adds=df,
+            updates=None,
+            deletes=None,
+            rollback_on_failure=True,
+            apply_coded_values=False,
         )
         assert result is expected
+
+    @pytest.mark.anyio
+    async def test_threads_apply_coded_values_true_to_execute(
+        self, feature_layer, mocker
+    ):
+        df = pd.DataFrame({"Status": ["Active"]})
+        expected = make_apply_edits_result()
+        mocker.patch.object(feature_layer, "supports_apply_edits", return_value=True)
+        mock_execute = mocker.patch.object(
+            feature_layer._apply_edits_op, "execute", return_value=expected
+        )
+
+        await feature_layer.apply_edits(adds=df, apply_coded_values=True)
+
+        mock_execute.assert_called_once_with(
+            adds=df,
+            updates=None,
+            deletes=None,
+            rollback_on_failure=False,
+            apply_coded_values=True,
+        )
 
 
 class TestAppend:
@@ -82,7 +109,7 @@ class TestAppend:
 
         result = await feature_layer.append(df)
 
-        mock_apply.assert_called_once_with(adds=df)
+        mock_apply.assert_called_once_with(adds=df, apply_coded_values=False)
         assert result is expected
 
 
@@ -100,7 +127,9 @@ class TestUpsert:
 
         await feature_layer.upsert(adds_df, ["Name"])
 
-        mock_apply.assert_called_once_with(adds=adds_df, updates=updates_df)
+        mock_apply.assert_called_once_with(
+            adds=adds_df, updates=updates_df, apply_coded_values=False
+        )
 
     @pytest.mark.parametrize(
         "adds_rows,updates_rows",
@@ -114,9 +143,17 @@ class TestUpsert:
     async def test_passes_none_for_empty_partition(
         self, feature_layer, mocker, adds_rows, updates_rows
     ):
-        adds_df = pd.DataFrame(adds_rows) if adds_rows else pd.DataFrame(columns=["Name"])
-        updates_df = pd.DataFrame(updates_rows) if updates_rows else pd.DataFrame(columns=["Name"])
-        mocker.patch.object(feature_layer, "_diff", return_value=(adds_df, updates_df, []))
+        adds_df = (
+            pd.DataFrame(adds_rows) if adds_rows else pd.DataFrame(columns=["Name"])
+        )
+        updates_df = (
+            pd.DataFrame(updates_rows)
+            if updates_rows
+            else pd.DataFrame(columns=["Name"])
+        )
+        mocker.patch.object(
+            feature_layer, "_diff", return_value=(adds_df, updates_df, [])
+        )
         mock_apply = mocker.patch.object(
             feature_layer, "apply_edits", return_value=make_apply_edits_result()
         )
@@ -126,6 +163,7 @@ class TestUpsert:
         mock_apply.assert_called_once_with(
             adds=None if adds_df.empty else adds_df,
             updates=None if updates_df.empty else updates_df,
+            apply_coded_values=False,
         )
 
 
@@ -145,7 +183,7 @@ class TestSync:
         await feature_layer.sync(adds_df, ["Name"])
 
         mock_apply.assert_called_once_with(
-            adds=adds_df, updates=updates_df, deletes=[2, 3]
+            adds=adds_df, updates=updates_df, deletes=[2, 3], apply_coded_values=False
         )
 
     @pytest.mark.anyio
@@ -162,7 +200,7 @@ class TestSync:
         await feature_layer.sync(adds_df, ["Name"])
 
         mock_apply.assert_called_once_with(
-            adds=adds_df, updates=updates_df, deletes=None
+            adds=adds_df, updates=updates_df, deletes=None, apply_coded_values=False
         )
 
 

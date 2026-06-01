@@ -5,7 +5,7 @@ import pandas as pd
 import geopandas as gpd
 
 from archie.exceptions import MissingGeometryError
-from archie.models import FieldsResult
+from archie.models import FieldsResult, QueryResult
 from tests.helpers import make_query_result
 
 
@@ -48,7 +48,13 @@ class TestToFrame:
 
         assert isinstance(result, pd.DataFrame)
         assert result.empty
-        assert list(result.columns) == ["OBJECTID", "Name", "Status", "Score", "EventDate"]
+        assert list(result.columns) == [
+            "OBJECTID",
+            "Name",
+            "Status",
+            "Score",
+            "EventDate",
+        ]
 
 
 class TestToGeoDataFrame:
@@ -173,3 +179,154 @@ class TestParseDtypes:
         assert isinstance(result, gpd.GeoDataFrame)
         assert str(result["StartDate"].dtype) == "datetime64[ms, UTC]"
         assert isinstance(result.geometry, gpd.GeoSeries)
+
+
+class TestApplyCodedValues:
+    @pytest.mark.parametrize(
+        "method",
+        ["to_frame", "to_geodataframe"],
+        ids=["frame", "geodataframe"],
+    )
+    def test_does_not_enforce_types_when_apply_coded_values_true_but_no_domains(
+        self, fields_result, method
+    ):
+        # apply_coded_values=True should not trigger type coercion when the
+        # fields carry no domain maps — the user did not request parse_dtypes.
+        if method == "to_frame":
+            features = [{"attributes": {"EventDate": 1_748_476_800_000}}]
+            qr = QueryResult(
+                features=features,
+                fields=fields_result.filter(names=["EventDate"]),
+                geojson=False,
+                apply_coded_values=True,
+            )
+        else:
+            features = [
+                {
+                    "type": "Feature",
+                    "properties": {"EventDate": 1_748_476_800_000},
+                    "geometry": {"type": "Point", "coordinates": [0.0, 0.0]},
+                }
+            ]
+            qr = QueryResult(
+                features=features,
+                fields=fields_result.filter(names=["EventDate"]),
+                geojson=True,
+                crs=4326,
+                apply_coded_values=True,
+            )
+
+        result = getattr(qr, method)()
+
+        assert pd.api.types.is_integer_dtype(result["EventDate"])
+
+    def test_to_frame_enforces_types_before_domain_lookup(
+        self, fields_result_with_domains
+    ):
+        # Without enforce_types running first, "1" (str) != 1 (int) in the dict
+        # lookup, so recode_domains silently falls back to the original value.
+        features = [{"attributes": {"Status": "1"}}]
+        qr = QueryResult(
+            features=features,
+            fields=fields_result_with_domains.filter(names=["Status"]),
+            geojson=False,
+            apply_coded_values=True,
+        )
+
+        result = qr.to_frame()
+
+        assert result["Status"].iloc[0] == "Active"
+
+    def test_to_frame_replaces_codes_with_names_when_flag_set(
+        self, fields_result_with_domains
+    ):
+        features = [
+            {"attributes": {"Status": 1}},
+            {"attributes": {"Status": 0}},
+        ]
+        qr = QueryResult(
+            features=features,
+            fields=fields_result_with_domains.filter(names=["Status"]),
+            geojson=False,
+            apply_coded_values=True,
+        )
+
+        result = qr.to_frame()
+
+        assert result["Status"].tolist() == ["Active", "Inactive"]
+
+    def test_to_frame_leaves_codes_unchanged_when_flag_not_set(
+        self, fields_result_with_domains
+    ):
+        features = [{"attributes": {"Status": 1}}]
+        qr = QueryResult(
+            features=features,
+            fields=fields_result_with_domains.filter(names=["Status"]),
+            geojson=False,
+        )
+
+        result = qr.to_frame()
+
+        assert result["Status"].iloc[0] == 1
+
+    def test_to_frame_domain_applied_after_type_coercion(
+        self, fields_result_with_domains
+    ):
+        # parse_dtypes coerces Status to Int32 first; domain map must still match.
+        features = [{"attributes": {"Status": 1}}]
+        qr = QueryResult(
+            features=features,
+            fields=fields_result_with_domains.filter(names=["Status"]),
+            geojson=False,
+            apply_coded_values=True,
+        )
+
+        result = qr.to_frame(parse_dtypes=True)
+
+        assert result["Status"].iloc[0] == "Active"
+
+    def test_to_geodataframe_replaces_codes_with_names_when_flag_set(
+        self, fields_result_with_domains
+    ):
+        features = [
+            {
+                "type": "Feature",
+                "properties": {"Status": 2},
+                "geometry": {"type": "Point", "coordinates": [0.0, 0.0]},
+            }
+        ]
+        qr = QueryResult(
+            features=features,
+            fields=fields_result_with_domains.filter(names=["Status"]),
+            geojson=True,
+            crs=4326,
+            apply_coded_values=True,
+        )
+
+        result = qr.to_geodataframe()
+
+        assert result["Status"].iloc[0] == "Pending"
+
+    def test_to_geodataframe_enforces_types_before_domain_lookup(
+        self, fields_result_with_domains
+    ):
+        # Without enforce_types running first, "1" (str) != 1 (int) in the dict
+        # lookup, so recode_domains silently falls back to the original value.
+        features = [
+            {
+                "type": "Feature",
+                "properties": {"Status": "1"},
+                "geometry": {"type": "Point", "coordinates": [0.0, 0.0]},
+            }
+        ]
+        qr = QueryResult(
+            features=features,
+            fields=fields_result_with_domains.filter(names=["Status"]),
+            geojson=True,
+            crs=4326,
+            apply_coded_values=True,
+        )
+
+        result = qr.to_geodataframe()
+
+        assert result["Status"].iloc[0] == "Active"
