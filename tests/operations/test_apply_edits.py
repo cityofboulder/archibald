@@ -74,7 +74,7 @@ class TestPostBatch:
         )
 
         await apply_edits_op._post_batch(
-            batch, rollback_on_failure=False, use_async=False
+            batch, rollback_on_failure=False, use_async=False, poll_timeout=300.0
         )
 
         data = mock_layer._client.post.call_args.kwargs["data"]
@@ -89,7 +89,7 @@ class TestPostBatch:
         )
 
         await apply_edits_op._post_batch(
-            batch, rollback_on_failure=False, use_async=False
+            batch, rollback_on_failure=False, use_async=False, poll_timeout=300.0
         )
 
         data = mock_layer._client.post.call_args.kwargs["data"]
@@ -103,7 +103,7 @@ class TestPostBatch:
         )
 
         await apply_edits_op._post_batch(
-            batch, rollback_on_failure=True, use_async=False
+            batch, rollback_on_failure=True, use_async=False, poll_timeout=300.0
         )
 
         data = mock_layer._client.post.call_args.kwargs["data"]
@@ -117,7 +117,7 @@ class TestPostBatch:
         )
 
         await apply_edits_op._post_batch(
-            batch, rollback_on_failure=False, use_async=False
+            batch, rollback_on_failure=False, use_async=False, poll_timeout=300.0
         )
 
         data = mock_layer._client.post.call_args.kwargs["data"]
@@ -138,7 +138,7 @@ class TestPostBatch:
         )
 
         await apply_edits_op._post_batch(
-            batch, rollback_on_failure=False, use_async=True
+            batch, rollback_on_failure=False, use_async=True, poll_timeout=300.0
         )
 
         data = mock_layer._client.post.call_args.kwargs["data"]
@@ -154,7 +154,7 @@ class TestPostBatch:
         )
 
         await apply_edits_op._post_batch(
-            batch, rollback_on_failure=False, use_async=False
+            batch, rollback_on_failure=False, use_async=False, poll_timeout=300.0
         )
 
         data = mock_layer._client.post.call_args.kwargs["data"]
@@ -170,7 +170,7 @@ class TestPostBatch:
         )
 
         result = await apply_edits_op._post_batch(
-            batch, rollback_on_failure=False, use_async=False
+            batch, rollback_on_failure=False, use_async=False, poll_timeout=300.0
         )
 
         assert isinstance(result, ApplyEditsResult)
@@ -192,90 +192,158 @@ class TestPostBatch:
         )
 
         await apply_edits_op._post_batch(
-            batch, rollback_on_failure=False, use_async=True
+            batch, rollback_on_failure=False, use_async=True, poll_timeout=300.0
         )
 
-        mock_poll.assert_awaited_once_with("https://example.com/status/42")
+        mock_poll.assert_awaited_once_with(
+            "https://example.com/status/42", timeout=300.0
+        )
 
 
 class TestPollStatus:
     @pytest.mark.anyio
-    async def test_returns_body_on_esri_job_succeeded(
+    async def test_returns_results_body_on_completed(
         self, apply_edits_op, mock_layer, mocker
     ):
         mocker.patch("archie.operations.apply_edits.anyio.sleep")
-        mock_layer._client.get.return_value = make_response(
-            {"status": "esriJobSucceeded"}
+        results_body = make_esri_apply_edits_response(add_ids=[1])
+        mock_layer._client.get.side_effect = [
+            make_response(
+                {"status": "COMPLETED", "resultUrl": "https://results.example.com/1"}
+            ),
+            make_response(results_body),
+        ]
+
+        result = await apply_edits_op._poll_status(
+            "https://status.example.com/1", timeout=300.0
         )
 
-        result = await apply_edits_op._poll_status("https://status.example.com/1")
-
-        assert result["status"] == "esriJobSucceeded"
+        assert result == results_body
 
     @pytest.mark.anyio
-    async def test_raises_service_error_on_esri_job_failed(
+    async def test_fetches_result_url_on_completed(
+        self, apply_edits_op, mock_layer, mocker
+    ):
+        mocker.patch("archie.operations.apply_edits.anyio.sleep")
+        mock_layer._client.get.side_effect = [
+            make_response(
+                {
+                    "status": "COMPLETED",
+                    "resultUrl": "https://results.example.com/job/42.json",
+                }
+            ),
+            make_response(make_esri_apply_edits_response()),
+        ]
+
+        await apply_edits_op._poll_status(
+            "https://status.example.com/1", timeout=300.0
+        )
+
+        assert mock_layer._client.get.call_args_list[1].kwargs["url"] == (
+            "https://results.example.com/job/42.json"
+        )
+
+    @pytest.mark.anyio
+    async def test_raises_service_error_on_error_in_body(
         self, apply_edits_op, mock_layer, mocker
     ):
         mocker.patch("archie.operations.apply_edits.anyio.sleep")
         mock_layer._client.get.return_value = make_response(
-            {"status": "esriJobFailed", "statusMessage": "Quota exceeded"}
+            {"error": {"code": 400, "message": "Quota exceeded"}}
         )
 
         with pytest.raises(ServiceError, match="Quota exceeded"):
-            await apply_edits_op._poll_status("https://status.example.com/1")
+            await apply_edits_op._poll_status(
+                "https://status.example.com/1", timeout=300.0
+            )
 
     @pytest.mark.anyio
     async def test_raises_service_error_uses_default_message_when_absent(
         self, apply_edits_op, mock_layer, mocker
     ):
         mocker.patch("archie.operations.apply_edits.anyio.sleep")
-        mock_layer._client.get.return_value = make_response(
-            {"status": "esriJobFailed"}
-        )
+        mock_layer._client.get.return_value = make_response({"error": {}})
 
         with pytest.raises(ServiceError, match="Async applyEdits job failed"):
-            await apply_edits_op._poll_status("https://status.example.com/1")
+            await apply_edits_op._poll_status(
+                "https://status.example.com/1", timeout=300.0
+            )
 
     @pytest.mark.anyio
-    async def test_polls_until_succeeded(self, apply_edits_op, mock_layer, mocker):
+    async def test_polls_until_completed(self, apply_edits_op, mock_layer, mocker):
         mocker.patch("archie.operations.apply_edits.anyio.sleep")
+        results_body = make_esri_apply_edits_response()
         mock_layer._client.get.side_effect = [
-            make_response({"status": "esriJobExecuting"}),
-            make_response({"status": "esriJobExecuting"}),
-            make_response({"status": "esriJobSucceeded"}),
+            make_response({"status": "PROCESSING"}),
+            make_response({"status": "PROCESSING"}),
+            make_response(
+                {"status": "COMPLETED", "resultUrl": "https://results.example.com/1"}
+            ),
+            make_response(results_body),
         ]
 
-        result = await apply_edits_op._poll_status("https://status.example.com/1")
+        result = await apply_edits_op._poll_status(
+            "https://status.example.com/1", timeout=300.0
+        )
 
-        assert mock_layer._client.get.call_count == 3
-        assert result["status"] == "esriJobSucceeded"
+        assert mock_layer._client.get.call_count == 4
+        assert result == results_body
 
     @pytest.mark.anyio
-    async def test_get_called_with_url_kwarg(self, apply_edits_op, mock_layer, mocker):
+    async def test_status_get_called_with_url_kwarg(
+        self, apply_edits_op, mock_layer, mocker
+    ):
         mocker.patch("archie.operations.apply_edits.anyio.sleep")
-        mock_layer._client.get.return_value = make_response(
-            {"status": "esriJobSucceeded"}
+        mock_layer._client.get.side_effect = [
+            make_response(
+                {
+                    "status": "COMPLETED",
+                    "resultUrl": "https://results.example.com/1",
+                }
+            ),
+            make_response(make_esri_apply_edits_response()),
+        ]
+
+        await apply_edits_op._poll_status(
+            "https://status.example.com/job/42", timeout=300.0
         )
 
-        await apply_edits_op._poll_status("https://status.example.com/job/42")
-
-        mock_layer._client.get.assert_called_once_with(
-            url="https://status.example.com/job/42"
+        assert mock_layer._client.get.call_args_list[0].kwargs["url"] == (
+            "https://status.example.com/job/42"
         )
+
+    @pytest.mark.anyio
+    async def test_raises_timeout_error_when_polling_exceeds_timeout(
+        self, apply_edits_op, mock_layer
+    ):
+        # anyio.sleep is NOT mocked so it creates a real checkpoint where
+        # anyio.fail_after can deliver cancellation.
+        mock_layer._client.get.return_value = make_response({"status": "PROCESSING"})
+
+        with pytest.raises(TimeoutError):
+            await apply_edits_op._poll_status(
+                "https://status.example.com/1", timeout=0.001
+            )
 
     @pytest.mark.anyio
     async def test_exponential_backoff_delay(
         self, apply_edits_op, mock_layer, mocker
     ):
         mock_sleep = mocker.patch("archie.operations.apply_edits.anyio.sleep")
+        results_body = make_esri_apply_edits_response()
         mock_layer._client.get.side_effect = [
-            make_response({"status": "esriJobExecuting"}),
-            make_response({"status": "esriJobExecuting"}),
-            make_response({"status": "esriJobExecuting"}),
-            make_response({"status": "esriJobSucceeded"}),
+            make_response({"status": "PROCESSING"}),
+            make_response({"status": "PROCESSING"}),
+            make_response({"status": "PROCESSING"}),
+            make_response(
+                {"status": "COMPLETED", "resultUrl": "https://results.example.com/1"}
+            ),
+            make_response(results_body),
         ]
 
-        await apply_edits_op._poll_status("https://status.example.com/1")
+        await apply_edits_op._poll_status(
+            "https://status.example.com/1", timeout=300.0
+        )
 
         delays = [call.args[0] for call in mock_sleep.await_args_list]
         assert delays == [0.5, 1.0, 2.0]
@@ -283,17 +351,23 @@ class TestPollStatus:
     @pytest.mark.anyio
     async def test_delay_capped_at_max(self, apply_edits_op, mock_layer, mocker):
         mock_sleep = mocker.patch("archie.operations.apply_edits.anyio.sleep")
+        results_body = make_esri_apply_edits_response()
         mock_layer._client.get.side_effect = [
-            make_response({"status": "esriJobExecuting"}),
-            make_response({"status": "esriJobExecuting"}),
-            make_response({"status": "esriJobExecuting"}),
-            make_response({"status": "esriJobExecuting"}),
-            make_response({"status": "esriJobExecuting"}),
-            make_response({"status": "esriJobExecuting"}),
-            make_response({"status": "esriJobSucceeded"}),
+            make_response({"status": "PROCESSING"}),
+            make_response({"status": "PROCESSING"}),
+            make_response({"status": "PROCESSING"}),
+            make_response({"status": "PROCESSING"}),
+            make_response({"status": "PROCESSING"}),
+            make_response({"status": "PROCESSING"}),
+            make_response(
+                {"status": "COMPLETED", "resultUrl": "https://results.example.com/1"}
+            ),
+            make_response(results_body),
         ]
 
-        await apply_edits_op._poll_status("https://status.example.com/1")
+        await apply_edits_op._poll_status(
+            "https://status.example.com/1", timeout=300.0
+        )
 
         delays = [call.args[0] for call in mock_sleep.await_args_list]
         # 0.5 → 1.0 → 2.0 → 4.0 → capped at 5.0 → 5.0
@@ -313,6 +387,7 @@ class TestPostBatches:
             [{"adds": [make_small_feature(1)]}],
             rollback_on_failure=False,
             use_async=False,
+            poll_timeout=300.0,
         )
 
         assert result.add_results == expected.add_results
@@ -324,13 +399,16 @@ class TestPostBatches:
         r1 = make_apply_edits_result(adds=[make_edit_result_item(1)])
         r2 = make_apply_edits_result(adds=[make_edit_result_item(2)])
 
-        async def post_side_effect(batch, *, rollback_on_failure, use_async):
+        async def post_side_effect(batch, *, rollback_on_failure, use_async, poll_timeout):
             return r1 if batch is batch1 else r2
 
         mocker.patch.object(apply_edits_op, "_post_batch", side_effect=post_side_effect)
 
         result = await apply_edits_op._post_batches(
-            [batch1, batch2], rollback_on_failure=False, use_async=False
+            [batch1, batch2],
+            rollback_on_failure=False,
+            use_async=False,
+            poll_timeout=300.0,
         )
 
         assert [r.object_id for r in result.add_results] == [1, 2]
@@ -346,12 +424,35 @@ class TestPostBatches:
         )
 
         await apply_edits_op._post_batches(
-            [{}, {}], rollback_on_failure=True, use_async=True
+            [{}, {}],
+            rollback_on_failure=True,
+            use_async=True,
+            poll_timeout=300.0,
         )
 
         for call in mock_post.call_args_list:
             assert call.kwargs["rollback_on_failure"] is True
             assert call.kwargs["use_async"] is True
+
+    @pytest.mark.anyio
+    async def test_poll_timeout_propagated_to_each_batch(
+        self, apply_edits_op, mocker
+    ):
+        mock_post = mocker.patch.object(
+            apply_edits_op,
+            "_post_batch",
+            return_value=make_apply_edits_result(),
+        )
+
+        await apply_edits_op._post_batches(
+            [{}, {}],
+            rollback_on_failure=False,
+            use_async=True,
+            poll_timeout=60.0,
+        )
+
+        for call in mock_post.call_args_list:
+            assert call.kwargs["poll_timeout"] == 60.0
 
 
 class TestExecute:
@@ -446,7 +547,7 @@ class TestExecute:
         assert len(recwarn) == 0
 
     @pytest.mark.anyio
-    async def test_async_flag_true_when_layer_supports_async(
+    async def test_async_false_for_single_batch_even_when_layer_supports_async(
         self, apply_edits_op, mock_layer, mocker
     ):
         mock_layer.supports_async_apply_edits.return_value = True
@@ -458,6 +559,25 @@ class TestExecute:
 
         await apply_edits_op.execute(deletes=[1])
 
+        assert mock_post_batches.call_args.kwargs["use_async"] is False
+
+    @pytest.mark.anyio
+    async def test_async_true_for_multiple_batches_when_layer_supports_async(
+        self, apply_edits_op, mock_layer, mocker
+    ):
+        mock_layer.supports_async_apply_edits.return_value = True
+        mocker.patch(
+            "archie.operations.apply_edits.pack_batches",
+            return_value=[{"deletes": "1"}, {"deletes": "2"}],
+        )
+        mock_post_batches = mocker.patch.object(
+            apply_edits_op,
+            "_post_batches",
+            return_value=make_apply_edits_result(),
+        )
+
+        await apply_edits_op.execute(deletes=[1, 2])
+
         assert mock_post_batches.call_args.kwargs["use_async"] is True
 
     @pytest.mark.anyio
@@ -465,12 +585,30 @@ class TestExecute:
         self, apply_edits_op, mock_layer, mocker
     ):
         mock_layer.supports_async_apply_edits.return_value = False
+        mocker.patch(
+            "archie.operations.apply_edits.pack_batches",
+            return_value=[{"deletes": "1"}, {"deletes": "2"}],
+        )
         mock_post_batches = mocker.patch.object(
             apply_edits_op,
             "_post_batches",
             return_value=make_apply_edits_result(),
         )
 
-        await apply_edits_op.execute(deletes=[1])
+        await apply_edits_op.execute(deletes=[1, 2])
 
         assert mock_post_batches.call_args.kwargs["use_async"] is False
+
+    @pytest.mark.anyio
+    async def test_poll_timeout_forwarded_to_post_batches(
+        self, apply_edits_op, mocker
+    ):
+        mock_post_batches = mocker.patch.object(
+            apply_edits_op,
+            "_post_batches",
+            return_value=make_apply_edits_result(),
+        )
+
+        await apply_edits_op.execute(deletes=[1], poll_timeout=60.0)
+
+        assert mock_post_batches.call_args.kwargs["poll_timeout"] == 60.0
