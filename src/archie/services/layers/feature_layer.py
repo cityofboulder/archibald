@@ -254,7 +254,7 @@ class FeatureLayer(FeatureService, BaseLayer):
         updates_mask = input_keys.isin(existing_keys)
         key_to_oid = dict(zip(existing_keys, existing_df[objectid_field]))
         updates = df[updates_mask].copy()
-        updates[objectid_field] = input_keys[updates_mask].map(key_to_oid)
+        updates[objectid_field] = input_keys[updates_mask].map(key_to_oid)  # type: ignore
 
         deletes = existing_df[~existing_keys.isin(input_keys)][objectid_field].tolist()
 
