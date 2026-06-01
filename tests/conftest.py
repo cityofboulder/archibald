@@ -4,8 +4,8 @@ from archie.auth import ARCGIS_ONLINE_BASE_URL, UserTokenAuth
 from archie.client import ArchieClient
 from archie.models import FieldsResult, QueryResult
 from archie.operations import ApplyEditsOperation, QueryOperation
-from archie.services import BaseService, FeatureLayer, FeatureService, MapService
-from tests.helpers import SERVICE_PATH, StaticTokenAuth, MinimalService
+from archie.services import BaseLayer, BaseService, FeatureLayer, FeatureService, MapLayer, MapService
+from tests.helpers import MAP_LAYER_PATH, SERVICE_PATH, MinimalService, StaticTokenAuth
 
 
 @pytest.fixture
@@ -49,6 +49,18 @@ def feature_service(mock_client) -> FeatureService:
 def map_service(mock_client) -> MapService:
     """A default MapService instance backed by a mock client."""
     return MapService(client=mock_client, service_path="services/MyService/MapServer")
+
+
+@pytest.fixture
+def base_layer(mock_client) -> BaseLayer:
+    """A default BaseLayer instance backed by a mock client, at layer 0."""
+    return FeatureLayer(client=mock_client, service_path=SERVICE_PATH, layer_id=0)
+
+
+@pytest.fixture
+def map_layer(mock_client) -> MapLayer:
+    """A default MapLayer instance backed by a mock client, at layer 0."""
+    return MapLayer(client=mock_client, service_path=MAP_LAYER_PATH, layer_id=0)
 
 
 @pytest.fixture

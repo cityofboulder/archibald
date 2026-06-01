@@ -12,6 +12,7 @@ from archie.services import BaseService
 
 BASE_URL = "https://example.com/arcgis/rest/services/MyService/FeatureServer"
 SERVICE_PATH = "services/MyService/FeatureServer"
+MAP_LAYER_PATH = "services/MyService/MapServer"
 
 AnyClient = UserTokenAuth | ArchieClient
 

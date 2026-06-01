@@ -1,4 +1,4 @@
-"""QueryOperation: execute queries against a feature layer with pagination support."""
+"""QueryOperation: execute queries against a layer with pagination support."""
 
 from __future__ import annotations
 
@@ -10,17 +10,17 @@ from archie.exceptions import InvalidParameterError
 from archie.models import QueryResult
 
 if TYPE_CHECKING:
-    from archie.services import FeatureLayer
+    from archie.services import BaseLayer
 
 
 class QueryOperation:
-    """Execute queries on a FeatureLayer with automatic pagination.
+    """Execute queries on a BaseLayer with automatic pagination.
 
-    Holds a reference to its owning FeatureLayer to access the client, layer
-    path, and metadata. Instantiated once at FeatureLayer.__init__ time.
+    Holds a reference to its owning layer to access the client, layer path,
+    and metadata. Instantiated once at BaseLayer.__init__ time.
     """
 
-    def __init__(self, layer: FeatureLayer) -> None:
+    def __init__(self, layer: BaseLayer) -> None:
         self._layer = layer
         self._endpoint = f"{layer._layer_path}/query"
 

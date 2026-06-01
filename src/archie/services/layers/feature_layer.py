@@ -8,20 +8,17 @@ import pandas as pd
 from archie.client import ArchieClient
 from archie.exceptions import InvalidParameterError, LayerCapabilityError
 from archie.models.apply_edits_result import ApplyEditsResult
-from archie.models.fields_result import FieldsResult
-from archie.models.query_result import QueryResult
 from archie.operations.apply_edits import ApplyEditsOperation
-from archie.operations.query import QueryOperation
 from archie.services.feature_service import FeatureService
+from archie.services.layers.base import BaseLayer
 
 
-class FeatureLayer(FeatureService):
+class FeatureLayer(FeatureService, BaseLayer):
     """Single layer within an ESRI FeatureServer service.
 
-    Represents a layer at a specific index (e.g., /FeatureServer/0). Inherits
-    service-level properties (CRS, max_record_count, etc.) from FeatureService.
-    Provides layer-specific metadata and delegates query/edit operations to
-    corresponding operation classes (QueryOperation, ApplyEditsOperation).
+    Inherits FeatureServer path validation from FeatureService and shared layer
+    capability (metadata caching, field inspection, querying) from BaseLayer.
+    Adds editing operations (applyEdits, upsert, sync).
     """
 
     def __init__(self, client: ArchieClient, service_path: str, layer_id: int) -> None:
@@ -30,56 +27,11 @@ class FeatureLayer(FeatureService):
         Args:
             client: The ArchieClient instance.
             service_path: Service path ending in FeatureServer (e.g.,
-                "services/MyService/FeatureServer"). Validated by parent FeatureService.
+                "services/MyService/FeatureServer"). Validated by FeatureService.
             layer_id: Layer index within the service (e.g., 0, 1, 2).
         """
-        super().__init__(client, service_path)
-        self._layer_id = layer_id
-        self._layer_path = f"{self._service_path}/{layer_id}"
-        self._layer_metadata: dict | None = None
-
-        # Operations
-        self._query_op = QueryOperation(self)
+        super().__init__(client, service_path, layer_id)
         self._apply_edits_op = ApplyEditsOperation(self)
-
-    async def _get_layer_metadata(self) -> dict:
-        """Fetch and cache layer-level metadata JSON.
-
-        Subsequent calls return the cached result without I/O.
-        """
-        if self._layer_metadata is None:
-            response = await self._client.get(endpoint=self._layer_path)
-            self._layer_metadata = response.json()
-        return self._layer_metadata  # type: ignore[return-value]
-
-    async def objectid_field(self) -> str:
-        """Name of the OBJECTID field for this layer.
-
-        Returns:
-            The name of the OBJECTID field, which is used for pagination and
-            often as a unique identifier for features.
-        """
-        metadata = await self._get_layer_metadata()
-        return metadata.get("objectIdField", "OBJECTID")
-
-    async def globalid_field(self) -> str | None:
-        """Name of the GlobalID field for this layer, if present.
-
-        Returns:
-            The name of the GlobalID field, which is a UUID string used for
-            unique identification across systems. May be None if not defined.
-        """
-        metadata = await self._get_layer_metadata()
-        return metadata.get("globalIdField")
-
-    async def supports_query(self) -> bool:
-        """Whether this layer supports query operations.
-
-        Returns:
-            True if the layer supports queries, False otherwise.
-        """
-        metadata = await self._get_layer_metadata()
-        return "query" in metadata.get("capabilities", "").lower()
 
     async def supports_apply_edits(self) -> bool:
         """Whether this layer supports applyEdits operations.
@@ -112,53 +64,6 @@ class FeatureLayer(FeatureService):
         adv = metadata.get("advancedEditingCapabilities", {})
         return bool(adv.get("supportsAsyncApplyEdits", False))
 
-    async def fields(self) -> FieldsResult:
-        """Field definitions from layer metadata.
-
-        Returns:
-            FieldsResult providing access to field names and definitions.
-        """
-        field_list = (await self._get_layer_metadata()).get("fields", [])
-        return FieldsResult(fields=field_list)
-
-    async def query(
-        self,
-        where: str = "1=1",
-        out_fields: list[str] | str | None = None,
-        return_geometry: bool = True,
-        out_sr: int | None = None,
-        **kwargs,
-    ) -> QueryResult:
-        """Execute a query on this layer.
-
-        Args:
-            where: WHERE clause (default "1=1" returns all features).
-            out_fields: Field names to return. Can be None (→ all), a list, or
-                a comma-separated string.
-            return_geometry: Include feature geometries in the response.
-            out_sr: Output spatial reference (EPSG code) for geometries.
-            **kwargs: Additional query parameters (e.g., orderByFields, resultType).
-
-        Returns:
-            QueryResult with aggregated features, field definitions, and geometry type.
-
-        Raises:
-            InvalidParameterError: If out_fields contains unknown field names.
-            LayerCapabilityError: If the layer does not support query operations.
-        """
-        if not await self.supports_query():
-            raise LayerCapabilityError(
-                f"Layer {self._layer_path} does not support query operations."
-            )
-
-        return await self._query_op.execute(
-            where=where,
-            out_fields=out_fields,
-            return_geometry=return_geometry,
-            out_sr=out_sr,
-            **kwargs,
-        )
-
     async def apply_edits(
         self,
         adds: pd.DataFrame | gpd.GeoDataFrame | None = None,
@@ -190,7 +95,6 @@ class FeatureLayer(FeatureService):
             raise LayerCapabilityError(
                 f"Layer {self._layer_path} does not support edit operations."
             )
-
         return await self._apply_edits_op.execute(
             adds=adds,
             updates=updates,
