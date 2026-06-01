@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import geopandas as gpd
 import pandas as pd
 
-from archie.serializers._coercions import enforce_types
+from archie.serializers._coercions import enforce_types, recode_domains
 from archie.serializers._geometry import geometry_to_esri
 
 if TYPE_CHECKING:
@@ -84,6 +84,7 @@ def serialize_features(
     fields: FieldsResult,
     *,
     objectid_field: str | None = None,
+    apply_coded_values: bool = False,
 ) -> list[dict]:
     """Convert a DataFrame (or GeoDataFrame) to a list of ESRI feature dicts.
 
@@ -116,6 +117,10 @@ def serialize_features(
             field selection.
         objectid_field: Name of the layer's OBJECTID field, or None to exclude
             it. Pass None for add operations; pass the field name for updates.
+        apply_coded_values: When True, translate human-readable domain names
+            back to their raw codes before type coercion. Use this when the
+            DataFrame contains names (e.g. ``"Active"``) rather than codes
+            (e.g. ``1``).
 
     Returns:
         List of ``{"attributes": {...}}`` dicts, with an additional
@@ -125,7 +130,10 @@ def serialize_features(
     geo_col: str | None = str(df.geometry.name) if is_geo else None
 
     attr_cols = _select_attr_columns(df, fields, objectid_field, geo_col)
-    attrs = _coerce_columns(df[attr_cols].copy(), fields)
+    attrs_pre = df[attr_cols].copy()
+    if apply_coded_values:
+        attrs_pre = recode_domains(attrs_pre, fields, direction="to_esri")
+    attrs = _coerce_columns(attrs_pre, fields)
     records: list[dict] = attrs.to_dict(orient="records")
 
     if is_geo:
