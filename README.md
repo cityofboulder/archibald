@@ -1,6 +1,6 @@
 # archie
 
-An async-first Python client for interacting with ESRI ArcGIS REST APIs, designed around a dataframe-first approach for seamless analysis with `pandas` and `geopandas`.
+An async Python client for interacting with ESRI ArcGIS REST APIs, designed around a dataframe-first approach for seamless analysis and data editing with `pandas` and `geopandas`.
 
 [![PyPI](https://img.shields.io/pypi/v/archie.svg)](https://pypi.org/project/archie/)
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
