@@ -17,6 +17,9 @@ htmlcov/
 # Claude-specific files
 .claude/*.local.*
 
+# MkDocs build output
+site/
+
 # Code editors
 .vscode/
 .idea/
