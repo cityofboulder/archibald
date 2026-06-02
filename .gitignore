@@ -11,6 +11,8 @@ wheels/
 
 # Tests
 .pytest*
+.coverage
+htmlcov/
 
 # Claude-specific files
 .claude/*.local.*
