@@ -3,13 +3,19 @@
 import pytest
 import pandas as pd
 
-from archie.exceptions import InvalidParameterError
-from archie.models import FieldsResult
+from archibald.exceptions import InvalidParameterError
+from archibald.models import FieldsResult
 
 
 class TestNames:
     def test_names_returns_all_field_names(self, fields_result):
-        assert fields_result.names == ["OBJECTID", "Name", "Status", "Score", "EventDate"]
+        assert fields_result.names == [
+            "OBJECTID",
+            "Name",
+            "Status",
+            "Score",
+            "EventDate",
+        ]
 
     def test_names_returns_empty_list_when_no_fields(self):
         assert FieldsResult(fields=[]).names == []
@@ -39,7 +45,13 @@ class TestToFrame:
 
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 5
-        assert result["name"].tolist() == ["OBJECTID", "Name", "Status", "Score", "EventDate"]
+        assert result["name"].tolist() == [
+            "OBJECTID",
+            "Name",
+            "Status",
+            "Score",
+            "EventDate",
+        ]
 
     def test_returns_empty_dataframe_when_no_fields(self):
         result = FieldsResult(fields=[]).to_frame()
@@ -69,11 +81,19 @@ class TestDomainMaps:
         assert "Name" not in result
 
     def test_non_coded_value_domain_type_excluded(self):
-        fr = FieldsResult(fields=[{
-            "name": "Score",
-            "type": "esriFieldTypeDouble",
-            "domain": {"type": "range", "name": "ScoreRange", "range": [0, 100]},
-        }])
+        fr = FieldsResult(
+            fields=[
+                {
+                    "name": "Score",
+                    "type": "esriFieldTypeDouble",
+                    "domain": {
+                        "type": "range",
+                        "name": "ScoreRange",
+                        "range": [0, 100],
+                    },
+                }
+            ]
+        )
 
         assert fr.domain_maps == {}
 
@@ -133,7 +153,10 @@ class TestFilter:
     @pytest.mark.parametrize(
         "nullable, expected",
         [
-            (True, ["Name", "Status", "Score", "EventDate"]),  # explicit True + absent key (defaults True)
+            (
+                True,
+                ["Name", "Status", "Score", "EventDate"],
+            ),  # explicit True + absent key (defaults True)
             (False, ["OBJECTID"]),
         ],
         ids=["nullable-only", "non-nullable-only"],
@@ -150,7 +173,10 @@ class TestFilter:
         [
             ({"names": ["OBJECTID", "Name"], "editable": True}, ["Name"]),
             ({"types": "esriFieldTypeInteger", "editable": True}, ["Status"]),
-            ({"editable": True, "nullable": True}, ["Name", "Status", "Score", "EventDate"]),
+            (
+                {"editable": True, "nullable": True},
+                ["Name", "Status", "Score", "EventDate"],
+            ),
         ],
         ids=["names-and-editable", "types-and-editable", "editable-and-nullable"],
     )

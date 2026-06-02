@@ -1,6 +1,6 @@
-site_name: archie
+site_name: archibald
 site_description: Async Python client for ArcGIS REST APIs
-repo_url: https://github.com/cityofboulder/archie
+repo_url: https://github.com/cityofboulder/archibald
 
 theme:
   name: material

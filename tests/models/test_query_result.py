@@ -4,8 +4,8 @@ import pytest
 import pandas as pd
 import geopandas as gpd
 
-from archie.exceptions import MissingGeometryError
-from archie.models import FieldsResult, QueryResult
+from archibald.exceptions import MissingGeometryError
+from archibald.models import FieldsResult, QueryResult
 from tests.helpers import make_query_result
 
 

@@ -1,7 +1,7 @@
 import pytest
 import httpx
 
-from archie.auth import NoAuth
+from archibald.auth import NoAuth
 
 
 @pytest.fixture

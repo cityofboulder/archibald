@@ -1,27 +1,27 @@
-# archie
+# archibald
 
 An async-first Python client for interacting with ESRI ArcGIS REST APIs, designed around a dataframe-first approach for seamless analysis with `pandas` and `geopandas`.
 
-[![PyPI](https://img.shields.io/pypi/v/archie.svg)](https://pypi.org/project/archie/)
+[![PyPI](https://img.shields.io/pypi/v/archibald.svg)](https://pypi.org/project/archibald/)
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
 ## Installation
 
 ```bash
-pip install archie
+pip install archibald
 ```
 
 Or with `uv`:
 
 ```bash
-uv add archie
+uv add archibald
 ```
 
 ## Quick Start
 
 ```python
-import archie as arc
+import archibald as arc
 
 auth = arc.UserTokenAuth(
     username="your_username",

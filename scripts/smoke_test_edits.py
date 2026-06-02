@@ -23,10 +23,10 @@ import sys
 
 import anyio
 
-from archie.auth import NoAuth, UserTokenAuth
-from archie.client import ArchieClient
-from archie.models import ApplyEditsResult
-from archie.services import FeatureLayer
+from archibald.auth import NoAuth, UserTokenAuth
+from archibald.client import ArchieClient
+from archibald.models import ApplyEditsResult
+from archibald.services import FeatureLayer
 
 _SEP = "-" * 60
 
@@ -92,7 +92,9 @@ def _section(title: str) -> None:
     print(_SEP)
 
 
-def _print_edit_result(result: ApplyEditsResult, items_attr: str, label: str) -> list[int]:
+def _print_edit_result(
+    result: ApplyEditsResult, items_attr: str, label: str
+) -> list[int]:
     """Print per-feature results and return OBJECTIDs of successful operations."""
     items = getattr(result, items_attr)
     succeeded = []
@@ -140,7 +142,9 @@ async def main(args: argparse.Namespace) -> None:
 
         # --- Seed query ---
         _section("SEED QUERY")
-        print(f"  where={args.where!r}, resultRecordCount=3, apply_coded_values={args.apply_coded_values}")
+        print(
+            f"  where={args.where!r}, resultRecordCount=3, apply_coded_values={args.apply_coded_values}"
+        )
         seed_result = await layer.query(
             where=args.where,
             return_geometry=True,
@@ -175,7 +179,9 @@ async def main(args: argparse.Namespace) -> None:
             overall_passed = False
 
         if not new_oids:
-            raise SystemExit("ABORT: All adds failed — cannot continue with update/delete.")
+            raise SystemExit(
+                "ABORT: All adds failed — cannot continue with update/delete."
+            )
 
         # --- Update ---
         _section("UPDATE")

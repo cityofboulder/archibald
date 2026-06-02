@@ -2,8 +2,8 @@
 
 import pytest
 
-from archie.exceptions import InvalidParameterError
-from archie.models import QueryResult
+from archibald.exceptions import InvalidParameterError
+from archibald.models import QueryResult
 from tests.helpers import make_feature, make_response
 
 
@@ -285,4 +285,3 @@ class TestExecute:
         await query_op.execute(out_fields=["OBJECTID", "Name"])
 
         mock_fetch.assert_not_called()
-

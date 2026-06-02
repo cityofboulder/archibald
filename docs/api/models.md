@@ -1,9 +1,9 @@
 # Models
 
-::: archie.models.QueryResult
+::: archibald.models.QueryResult
 
-::: archie.models.FieldsResult
+::: archibald.models.FieldsResult
 
-::: archie.models.ApplyEditsResult
+::: archibald.models.ApplyEditsResult
 
-::: archie.models.EditResultItem
+::: archibald.models.EditResultItem

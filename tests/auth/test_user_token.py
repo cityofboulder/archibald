@@ -8,13 +8,13 @@ import anyio
 import httpx
 import pytest
 
-from archie.auth.user_token import (
+from archibald.auth.user_token import (
     ARCGIS_ONLINE_BASE_URL,
     EXPIRY_BUFFER_SECONDS,
     TOKEN_PATH,
     UserTokenAuth,
 )
-from archie.exceptions import ConfigurationError, TokenRefreshError
+from archibald.exceptions import ConfigurationError, TokenRefreshError
 from tests.helpers import inject_mock_client, make_response
 
 

@@ -7,7 +7,7 @@ import warnings
 import pandas as pd
 import pytest
 
-from archie.serializers._coercions import (
+from archibald.serializers._coercions import (
     _coerce_datetime,
     _coerce_float,
     _coerce_integer,
@@ -458,9 +458,7 @@ class TestRecodeDomains:
         with pytest.warns(UserWarning, match="Status"):
             recode_domains(df, fields_result_with_domains, direction=direction)
 
-    def test_warning_includes_unmapped_example_values(
-        self, fields_result_with_domains
-    ):
+    def test_warning_includes_unmapped_example_values(self, fields_result_with_domains):
         df = pd.DataFrame({"Status": [1, 99, 100]})
 
         with pytest.warns(UserWarning, match="99"):

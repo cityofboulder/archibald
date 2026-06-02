@@ -2,9 +2,9 @@
 
 import pytest
 
-from archie.exceptions import LayerCapabilityError
-from archie.models import FieldsResult
-from archie.services import FeatureLayer
+from archibald.exceptions import LayerCapabilityError
+from archibald.models import FieldsResult
+from archibald.services import FeatureLayer
 from tests.helpers import SERVICE_PATH, make_response
 
 

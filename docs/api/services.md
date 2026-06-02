@@ -2,16 +2,16 @@
 
 ## Layers
 
-::: archie.services.FeatureLayer
+::: archibald.services.FeatureLayer
 
-::: archie.services.MapLayer
+::: archibald.services.MapLayer
 
-::: archie.services.BaseLayer
+::: archibald.services.BaseLayer
 
 ## Services
 
-::: archie.services.FeatureService
+::: archibald.services.FeatureService
 
-::: archie.services.MapService
+::: archibald.services.MapService
 
-::: archie.services.BaseService
+::: archibald.services.BaseService

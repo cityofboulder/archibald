@@ -3,8 +3,8 @@
 import httpx
 import pytest
 
-from archie.exceptions import ArcGISError, LayerCapabilityError
-from archie.models import QueryResult
+from archibald.exceptions import ArcGISError, LayerCapabilityError
+from archibald.models import QueryResult
 from tests.integration.conftest import (
     FEATURES,
     LAYER_METADATA,

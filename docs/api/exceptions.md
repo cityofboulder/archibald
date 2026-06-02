@@ -10,7 +10,7 @@ ArchieError
 │   ├── AuthorizationError       ← insufficient permissions (code 403)
 │   ├── NotFoundError            ← resource does not exist (code 404)
 │   └── ServiceError             ← catch-all for other ESRI error codes
-└── ArchieClientError            ← archie itself caused this error
+└── ArchieClientError            ← archibald itself caused this error
     ├── TokenRefreshError        ← token refresh attempted and failed
     ├── ConfigurationError       ← client or auth configured incorrectly
     ├── InvalidServiceURL        ← URL does not match expected service type
@@ -21,30 +21,30 @@ ArchieError
 
 ## Reference
 
-::: archie.exceptions.ArchieError
+::: archibald.exceptions.ArchieError
 
-::: archie.exceptions.ArcGISError
+::: archibald.exceptions.ArcGISError
 
-::: archie.exceptions.TokenExpiredError
+::: archibald.exceptions.TokenExpiredError
 
-::: archie.exceptions.TokenMissingError
+::: archibald.exceptions.TokenMissingError
 
-::: archie.exceptions.AuthorizationError
+::: archibald.exceptions.AuthorizationError
 
-::: archie.exceptions.NotFoundError
+::: archibald.exceptions.NotFoundError
 
-::: archie.exceptions.ServiceError
+::: archibald.exceptions.ServiceError
 
-::: archie.exceptions.ArchieClientError
+::: archibald.exceptions.ArchieClientError
 
-::: archie.exceptions.TokenRefreshError
+::: archibald.exceptions.TokenRefreshError
 
-::: archie.exceptions.ConfigurationError
+::: archibald.exceptions.ConfigurationError
 
-::: archie.exceptions.InvalidServiceURL
+::: archibald.exceptions.InvalidServiceURL
 
-::: archie.exceptions.LayerCapabilityError
+::: archibald.exceptions.LayerCapabilityError
 
-::: archie.exceptions.InvalidParameterError
+::: archibald.exceptions.InvalidParameterError
 
-::: archie.exceptions.MissingGeometryError
+::: archibald.exceptions.MissingGeometryError

@@ -1,6 +1,6 @@
 import pytest
 
-from archie.exceptions import InvalidServiceURL
+from archibald.exceptions import InvalidServiceURL
 from tests.helpers import SERVICE_PATH, MinimalService, make_response
 
 

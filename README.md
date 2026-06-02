@@ -1,30 +1,30 @@
-# archie
+# archibald
 
 An async Python client for interacting with ESRI ArcGIS REST APIs, designed around a dataframe-first approach for seamless analysis and data editing with `pandas` and `geopandas`.
 
-[![PyPI](https://img.shields.io/pypi/v/archie.svg)](https://pypi.org/project/archie/)
+[![PyPI](https://img.shields.io/pypi/v/archibald.svg)](https://pypi.org/project/archibald/)
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Docs](https://img.shields.io/badge/docs-github%20pages-blue)](https://cityofboulder.github.io/archie/)
+[![Docs](https://img.shields.io/badge/docs-github%20pages-blue)](https://cityofboulder.github.io/archibald/)
 
 ## Installation
 
 Install via pip:
 
 ```bash
-pip install archie
+pip install archibald
 ```
 
 Or with `uv`:
 
 ```bash
-uv add archie
+uv add archibald
 ```
 
 ## Quick Start
 
 ```python
-import archie as arc
+import archibald as arc
 
 # Initialize a client with user token authentication
 auth = arc.UserTokenAuth(
@@ -86,7 +86,7 @@ class MyCustomAuth(arc.ArcGISAuth):
 
 ## Services
 
-`archie` provides service and layer classes that wrap ESRI's REST endpoints:
+`archibald` provides service and layer classes that wrap ESRI's REST endpoints:
 
 - **FeatureLayer** — query, add, update, delete, upsert features; supports spatial and non-spatial operations
 - **MapLayer** — query-only access to map service layers
@@ -162,13 +162,13 @@ except arc.ArcGISError as e:
 
 The exception hierarchy distinguishes specific error types:
 
-- `TokenExpiredError` — authentication token has expired (auto-refreshed by archie)
+- `TokenExpiredError` — authentication token has expired (auto-refreshed by archibald)
 - `TokenMissingError` — authentication token required but missing
 - `AuthorizationError` — insufficient permissions for the operation
 - `NotFoundError` — resource not found
 - `ServiceError` — other ESRI service errors
 
-`ArchieClientError` and its subclasses cover archie-originated errors (invalid parameters, missing capabilities, etc.).
+`ArchieClientError` and its subclasses cover archibald-originated errors (invalid parameters, missing capabilities, etc.).
 
 ## Roadmap
 
