@@ -1,9 +1,10 @@
 """Tests for EditResultItem and ApplyEditsResult."""
+
 from __future__ import annotations
 
 import pytest
 
-from archie.models.apply_edits_result import ApplyEditsResult, EditResultItem
+from archibald.models.apply_edits_result import ApplyEditsResult, EditResultItem
 from tests.helpers import make_apply_edits_result, make_edit_result_item
 
 
@@ -188,8 +189,8 @@ class TestApplyEditsResultFailedProperties:
     @pytest.mark.parametrize(
         "prop, failure_kwarg",
         [
-            ("failed_adds",    "updates"),
-            ("failed_adds",    "deletes"),
+            ("failed_adds", "updates"),
+            ("failed_adds", "deletes"),
             ("failed_updates", "adds"),
             ("failed_updates", "deletes"),
             ("failed_deletes", "adds"),
@@ -214,7 +215,7 @@ class TestApplyEditsResultFailedProperties:
     @pytest.mark.parametrize(
         "prop, kwarg",
         [
-            ("failed_adds",    "adds"),
+            ("failed_adds", "adds"),
             ("failed_updates", "updates"),
             ("failed_deletes", "deletes"),
         ],
@@ -232,7 +233,7 @@ class TestApplyEditsResultMerge:
     @pytest.mark.parametrize(
         "kwarg, attr",
         [
-            ("adds",    "add_results"),
+            ("adds", "add_results"),
             ("updates", "update_results"),
             ("deletes", "delete_results"),
         ],

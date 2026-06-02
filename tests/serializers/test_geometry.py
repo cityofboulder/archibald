@@ -16,8 +16,8 @@ from shapely.geometry import (
     Polygon,
 )
 
-from archie.exceptions import InvalidParameterError
-from archie.serializers._geometry import geometry_to_esri
+from archibald.exceptions import InvalidParameterError
+from archibald.serializers._geometry import geometry_to_esri
 
 
 class TestNullInputs:

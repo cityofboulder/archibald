@@ -4,7 +4,7 @@
 
 This guide walks through the full workflow: authenticating, connecting to a service, querying data, editing features, and handling errors.
 
-The `archie` library is built around object-injection. In order to interact with a service, layer, geocoder, etc, an `auth` and `client` object both need to be defined first.
+The `archibald` library is built around object-injection. In order to interact with a service, layer, geocoder, etc, an `auth` and `client` object both need to be defined first.
 
 ---
 
@@ -17,7 +17,7 @@ The `archie` library is built around object-injection. In order to interact with
 Use `NoAuth` for services that require no credentials and are completely public. This is usually the best option when attempting to access ESRI Open Data layers.
 
 ```python
-import archie as arc
+import archibald as arc
 
 auth = arc.NoAuth()
 ```
@@ -92,7 +92,7 @@ finally:
 
 ## Services and layers
 
-`archie` distinguishes between *services* (the REST endpoint root) and *layers* (individual layers within a service). In most cases you'll work with layers directly.
+`archibald` distinguishes between *services* (the REST endpoint root) and *layers* (individual layers within a service). In most cases you'll work with layers directly.
 
 ### Map layers
 
@@ -172,7 +172,7 @@ Use `layer.query()` to retrieve features. Results are automatically paginated wh
 
 ### Parameter reference
 
-`layer.query()` accepts Pythonic arguments that archie translates into ESRI REST parameters before sending the request:
+`layer.query()` accepts Pythonic arguments that archibald translates into ESRI REST parameters before sending the request:
 
 | `layer.query()` argument | ESRI REST parameter | Default |
 |---|---|---|
@@ -182,7 +182,7 @@ Use `layer.query()` to retrieve features. Results are automatically paginated wh
 | `out_sr` | `outSR` | service CRS |
 | `**kwargs` | passed through verbatim | — |
 
-Two parameters are managed by archie:
+Two parameters are managed by archibald:
 
 - **`f`** — set to `geojson` automatically when `return_geometry=True` (for reliable geometry decoding); falls back to `json` otherwise. This parameter cannot be overridden.
 - **`orderByFields`** — defaults to `OBJECTID ASC` for deterministic pagination; override via kwargs if needed
@@ -268,7 +268,7 @@ df = result.to_frame()  # domain codes replaced with labels
 | Code absent from the domain | Passed through unchanged as the original code value |
 | Field has no domain at all | Column left unchanged |
 
-The pass-through behavior for unmapped codes is intentional — archie never silently drops data. However, if a column contains a mix of successfully translated values *and* unmapped codes, the result will be a mixed-type column (e.g., some `str` labels alongside raw `int` codes). A `UserWarning` is emitted in that case to flag the inconsistency; a column where *all* non-null values are unmapped stays uniform and produces no warning.
+The pass-through behavior for unmapped codes is intentional — archibald never silently drops data. However, if a column contains a mix of successfully translated values *and* unmapped codes, the result will be a mixed-type column (e.g., some `str` labels alongside raw `int` codes). A `UserWarning` is emitted in that case to flag the inconsistency; a column where *all* non-null values are unmapped stays uniform and produces no warning.
 
 `apply_coded_values=True` also implies `parse_dtypes=True` behavior for any field that has a domain — ESRI field types are coerced to their pandas equivalents first so that code lookups match on type (e.g., integer `1` matches integer keys in the domain map, not string `"1"`).
 
@@ -280,7 +280,7 @@ Editing is available on `FeatureLayer` only. All editing methods accept a standa
 
 ### What happens automatically
 
-Before any data reaches the API, archie runs a serialization pipeline on your DataFrame:
+Before any data reaches the API, archibald runs a serialization pipeline on your DataFrame:
 
 1. **Field selection** — only fields the service marks as editable are included. Any DataFrame column that doesn't map to an editable field is dropped, and a `UserWarning` is emitted so you know what was excluded. For updates, the OBJECTID column is always carried through regardless of editability.
 2. **Type coercion** — pandas types are converted to ESRI JSON-compatible values automatically:
@@ -332,7 +332,7 @@ edits = await layer.apply_edits(
 
 ### Round-trip domain translation
 
-Because `apply_coded_values` works in both directions, archie supports a clean read-modify-write workflow without ever touching raw domain codes:
+Because `apply_coded_values` works in both directions, archibald supports a clean read-modify-write workflow without ever touching raw domain codes:
 
 ```python
 # 1. Query with labels — domain codes are expanded to human-readable strings

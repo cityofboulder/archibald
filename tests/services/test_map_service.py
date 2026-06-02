@@ -1,7 +1,7 @@
 import pytest
 
-from archie.exceptions import InvalidServiceURL
-from archie.services import MapService
+from archibald.exceptions import InvalidServiceURL
+from archibald.services import MapService
 
 
 class TestMapService:

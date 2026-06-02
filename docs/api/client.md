@@ -1,3 +1,3 @@
 # Client
 
-::: archie.client.ArchieClient
+::: archibald.client.ArchieClient

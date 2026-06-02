@@ -1,5 +1,5 @@
 import pytest
-from archie.exceptions import (
+from archibald.exceptions import (
     ArchieError,
     ArcGISError,
     TokenExpiredError,
@@ -77,19 +77,19 @@ class TestHierarchy:
             MissingGeometryError,
         ],
     )
-    def test_client_subclasses_inherit_from_archie_client_error(self, exc_class):
+    def test_client_subclasses_inherit_from_archibald_client_error(self, exc_class):
         err = exc_class("test")
 
         assert isinstance(err, ArchieClientError)
         assert isinstance(err, ArchieError)
         assert isinstance(err, Exception)
 
-    def test_arcgis_error_is_not_archie_client_error(self):
+    def test_arcgis_error_is_not_archibald_client_error(self):
         err = ArcGISError(code=0, message="test")
 
         assert not isinstance(err, ArchieClientError)
 
-    def test_archie_client_error_is_not_arcgis_error(self):
+    def test_archibald_client_error_is_not_arcgis_error(self):
         err = TokenRefreshError("test")
 
         assert not isinstance(err, ArcGISError)
@@ -100,26 +100,26 @@ class TestCatchability:
         with pytest.raises(ArcGISError):
             raise TokenExpiredError(code=498, message="Invalid token.")
 
-    def test_token_expired_caught_as_archie_error(self):
+    def test_token_expired_caught_as_archibald_error(self):
         with pytest.raises(ArchieError):
             raise TokenExpiredError(code=498, message="Invalid token.")
 
-    def test_token_refresh_caught_as_archie_client_error(self):
+    def test_token_refresh_caught_as_archibald_client_error(self):
         with pytest.raises(ArchieClientError):
             raise TokenRefreshError("Refresh failed after retry.")
 
-    def test_token_refresh_caught_as_archie_error(self):
+    def test_token_refresh_caught_as_archibald_error(self):
         with pytest.raises(ArchieError):
             raise TokenRefreshError("Refresh failed after retry.")
 
-    def test_layer_capability_error_caught_as_archie_client_error(self):
+    def test_layer_capability_error_caught_as_archibald_client_error(self):
         with pytest.raises(ArchieClientError):
             raise LayerCapabilityError("Layer does not support query.")
 
-    def test_invalid_parameter_error_caught_as_archie_client_error(self):
+    def test_invalid_parameter_error_caught_as_archibald_client_error(self):
         with pytest.raises(ArchieClientError):
             raise InvalidParameterError("key_fields must not be empty.")
 
-    def test_missing_geometry_error_caught_as_archie_client_error(self):
+    def test_missing_geometry_error_caught_as_archibald_client_error(self):
         with pytest.raises(ArchieClientError):
             raise MissingGeometryError("No geometry present.")

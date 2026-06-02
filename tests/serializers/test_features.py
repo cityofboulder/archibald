@@ -7,8 +7,8 @@ import pandas as pd
 import pytest
 from shapely.geometry import Point
 
-from archie.models import FieldsResult
-from archie.serializers._features import pack_batches, serialize_features
+from archibald.models import FieldsResult
+from archibald.serializers._features import pack_batches, serialize_features
 from tests.helpers import make_small_feature
 
 

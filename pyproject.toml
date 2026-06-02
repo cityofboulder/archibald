@@ -3,10 +3,10 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/archie"]
+packages = ["src/archibald"]
 
 [project]
-name = "archie"
+name = "archibald"
 version = "1.0.0"
 description = "A lightweight library for interacting with ESRI ArcGIS REST APIs."
 readme = {file = "README.md", content-type = "text/markdown"}
@@ -34,8 +34,8 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/cityofboulder/archie"
-Documentation = "https://cityofboulder.github.io/archie/"
+Repository = "https://github.com/cityofboulder/archibald"
+Documentation = "https://cityofboulder.github.io/archibald/"
 
 [dependency-groups]
 docs = [
@@ -54,7 +54,7 @@ dev = [
 ]
 
 [tool.coverage.run]
-source = ["archie"]
+source = ["archibald"]
 branch = true
 
 [tool.coverage.report]

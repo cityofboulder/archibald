@@ -1,7 +1,7 @@
 # Authentication
 
-::: archie.auth.ArcGISAuth
+::: archibald.auth.ArcGISAuth
 
-::: archie.auth.NoAuth
+::: archibald.auth.NoAuth
 
-::: archie.auth.UserTokenAuth
+::: archibald.auth.UserTokenAuth

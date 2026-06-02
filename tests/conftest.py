@@ -1,10 +1,17 @@
 import pytest
 
-from archie.auth import ARCGIS_ONLINE_BASE_URL, UserTokenAuth
-from archie.client import ArchieClient
-from archie.models import FieldsResult, QueryResult
-from archie.operations import ApplyEditsOperation, QueryOperation
-from archie.services import BaseLayer, BaseService, FeatureLayer, FeatureService, MapLayer, MapService
+from archibald.auth import ARCGIS_ONLINE_BASE_URL, UserTokenAuth
+from archibald.client import ArchieClient
+from archibald.models import FieldsResult, QueryResult
+from archibald.operations import ApplyEditsOperation, QueryOperation
+from archibald.services import (
+    BaseLayer,
+    BaseService,
+    FeatureLayer,
+    FeatureService,
+    MapLayer,
+    MapService,
+)
 from tests.helpers import MAP_LAYER_PATH, SERVICE_PATH, MinimalService, StaticTokenAuth
 
 

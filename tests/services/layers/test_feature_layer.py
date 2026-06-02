@@ -3,8 +3,8 @@
 import pandas as pd
 import pytest
 
-from archie.exceptions import InvalidParameterError, LayerCapabilityError
-from archie.services import FeatureLayer
+from archibald.exceptions import InvalidParameterError, LayerCapabilityError
+from archibald.services import FeatureLayer
 from tests.helpers import make_apply_edits_result
 
 

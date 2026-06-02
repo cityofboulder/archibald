@@ -24,9 +24,9 @@ import argparse
 
 import anyio
 
-from archie.auth import NoAuth, UserTokenAuth
-from archie.client import ArchieClient
-from archie.services import FeatureLayer, MapLayer
+from archibald.auth import NoAuth, UserTokenAuth
+from archibald.client import ArchieClient
+from archibald.services import FeatureLayer, MapLayer
 
 
 def parse_args() -> argparse.Namespace:

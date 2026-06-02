@@ -4,8 +4,13 @@ import httpx
 import pytest
 from unittest.mock import AsyncMock
 
-from archie.client import ArchieClient
-from archie.exceptions import InvalidServiceURL, ServiceError, TokenExpiredError, TokenMissingError
+from archibald.client import ArchieClient
+from archibald.exceptions import (
+    InvalidServiceURL,
+    ServiceError,
+    TokenExpiredError,
+    TokenMissingError,
+)
 from tests.helpers import StaticTokenAuth, inject_mock_client, make_response
 
 

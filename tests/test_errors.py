@@ -1,7 +1,7 @@
 import pytest
 
-from archie.errors import handle_esri_errors, parse_esri_error
-from archie.exceptions import (
+from archibald.errors import handle_esri_errors, parse_esri_error
+from archibald.exceptions import (
     AuthorizationError,
     NotFoundError,
     ServiceError,
