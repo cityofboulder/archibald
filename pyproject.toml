@@ -37,6 +37,11 @@ dependencies = [
 Repository = "https://github.com/cityofboulder/archie"
 
 [dependency-groups]
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.27",
+]
 dev = [
     "anyio[trio]>=4.13.0",
     "ipykernel>=7.2.0",
