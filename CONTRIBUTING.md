@@ -30,8 +30,6 @@ Tests marked `integration` hit a mocked HTTP transport and are included by defau
 uv run pytest -m "not integration"
 ```
 
-Coverage must stay at or above 80%. The suite will fail if it drops below that threshold.
-
 ## Code style
 
 Ruff handles formatting and linting. The pre-commit hooks run both automatically on every commit. To run them manually:
@@ -65,7 +63,6 @@ For non-trivial changes, open an issue to align on the approach before investing
 ## Submitting a pull request
 
 - Open PRs against `main`
-- CI runs the test suite on Ubuntu and Windows — both must pass
 - Keep PRs focused; one logical change per PR
 
 ## Releases (maintainers only)

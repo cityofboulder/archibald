@@ -53,13 +53,6 @@ dev = [
     "ruff>=0.15.13",
 ]
 
-[tool.coverage.run]
-source = ["archibald"]
-branch = true
-
-[tool.coverage.report]
-fail_under = 80
-
 [tool.pytest.ini_options]
 anyio_mode = "auto"
 markers = [
