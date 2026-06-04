@@ -11,9 +11,10 @@ dataframe-first approach for seamless analysis and data editing with `pandas` an
 ## Why archibald?
 
 Esri's official [`arcgis`](https://developers.arcgis.com/python/) Python library is comprehensive,
-but it comes with tradeoffs that make it difficult to use in modern data engineering contexts:
+but it comes with tradeoffs that make it difficult to use in modern data engineering contexts.
+`archibald` is/has:
 
-- **Async first.** Every call blocks, which makes concurrent operations across multiple
+- **Async first.** Every call blocks in `arcgis`, which makes concurrent operations across multiple
   layers awkward, expensive, and time-consuming. archibald is `async`-native throughout.
 - **Light.** The `arcgis` package pulls in hundreds of megabytes of dependencies — map
   rendering, notebook widgets, spatial analysis services, and more. archibald's dependency
@@ -23,8 +24,8 @@ but it comes with tradeoffs that make it difficult to use in modern data enginee
   error bodies that the official library doesn't always surface. archibald treats these as
   first-class exceptions with a typed hierarchy.
 - **Robust DataFrame integration.** The official library's `SpatialDataFrame` type has
-  historically been finicky. archibald returns explicit `QueryResult` objects with clean
-  `.to_frame()` and `.to_geodataframe()` methods.
+  historically been finicky. archibald deals entirely in `pd.DataFrame` and `gpd.GeoDataFrame`
+  objects.
 - **Editing that meets you at the DataFrame.** Pass a GeoDataFrame and archibald handles
   the rest: geometry serialization, field type coercion, and validation before anything
   hits the wire. Write operations range from fine-grained `apply_edits()` to a full
