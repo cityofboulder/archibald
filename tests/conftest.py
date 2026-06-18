@@ -3,7 +3,11 @@ import pytest
 from archibald.auth import ARCGIS_ONLINE_BASE_URL, UserTokenAuth
 from archibald.client import ArchieClient
 from archibald.models import FieldsResult, QueryResult
-from archibald.operations import ApplyEditsOperation, QueryOperation
+from archibald.operations import (
+    AddAttachmentsOperation,
+    ApplyEditsOperation,
+    QueryOperation,
+)
 from archibald.services import (
     BaseLayer,
     BaseService,
@@ -155,6 +159,12 @@ def mock_layer(mocker, fields_result):
     layer.supports_rollback_on_failure.return_value = True
     layer.supports_async_apply_edits.return_value = False
     return layer
+
+
+@pytest.fixture
+def add_attachments_op(mock_layer) -> AddAttachmentsOperation:
+    """An AddAttachmentsOperation instance backed by mock_layer."""
+    return AddAttachmentsOperation(mock_layer)
 
 
 @pytest.fixture

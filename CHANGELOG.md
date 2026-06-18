@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `FeatureLayer.supports_attachments()` checks whether a layer advertises `hasAttachments: true` in its metadata.
+- `FeatureLayer.add_attachment()` uploads a single file to one feature; `FeatureLayer.add_attachments()` fans out concurrent uploads to multiple features via `anyio` task groups. Both accept `Path`, open binary file objects, or raw `bytes`; filenames are auto-detected from the file object and MIME types are guessed from the resolved filename. Both guard on `supports_attachments()` and raise `LayerCapabilityError` when the layer does not support attachments.
+- `AddAttachmentsResult` aggregates per-attachment `EditResultItem` results. Exposes `has_failures` and `failed` properties, and `to_frame()` which returns a `DataFrame` with error dicts flattened into prefixed columns via `pd.json_normalize`.
+- `AddAttachmentsOperation` handles coercion of parallel iterables, filename resolution, MIME-type guessing, and concurrent POSTs to the `addAttachment` endpoint.
+
+### Changed
+
+- `EditResultItem` extracted from `apply_edits_result.py` into its own `models/edit_result_item.py` module so it can be imported independently. Re-exported from `apply_edits_result.py` to preserve existing import paths.
+
 ## [1.0.0] - 2026-06-01
 
 ### Added

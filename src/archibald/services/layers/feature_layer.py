@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import BinaryIO, Iterable
+
 import geopandas as gpd
 import pandas as pd
 
 from archibald.client import ArchieClient
 from archibald.exceptions import InvalidParameterError, LayerCapabilityError
 from archibald.models.apply_edits_result import ApplyEditsResult
+from archibald.models.attachments_result import AddAttachmentsResult
+from archibald.operations.add_attachments import AddAttachmentsOperation
 from archibald.operations.apply_edits import ApplyEditsOperation
 from archibald.services.feature_service import FeatureService
 from archibald.services.layers.base import BaseLayer
@@ -32,6 +37,7 @@ class FeatureLayer(FeatureService, BaseLayer):
         """
         super().__init__(client, service_path, layer_id)
         self._apply_edits_op = ApplyEditsOperation(self)
+        self._add_attachments_op = AddAttachmentsOperation(self)
 
     async def supports_apply_edits(self) -> bool:
         """Whether this layer supports applyEdits operations.
@@ -63,6 +69,88 @@ class FeatureLayer(FeatureService, BaseLayer):
         metadata = await self._get_layer_metadata()
         adv = metadata.get("advancedEditingCapabilities", {})
         return bool(adv.get("supportsAsyncApplyEdits", False))
+
+    async def supports_attachments(self) -> bool:
+        """Whether this layer supports file attachments.
+
+        Returns:
+            True if the layer metadata advertises hasAttachments=True.
+        """
+        metadata = await self._get_layer_metadata()
+        return bool(metadata.get("hasAttachments", False))
+
+    async def add_attachment(
+        self,
+        object_id: int,
+        file: Path | BinaryIO | bytes,
+        *,
+        filename: str | None = None,
+        content_type: str | None = None,
+    ) -> AddAttachmentsResult:
+        """Attach a single file to one feature.
+
+        Args:
+            object_id: Feature OBJECTID to attach the file to.
+            file: File to attach. May be a pathlib.Path, an open binary file
+                object, or raw bytes.
+            filename: Filename sent in the multipart form. Auto-detected from
+                Path.name or the file object's name attribute when omitted.
+                Required when file is raw bytes.
+            content_type: MIME type sent in the multipart form. When omitted,
+                guessed from the resolved filename and falls back to
+                ``application/octet-stream``.
+
+        Returns:
+            AddAttachmentsResult with a single result entry.
+
+        Raises:
+            LayerCapabilityError: If the layer does not support attachments.
+            InvalidParameterError: If filename cannot be resolved.
+        """
+        if not await self.supports_attachments():
+            raise LayerCapabilityError(
+                f"Layer {self._layer_path} does not support attachments."
+            )
+        return await self._add_attachments_op.execute(
+            [object_id], [file], [filename], [content_type]
+        )
+
+    async def add_attachments(
+        self,
+        object_ids: Iterable[int],
+        files: Iterable[Path | BinaryIO | bytes],
+        filenames: Iterable[str | None] | None = None,
+        content_types: Iterable[str | None] | None = None,
+    ) -> AddAttachmentsResult:
+        """Attach files to multiple features concurrently.
+
+        Args:
+            object_ids: Feature OBJECTIDs to attach files to. OBJECTIDs can be repeated
+                if multiple files are to be attached to the same feature.
+            files: Files to attach, one per object_id. Each item may be a
+                pathlib.Path, an open binary file object, or raw bytes.
+            filenames: Per-item filename overrides. When omitted, filenames are
+                inferred from each file (Path.name or file.name). Required
+                per-item for any raw bytes entries.
+            content_types: Per-item MIME type overrides. When omitted or None
+                for an item, the type is guessed from the resolved filename and
+                falls back to ``application/octet-stream``.
+
+        Returns:
+            AddAttachmentsResult with one result per input item, in input order.
+
+        Raises:
+            LayerCapabilityError: If the layer does not support attachments.
+            InvalidParameterError: If any iterables differ in length, or if a
+                bytes file has no resolvable filename.
+        """
+        if not await self.supports_attachments():
+            raise LayerCapabilityError(
+                f"Layer {self._layer_path} does not support attachments."
+            )
+        return await self._add_attachments_op.execute(
+            object_ids, files, filenames, content_types
+        )
 
     async def apply_edits(
         self,

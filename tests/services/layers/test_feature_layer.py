@@ -5,7 +5,11 @@ import pytest
 
 from archibald.exceptions import InvalidParameterError, LayerCapabilityError
 from archibald.services import FeatureLayer
-from tests.helpers import make_apply_edits_result
+from tests.helpers import (
+    make_add_attachments_result,
+    make_apply_edits_result,
+    make_attachment_result_item,
+)
 
 
 class TestValidateKeyFields:
@@ -282,3 +286,81 @@ class TestDiff:
         assert updates["Status"].tolist() == ["Active"]
         assert updates["OBJECTID"].tolist() == [1]
         assert delete_oids == []
+
+
+class TestSupportsAttachments:
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "metadata,expected",
+        [
+            ({"hasAttachments": True}, True),
+            ({"hasAttachments": False}, False),
+            ({}, False),
+        ],
+        ids=[
+            "has_attachments_true",
+            "has_attachments_false",
+            "has_attachments_missing",
+        ],
+    )
+    async def test_returns_expected_value(
+        self, feature_layer, mocker, metadata, expected
+    ):
+        mocker.patch.object(feature_layer, "_get_layer_metadata", return_value=metadata)
+
+        assert await feature_layer.supports_attachments() is expected
+
+
+class TestAddAttachmentMethods:
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "call",
+        [
+            lambda layer: layer.add_attachment(1, b"data", filename="f.jpg"),
+            lambda layer: layer.add_attachments([1], [b"data"], ["f.jpg"]),
+        ],
+        ids=["add_attachment", "add_attachments"],
+    )
+    async def test_raises_when_layer_has_no_attachments(
+        self, feature_layer, mocker, call
+    ):
+        mocker.patch.object(feature_layer, "supports_attachments", return_value=False)
+
+        with pytest.raises(LayerCapabilityError, match="does not support attachments"):
+            await call(feature_layer)
+
+    @pytest.mark.anyio
+    async def test_add_attachment_wraps_single_args_and_delegates(
+        self, feature_layer, mocker
+    ):
+        mocker.patch.object(feature_layer, "supports_attachments", return_value=True)
+        expected = make_add_attachments_result([make_attachment_result_item(99)])
+        mock_execute = mocker.patch.object(
+            feature_layer._add_attachments_op, "execute", return_value=expected
+        )
+
+        result = await feature_layer.add_attachment(
+            5, b"data", filename="img.jpg", content_type="image/jpeg"
+        )
+
+        mock_execute.assert_called_once_with(
+            [5], [b"data"], ["img.jpg"], ["image/jpeg"]
+        )
+        assert result is expected
+
+    @pytest.mark.anyio
+    async def test_add_attachments_passes_iterables_to_operation(
+        self, feature_layer, mocker
+    ):
+        mocker.patch.object(feature_layer, "supports_attachments", return_value=True)
+        expected = make_add_attachments_result([make_attachment_result_item(10)])
+        mock_execute = mocker.patch.object(
+            feature_layer._add_attachments_op, "execute", return_value=expected
+        )
+
+        result = await feature_layer.add_attachments(
+            [1], [b"data"], ["f.jpg"], content_types=["image/jpeg"]
+        )
+
+        mock_execute.assert_called_once_with([1], [b"data"], ["f.jpg"], ["image/jpeg"])
+        assert result is expected

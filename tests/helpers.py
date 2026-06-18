@@ -7,7 +7,13 @@ from unittest.mock import AsyncMock
 from archibald.auth import ArcGISAuth, UserTokenAuth
 from archibald.client import ArchieClient
 from archibald.errors import handle_esri_errors
-from archibald.models import ApplyEditsResult, EditResultItem, FieldsResult, QueryResult
+from archibald.models import (
+    AddAttachmentsResult,
+    ApplyEditsResult,
+    EditResultItem,
+    FieldsResult,
+    QueryResult,
+)
 from archibald.services import BaseService
 
 BASE_URL = "https://example.com/arcgis/rest/services/MyService/FeatureServer"
@@ -131,6 +137,54 @@ def make_esri_apply_edits_response(
     if delete_ids:
         body["deleteResults"] = _items(delete_ids)
     return body
+
+
+def make_attachment_result_item(
+    object_id: int,
+    *,
+    success: bool = True,
+    global_id: str | None = None,
+    error: dict | None = None,
+) -> EditResultItem:
+    """Create an EditResultItem representing an attachment result for use in tests."""
+    return EditResultItem(
+        object_id=object_id,
+        global_id=global_id,
+        success=success,
+        error=error,
+    )
+
+
+def make_add_attachments_result(
+    results: list[EditResultItem] | None = None,
+) -> AddAttachmentsResult:
+    """Create an AddAttachmentsResult for use in tests."""
+    return AddAttachmentsResult(results=results or [])
+
+
+def make_esri_add_attachment_response(
+    object_id: int,
+    *,
+    success: bool = True,
+) -> dict:
+    """Build a raw ESRI addAttachment response dict for use in tests.
+
+    Args:
+        object_id: Attachment OID returned by the server.
+        success: Whether the attachment operation succeeded.
+
+    Returns:
+        Dict with addAttachmentResult key in the format expected by
+        EditResultItem._from_esri.
+    """
+    return {
+        "addAttachmentResult": {
+            "objectId": object_id,
+            "globalId": None,
+            "success": success,
+            "error": None,
+        }
+    }
 
 
 def make_small_feature(i: int = 1) -> dict:
