@@ -490,6 +490,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#archibald.services.FeatureLayer.add_attachment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        add_attachment
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#archibald.services.FeatureLayer.add_attachments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        add_attachments
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#archibald.services.FeatureLayer.append" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -527,6 +549,17 @@
     <span class="md-ellipsis">
       
         supports_async_apply_edits
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#archibald.services.FeatureLayer.supports_attachments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        supports_attachments
       
     </span>
   </a>
@@ -881,6 +914,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#archibald.services.FeatureLayer.add_attachment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        add_attachment
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#archibald.services.FeatureLayer.add_attachments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        add_attachments
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#archibald.services.FeatureLayer.append" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -918,6 +973,17 @@
     <span class="md-ellipsis">
       
         supports_async_apply_edits
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#archibald.services.FeatureLayer.supports_attachments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        supports_attachments
       
     </span>
   </a>
@@ -1291,6 +1357,332 @@ Adds editing operations (applyEdits, upsert, sync).</p>
 <div class="doc doc-object doc-function">
 
 
+<h3 id="archibald.services.FeatureLayer.add_attachment" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">add_attachment</span><span class="p">(</span><span class="n">object_id</span><span class="p">,</span> <span class="n">file</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">content_type</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Attach a single file to one feature.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>object_id</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Feature OBJECTID to attach the file to.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>file</code>
+            </td>
+            <td>
+                  <code><span title="pathlib.Path">Path</span> | <span title="typing.BinaryIO">BinaryIO</span> | <span title="bytes">bytes</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>File to attach. May be a pathlib.Path, an open binary file
+object, or raw bytes.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>filename</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Filename sent in the multipart form. Auto-detected from
+Path.name or the file object's name attribute when omitted.
+Required when file is raw bytes.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>content_type</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>MIME type sent in the multipart form. When omitted,
+guessed from the resolved filename and falls back to
+<code>application/octet-stream</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="archibald.models.attachments_result.AddAttachmentsResult">AddAttachmentsResult</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>AddAttachmentsResult with a single result entry.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="archibald.exceptions.LayerCapabilityError" href="../exceptions/#archibald.exceptions.LayerCapabilityError">LayerCapabilityError</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If the layer does not support attachments.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="archibald.exceptions.InvalidParameterError" href="../exceptions/#archibald.exceptions.InvalidParameterError">InvalidParameterError</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If filename cannot be resolved.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="archibald.services.FeatureLayer.add_attachments" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">add_attachments</span><span class="p">(</span><span class="n">object_ids</span><span class="p">,</span> <span class="n">files</span><span class="p">,</span> <span class="n">filenames</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">content_types</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Attach files to multiple features concurrently.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>object_ids</code>
+            </td>
+            <td>
+                  <code><span title="typing.Iterable">Iterable</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Feature OBJECTIDs to attach files to. OBJECTIDs can be repeated
+if multiple files are to be attached to the same feature.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>files</code>
+            </td>
+            <td>
+                  <code><span title="typing.Iterable">Iterable</span>[<span title="pathlib.Path">Path</span> | <span title="typing.BinaryIO">BinaryIO</span> | <span title="bytes">bytes</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Files to attach, one per object_id. Each item may be a
+pathlib.Path, an open binary file object, or raw bytes.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>filenames</code>
+            </td>
+            <td>
+                  <code><span title="typing.Iterable">Iterable</span>[<span title="str">str</span> | None] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Per-item filename overrides. When omitted, filenames are
+inferred from each file (Path.name or file.name). Required
+per-item for any raw bytes entries.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>content_types</code>
+            </td>
+            <td>
+                  <code><span title="typing.Iterable">Iterable</span>[<span title="str">str</span> | None] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Per-item MIME type overrides. When omitted or None
+for an item, the type is guessed from the resolved filename and
+falls back to <code>application/octet-stream</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="archibald.models.attachments_result.AddAttachmentsResult">AddAttachmentsResult</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>AddAttachmentsResult with one result per input item, in input order.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="archibald.exceptions.LayerCapabilityError" href="../exceptions/#archibald.exceptions.LayerCapabilityError">LayerCapabilityError</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If the layer does not support attachments.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="archibald.exceptions.InvalidParameterError" href="../exceptions/#archibald.exceptions.InvalidParameterError">InvalidParameterError</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If any iterables differ in length, or if a
+bytes file has no resolvable filename.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h3 id="archibald.services.FeatureLayer.append" class="doc doc-heading">
             <code class="highlight language-python"><span class="n">append</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">apply_coded_values</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
 
@@ -1650,6 +2042,51 @@ in the DataFrame back to their raw codes before serialization.</p>
             <td>
               <div class="doc-md-description">
                 <p>advancedEditingCapabilities.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="archibald.services.FeatureLayer.supports_attachments" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">supports_attachments</span><span class="p">()</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Whether this layer supports file attachments.</p>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>True if the layer metadata advertises hasAttachments=True.</p>
               </div>
             </td>
           </tr>
