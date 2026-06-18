@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `EditResultItem` extracted from `apply_edits_result.py` into its own `models/edit_result_item.py` module so it can be imported independently. Re-exported from `apply_edits_result.py` to preserve existing import paths.
+
 ## [1.0.0] - 2026-06-01
 
 ### Added
