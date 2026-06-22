@@ -534,6 +534,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#archibald.services.FeatureLayer.delete_attachment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        delete_attachment
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#archibald.services.FeatureLayer.delete_attachments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        delete_attachments
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#archibald.services.FeatureLayer.supports_apply_edits" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -951,6 +973,28 @@
     <span class="md-ellipsis">
       
         apply_edits
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#archibald.services.FeatureLayer.delete_attachment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        delete_attachment
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#archibald.services.FeatureLayer.delete_attachments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        delete_attachments
       
     </span>
   </a>
@@ -1467,11 +1511,11 @@ guessed from the resolved filename and falls back to
       <tbody>
           <tr class="doc-section-item">
             <td>
-                  <code><span title="archibald.models.attachments_result.AddAttachmentsResult">AddAttachmentsResult</span></code>
+                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>AddAttachmentsResult with a single result entry.</p>
+                <p>AttachmentsResult with a single result entry.</p>
               </div>
             </td>
           </tr>
@@ -1630,11 +1674,11 @@ falls back to <code>application/octet-stream</code>.</p>
       <tbody>
           <tr class="doc-section-item">
             <td>
-                  <code><span title="archibald.models.attachments_result.AddAttachmentsResult">AddAttachmentsResult</span></code>
+                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>AddAttachmentsResult with one result per input item, in input order.</p>
+                <p>AttachmentsResult with one result per input item, in input order.</p>
               </div>
             </td>
           </tr>
@@ -1942,6 +1986,249 @@ in the DataFrame back to their raw codes before serialization.</p>
             <td>
               <div class="doc-md-description">
                 <p>If the layer does not support edit operations.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="archibald.services.FeatureLayer.delete_attachment" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">delete_attachment</span><span class="p">(</span><span class="n">object_id</span><span class="p">,</span> <span class="n">attachment_id</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Delete a single attachment from one feature.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>object_id</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Feature OBJECTID whose attachment is being deleted.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>attachment_id</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Attachment ID to delete.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>AttachmentsResult with a single result entry.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="archibald.exceptions.LayerCapabilityError" href="../exceptions/#archibald.exceptions.LayerCapabilityError">LayerCapabilityError</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If the layer does not support attachments.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="archibald.services.FeatureLayer.delete_attachments" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">delete_attachments</span><span class="p">(</span><span class="n">object_ids</span><span class="p">,</span> <span class="n">attachment_ids</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Delete attachments from multiple features concurrently.</p>
+<p>Pairs are grouped by OBJECTID so that all attachments on the same feature
+are removed in a single request.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>object_ids</code>
+            </td>
+            <td>
+                  <code><span title="typing.Iterable">Iterable</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Feature OBJECTIDs. May be repeated when multiple
+attachments on the same feature are to be deleted.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>attachment_ids</code>
+            </td>
+            <td>
+                  <code><span title="typing.Iterable">Iterable</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Attachment IDs to delete, one per object_id entry.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>AttachmentsResult with one result per input pair, in input order.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="archibald.exceptions.LayerCapabilityError" href="../exceptions/#archibald.exceptions.LayerCapabilityError">LayerCapabilityError</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If the layer does not support attachments.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="archibald.exceptions.InvalidParameterError" href="../exceptions/#archibald.exceptions.InvalidParameterError">InvalidParameterError</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If object_ids and attachment_ids differ in length.</p>
               </div>
             </td>
           </tr>
