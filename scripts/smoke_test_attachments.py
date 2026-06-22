@@ -1,4 +1,4 @@
-"""Attachment smoke-test script — uploads a file attachment to a real FeatureLayer.
+"""Attachment smoke-test script — uploads then deletes a file attachment on a real FeatureLayer.
 
 If --file is not provided, a small synthetic text stub is generated in memory
 so the script requires no external data files.
@@ -157,21 +157,36 @@ async def main(args: argparse.Namespace) -> None:
         _section("ADD ATTACHMENT")
         print(f"  object_id : {object_id}")
         print(f"  file      : {file_label}")
-        result = await layer.add_attachment(object_id, file_arg, filename=filename)
+        add_result = await layer.add_attachment(object_id, file_arg, filename=filename)
 
-        df = result.to_frame()
         print()
-        print(df.to_string(index=False))
+        print(add_result.to_frame().to_string(index=False))
 
-        if result.has_failures:
+        if add_result.has_failures:
             overall_passed = False
+
+        # --- Delete ---
+        _section("DELETE ATTACHMENT")
+        if add_result.has_failures or not add_result.results:
+            print("  SKIPPED — add step failed; nothing to delete.")
+        else:
+            attachment_id = add_result.results[0].object_id
+            print(f"  object_id     : {object_id}")
+            print(f"  attachment_id : {attachment_id}")
+            delete_result = await layer.delete_attachment(object_id, attachment_id)
+
+            print()
+            print(delete_result.to_frame().to_string(index=False))
+
+            if delete_result.has_failures:
+                overall_passed = False
 
         # --- Summary ---
         _section("SUMMARY")
         if overall_passed:
-            print("  PASSED — attachment uploaded successfully.")
+            print("  PASSED — attachment added and deleted successfully.")
         else:
-            print("  FAILED — attachment upload had errors (see above).")
+            print("  FAILED — one or more steps had errors (see above).")
 
     if not overall_passed:
         sys.exit(1)
