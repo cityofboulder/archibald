@@ -1,4 +1,4 @@
-"""AddAttachmentsOperation: post file attachments to individual features concurrently."""
+"""Attachment operations: add and delete file attachments on feature layer records."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, BinaryIO, Iterable
 import anyio
 
 from archibald.exceptions import InvalidParameterError
-from archibald.models.attachments_result import AddAttachmentsResult
+from archibald.models.attachments_result import AttachmentsResult
 from archibald.models.edit_result_item import EditResultItem
 
 if TYPE_CHECKING:
@@ -32,7 +32,7 @@ class AddAttachmentsOperation:
         files: Iterable[Path | BinaryIO | bytes],
         filenames: Iterable[str | None] | None = None,
         content_types: Iterable[str | None] | None = None,
-    ) -> AddAttachmentsResult:
+    ) -> AttachmentsResult:
         """Post attachments to multiple features concurrently.
 
         Filenames and content types are fully resolved during coercion before
@@ -52,7 +52,7 @@ class AddAttachmentsOperation:
                 falls back to ``application/octet-stream``.
 
         Returns:
-            AddAttachmentsResult with one result per input item, in input order.
+            AttachmentsResult with one result per input item, in input order.
 
         Raises:
             InvalidParameterError: If any iterables differ in length, or if a
@@ -70,7 +70,7 @@ class AddAttachmentsOperation:
             for idx, (oid, file, name, ct) in enumerate(coerced):
                 tg.start_soon(post_one, idx, oid, file, name, ct)
 
-        return AddAttachmentsResult(results=results)  # type: ignore[arg-type]
+        return AttachmentsResult(results=results)  # type: ignore[arg-type]
 
     def _coerce_attachments(
         self,

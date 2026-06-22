@@ -6,7 +6,7 @@ import pytest
 from archibald.exceptions import InvalidParameterError, LayerCapabilityError
 from archibald.services import FeatureLayer
 from tests.helpers import (
-    make_add_attachments_result,
+    make_attachments_result,
     make_apply_edits_result,
     make_attachment_result_item,
 )
@@ -334,7 +334,7 @@ class TestAddAttachmentMethods:
         self, feature_layer, mocker
     ):
         mocker.patch.object(feature_layer, "supports_attachments", return_value=True)
-        expected = make_add_attachments_result([make_attachment_result_item(99)])
+        expected = make_attachments_result([make_attachment_result_item(99)])
         mock_execute = mocker.patch.object(
             feature_layer._add_attachments_op, "execute", return_value=expected
         )
@@ -353,7 +353,7 @@ class TestAddAttachmentMethods:
         self, feature_layer, mocker
     ):
         mocker.patch.object(feature_layer, "supports_attachments", return_value=True)
-        expected = make_add_attachments_result([make_attachment_result_item(10)])
+        expected = make_attachments_result([make_attachment_result_item(10)])
         mock_execute = mocker.patch.object(
             feature_layer._add_attachments_op, "execute", return_value=expected
         )

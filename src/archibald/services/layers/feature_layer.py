@@ -11,8 +11,8 @@ import pandas as pd
 from archibald.client import ArchieClient
 from archibald.exceptions import InvalidParameterError, LayerCapabilityError
 from archibald.models.apply_edits_result import ApplyEditsResult
-from archibald.models.attachments_result import AddAttachmentsResult
-from archibald.operations.add_attachments import AddAttachmentsOperation
+from archibald.models.attachments_result import AttachmentsResult
+from archibald.operations.attachments import AddAttachmentsOperation
 from archibald.operations.apply_edits import ApplyEditsOperation
 from archibald.services.feature_service import FeatureService
 from archibald.services.layers.base import BaseLayer
@@ -86,7 +86,7 @@ class FeatureLayer(FeatureService, BaseLayer):
         *,
         filename: str | None = None,
         content_type: str | None = None,
-    ) -> AddAttachmentsResult:
+    ) -> AttachmentsResult:
         """Attach a single file to one feature.
 
         Args:
@@ -101,7 +101,7 @@ class FeatureLayer(FeatureService, BaseLayer):
                 ``application/octet-stream``.
 
         Returns:
-            AddAttachmentsResult with a single result entry.
+            AttachmentsResult with a single result entry.
 
         Raises:
             LayerCapabilityError: If the layer does not support attachments.
@@ -121,7 +121,7 @@ class FeatureLayer(FeatureService, BaseLayer):
         files: Iterable[Path | BinaryIO | bytes],
         filenames: Iterable[str | None] | None = None,
         content_types: Iterable[str | None] | None = None,
-    ) -> AddAttachmentsResult:
+    ) -> AttachmentsResult:
         """Attach files to multiple features concurrently.
 
         Args:
@@ -137,7 +137,7 @@ class FeatureLayer(FeatureService, BaseLayer):
                 falls back to ``application/octet-stream``.
 
         Returns:
-            AddAttachmentsResult with one result per input item, in input order.
+            AttachmentsResult with one result per input item, in input order.
 
         Raises:
             LayerCapabilityError: If the layer does not support attachments.

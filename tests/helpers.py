@@ -8,7 +8,7 @@ from archibald.auth import ArcGISAuth, UserTokenAuth
 from archibald.client import ArchieClient
 from archibald.errors import handle_esri_errors
 from archibald.models import (
-    AddAttachmentsResult,
+    AttachmentsResult,
     ApplyEditsResult,
     EditResultItem,
     FieldsResult,
@@ -155,11 +155,11 @@ def make_attachment_result_item(
     )
 
 
-def make_add_attachments_result(
+def make_attachments_result(
     results: list[EditResultItem] | None = None,
-) -> AddAttachmentsResult:
-    """Create an AddAttachmentsResult for use in tests."""
-    return AddAttachmentsResult(results=results or [])
+) -> AttachmentsResult:
+    """Create an AttachmentsResult for use in tests."""
+    return AttachmentsResult(results=results or [])
 
 
 def make_esri_add_attachment_response(

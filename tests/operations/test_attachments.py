@@ -5,7 +5,7 @@ import pytest
 
 from archibald.exceptions import InvalidParameterError
 from archibald.models.edit_result_item import EditResultItem
-from archibald.operations.add_attachments import AddAttachmentsOperation
+from archibald.operations.attachments import AddAttachmentsOperation
 from tests.helpers import make_esri_add_attachment_response, make_response
 
 

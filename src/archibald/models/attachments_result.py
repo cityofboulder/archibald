@@ -1,4 +1,4 @@
-"""AddAttachmentsResult: aggregated response from an addAttachment operation."""
+"""AttachmentsResult: aggregated response from attachment operations."""
 
 from __future__ import annotations
 
@@ -11,12 +11,12 @@ from archibald.models.edit_result_item import EditResultItem
 
 
 @dataclass
-class AddAttachmentsResult:
-    """Aggregated per-attachment results from one or more addAttachment calls.
+class AttachmentsResult:
+    """Aggregated per-attachment results from one or more attachment operations.
 
-    Each result item's ``object_id`` is the attachment OID assigned by the
-    server, not the feature OID. Inspect ``has_failures`` and ``failed`` to
-    detect partial failures without iterating manually.
+    Each result item's ``object_id`` is the attachment OID, not the feature OID.
+    Inspect ``has_failures`` and ``failed`` to detect partial failures without
+    iterating manually.
     """
 
     results: list[EditResultItem]
