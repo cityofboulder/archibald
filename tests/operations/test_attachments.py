@@ -6,7 +6,11 @@ import pytest
 from archibald.exceptions import InvalidParameterError
 from archibald.models.edit_result_item import EditResultItem
 from archibald.operations.attachments import AddAttachmentsOperation
-from tests.helpers import make_esri_add_attachment_response, make_response
+from tests.helpers import (
+    make_esri_add_attachment_response,
+    make_esri_delete_attachments_response,
+    make_response,
+)
 
 
 class TestResolveFilename:
@@ -130,7 +134,7 @@ class TestReadFile:
         assert await AddAttachmentsOperation._read_file(buf) == b"content"
 
 
-class TestPostOne:
+class TestAddAttachmentsPostOne:
     @pytest.mark.anyio
     async def test_posts_to_correct_endpoint(self, add_attachments_op):
         add_attachments_op._layer._client.post.return_value = make_response(
@@ -172,7 +176,7 @@ class TestPostOne:
         assert result.success is True
 
 
-class TestExecute:
+class TestAddAttachmentsExecute:
     @pytest.mark.anyio
     async def test_returns_one_result_per_attachment_in_input_order(
         self, add_attachments_op, mocker
@@ -220,3 +224,104 @@ class TestExecute:
     async def test_raises_on_length_mismatch(self, add_attachments_op):
         with pytest.raises(InvalidParameterError):
             await add_attachments_op.execute([1, 2], [b"a"])
+
+
+class TestDeleteForObject:
+    @pytest.mark.anyio
+    async def test_posts_to_correct_endpoint(self, delete_attachments_op):
+        delete_attachments_op._layer._client.post.return_value = make_response(
+            make_esri_delete_attachments_response([10])
+        )
+
+        await delete_attachments_op._delete_for_object(5, [10])
+        call = delete_attachments_op._layer._client.post.call_args
+
+        assert (
+            call.kwargs["endpoint"]
+            == "services/MyService/FeatureServer/0/5/deleteAttachments"
+        )
+
+    @pytest.mark.anyio
+    async def test_sends_comma_separated_attachment_ids(self, delete_attachments_op):
+        delete_attachments_op._layer._client.post.return_value = make_response(
+            make_esri_delete_attachments_response([10, 11])
+        )
+
+        await delete_attachments_op._delete_for_object(5, [10, 11])
+        call = delete_attachments_op._layer._client.post.call_args
+
+        assert call.kwargs["data"]["attachmentIds"] == "10,11"
+
+    @pytest.mark.anyio
+    async def test_returns_parsed_edit_result_items(self, delete_attachments_op):
+        delete_attachments_op._layer._client.post.return_value = make_response(
+            make_esri_delete_attachments_response([10, 11])
+        )
+
+        results = await delete_attachments_op._delete_for_object(5, [10, 11])
+
+        assert len(results) == 2
+        assert all(isinstance(r, EditResultItem) for r in results)
+        assert [r.object_id for r in results] == [10, 11]
+
+
+class TestDeleteAttachmentsExecute:
+    @pytest.mark.anyio
+    async def test_raises_on_length_mismatch(self, delete_attachments_op):
+        with pytest.raises(InvalidParameterError, match="got 2, 1"):
+            await delete_attachments_op.execute([1, 2], [10])
+
+    @pytest.mark.anyio
+    async def test_groups_same_oid_into_one_request(
+        self, delete_attachments_op, mocker
+    ):
+        async def fake_delete(oid, att_ids):
+            return [
+                EditResultItem(object_id=i, global_id=None, success=True, error=None)
+                for i in att_ids
+            ]
+
+        mock = mocker.patch.object(
+            delete_attachments_op, "_delete_for_object", side_effect=fake_delete
+        )
+
+        await delete_attachments_op.execute([1, 1], [10, 11])
+
+        mock.assert_called_once_with(1, [10, 11])
+
+    @pytest.mark.anyio
+    async def test_fires_one_request_per_unique_oid(
+        self, delete_attachments_op, mocker
+    ):
+        async def fake_delete(oid, att_ids):
+            return [
+                EditResultItem(object_id=i, global_id=None, success=True, error=None)
+                for i in att_ids
+            ]
+
+        mock = mocker.patch.object(
+            delete_attachments_op, "_delete_for_object", side_effect=fake_delete
+        )
+
+        await delete_attachments_op.execute([1, 2], [10, 20])
+
+        assert mock.call_count == 2
+
+    @pytest.mark.anyio
+    async def test_preserves_input_order_across_groups(
+        self, delete_attachments_op, mocker
+    ):
+        async def fake_delete(oid, att_ids):
+            return [
+                EditResultItem(object_id=i, global_id=None, success=True, error=None)
+                for i in att_ids
+            ]
+
+        mocker.patch.object(
+            delete_attachments_op, "_delete_for_object", side_effect=fake_delete
+        )
+
+        # Input order: (oid=1, att=10), (oid=2, att=20), (oid=1, att=11)
+        result = await delete_attachments_op.execute([1, 2, 1], [10, 20, 11])
+
+        assert [r.object_id for r in result.results] == [10, 20, 11]

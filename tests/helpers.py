@@ -187,6 +187,29 @@ def make_esri_add_attachment_response(
     }
 
 
+def make_esri_delete_attachments_response(
+    attachment_ids: list[int],
+    *,
+    success: bool = True,
+) -> dict:
+    """Build a raw ESRI deleteAttachments response dict for use in tests.
+
+    Args:
+        attachment_ids: Attachment OIDs returned by the server.
+        success: Whether all deletions succeeded.
+
+    Returns:
+        Dict with deleteAttachmentResults key in the format expected by
+        EditResultItem._from_esri.
+    """
+    return {
+        "deleteAttachmentResults": [
+            {"objectId": att_id, "globalId": None, "success": success, "error": None}
+            for att_id in attachment_ids
+        ]
+    }
+
+
 def make_small_feature(i: int = 1) -> dict:
     """Create a minimal ESRI feature dict for batch packing tests."""
     return {"attributes": {"id": i}}

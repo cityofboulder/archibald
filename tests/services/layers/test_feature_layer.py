@@ -364,3 +364,52 @@ class TestAddAttachmentMethods:
 
         mock_execute.assert_called_once_with([1], [b"data"], ["f.jpg"], ["image/jpeg"])
         assert result is expected
+
+
+class TestDeleteAttachmentMethods:
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "call",
+        [
+            lambda layer: layer.delete_attachment(1, 10),
+            lambda layer: layer.delete_attachments([1], [10]),
+        ],
+        ids=["delete_attachment", "delete_attachments"],
+    )
+    async def test_raises_when_layer_has_no_attachments(
+        self, feature_layer, mocker, call
+    ):
+        mocker.patch.object(feature_layer, "supports_attachments", return_value=False)
+
+        with pytest.raises(LayerCapabilityError, match="does not support attachments"):
+            await call(feature_layer)
+
+    @pytest.mark.anyio
+    async def test_delete_attachment_wraps_single_args_and_delegates(
+        self, feature_layer, mocker
+    ):
+        mocker.patch.object(feature_layer, "supports_attachments", return_value=True)
+        expected = make_attachments_result([make_attachment_result_item(10)])
+        mock_execute = mocker.patch.object(
+            feature_layer._delete_attachments_op, "execute", return_value=expected
+        )
+
+        result = await feature_layer.delete_attachment(5, 10)
+
+        mock_execute.assert_called_once_with([5], [10])
+        assert result is expected
+
+    @pytest.mark.anyio
+    async def test_delete_attachments_passes_iterables_to_operation(
+        self, feature_layer, mocker
+    ):
+        mocker.patch.object(feature_layer, "supports_attachments", return_value=True)
+        expected = make_attachments_result([make_attachment_result_item(10)])
+        mock_execute = mocker.patch.object(
+            feature_layer._delete_attachments_op, "execute", return_value=expected
+        )
+
+        result = await feature_layer.delete_attachments([1, 2], [10, 11])
+
+        mock_execute.assert_called_once_with([1, 2], [10, 11])
+        assert result is expected
