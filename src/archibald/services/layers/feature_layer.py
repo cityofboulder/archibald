@@ -12,7 +12,10 @@ from archibald.client import ArchieClient
 from archibald.exceptions import InvalidParameterError, LayerCapabilityError
 from archibald.models.apply_edits_result import ApplyEditsResult
 from archibald.models.attachments_result import AttachmentsResult
-from archibald.operations.attachments import AddAttachmentsOperation
+from archibald.operations.attachments import (
+    AddAttachmentsOperation,
+    DeleteAttachmentsOperation,
+)
 from archibald.operations.apply_edits import ApplyEditsOperation
 from archibald.services.feature_service import FeatureService
 from archibald.services.layers.base import BaseLayer
@@ -38,6 +41,7 @@ class FeatureLayer(FeatureService, BaseLayer):
         super().__init__(client, service_path, layer_id)
         self._apply_edits_op = ApplyEditsOperation(self)
         self._add_attachments_op = AddAttachmentsOperation(self)
+        self._delete_attachments_op = DeleteAttachmentsOperation(self)
 
     async def supports_apply_edits(self) -> bool:
         """Whether this layer supports applyEdits operations.
@@ -151,6 +155,57 @@ class FeatureLayer(FeatureService, BaseLayer):
         return await self._add_attachments_op.execute(
             object_ids, files, filenames, content_types
         )
+
+    async def delete_attachment(
+        self,
+        object_id: int,
+        attachment_id: int,
+    ) -> AttachmentsResult:
+        """Delete a single attachment from one feature.
+
+        Args:
+            object_id: Feature OBJECTID whose attachment is being deleted.
+            attachment_id: Attachment ID to delete.
+
+        Returns:
+            AttachmentsResult with a single result entry.
+
+        Raises:
+            LayerCapabilityError: If the layer does not support attachments.
+        """
+        if not await self.supports_attachments():
+            raise LayerCapabilityError(
+                f"Layer {self._layer_path} does not support attachments."
+            )
+        return await self._delete_attachments_op.execute([object_id], [attachment_id])
+
+    async def delete_attachments(
+        self,
+        object_ids: Iterable[int],
+        attachment_ids: Iterable[int],
+    ) -> AttachmentsResult:
+        """Delete attachments from multiple features concurrently.
+
+        Pairs are grouped by OBJECTID so that all attachments on the same feature
+        are removed in a single request.
+
+        Args:
+            object_ids: Feature OBJECTIDs. May be repeated when multiple
+                attachments on the same feature are to be deleted.
+            attachment_ids: Attachment IDs to delete, one per object_id entry.
+
+        Returns:
+            AttachmentsResult with one result per input pair, in input order.
+
+        Raises:
+            LayerCapabilityError: If the layer does not support attachments.
+            InvalidParameterError: If object_ids and attachment_ids differ in length.
+        """
+        if not await self.supports_attachments():
+            raise LayerCapabilityError(
+                f"Layer {self._layer_path} does not support attachments."
+            )
+        return await self._delete_attachments_op.execute(object_ids, attachment_ids)
 
     async def apply_edits(
         self,

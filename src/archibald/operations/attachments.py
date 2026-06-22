@@ -197,3 +197,90 @@ class AddAttachmentsOperation:
         if isinstance(file, bytes):
             return file
         return file.read()  # type: ignore
+
+
+class DeleteAttachmentsOperation:
+    """Delete file attachments from one or more features via the deleteAttachments endpoint.
+
+    Accepts flat parallel iterables of feature OBJECTIDs and attachment IDs, groups
+    them by OBJECTID internally, and fires one batched DELETE request per unique
+    feature concurrently. Instantiated once at FeatureLayer.__init__ time.
+    """
+
+    def __init__(self, layer: FeatureLayer) -> None:
+        self._layer = layer
+
+    async def execute(
+        self,
+        object_ids: Iterable[int],
+        attachment_ids: Iterable[int],
+    ) -> AttachmentsResult:
+        """Delete attachments from multiple features concurrently.
+
+        Pairs are grouped by OBJECTID so that all attachments belonging to the
+        same feature are deleted in a single request. Result order matches the
+        input order of (object_id, attachment_id) pairs.
+
+        Args:
+            object_ids: Feature OBJECTIDs. May be repeated when multiple
+                attachments on the same feature are to be deleted.
+            attachment_ids: Attachment IDs to delete, one per object_id entry.
+
+        Returns:
+            AttachmentsResult with one result per input pair, in input order.
+
+        Raises:
+            InvalidParameterError: If object_ids and attachment_ids differ in length.
+        """
+        ids = list(object_ids)
+        att_ids = list(attachment_ids)
+
+        if len(ids) != len(att_ids):
+            raise InvalidParameterError(
+                "object_ids and attachment_ids must be the same length "
+                f"(got {len(ids)}, {len(att_ids)})."
+            )
+
+        results: list[EditResultItem | None] = [None] * len(ids)
+
+        groups: dict[int, list[tuple[int, int]]] = {}
+        for idx, (oid, att_id) in enumerate(zip(ids, att_ids)):
+            groups.setdefault(oid, []).append((idx, att_id))
+
+        async def delete_group(oid: int, pairs: list[tuple[int, int]]) -> None:
+            group_att_ids = [att_id for _, att_id in pairs]
+            group_results = await self._delete_for_object(oid, group_att_ids)
+            result_by_att_id = {r.object_id: r for r in group_results}
+            for orig_idx, att_id in pairs:
+                results[orig_idx] = result_by_att_id[att_id]
+
+        async with anyio.create_task_group() as tg:
+            for oid, pairs in groups.items():
+                tg.start_soon(delete_group, oid, pairs)
+
+        return AttachmentsResult(results=results)  # type: ignore[arg-type]
+
+    async def _delete_for_object(
+        self,
+        object_id: int,
+        attachment_ids: list[int],
+    ) -> list[EditResultItem]:
+        """DELETE one or more attachments from a single feature.
+
+        Args:
+            object_id: Feature OBJECTID whose attachments are being deleted.
+            attachment_ids: Attachment IDs to delete in this request.
+
+        Returns:
+            List of EditResultItem parsed from the deleteAttachmentResults response,
+            in the order the server returns them.
+        """
+        endpoint = f"{self._layer._layer_path}/{object_id}/deleteAttachments"
+        response = await self._layer._client.post(
+            endpoint=endpoint,
+            data={"attachmentIds": ",".join(str(i) for i in attachment_ids)},
+        )
+        return [
+            EditResultItem._from_esri(r)
+            for r in response.json()["deleteAttachmentResults"]
+        ]
