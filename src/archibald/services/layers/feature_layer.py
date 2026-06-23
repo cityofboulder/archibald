@@ -74,15 +74,6 @@ class FeatureLayer(FeatureService, BaseLayer):
         adv = metadata.get("advancedEditingCapabilities", {})
         return bool(adv.get("supportsAsyncApplyEdits", False))
 
-    async def supports_attachments(self) -> bool:
-        """Whether this layer supports file attachments.
-
-        Returns:
-            True if the layer metadata advertises hasAttachments=True.
-        """
-        metadata = await self._get_layer_metadata()
-        return bool(metadata.get("hasAttachments", False))
-
     async def add_attachment(
         self,
         object_id: int,
