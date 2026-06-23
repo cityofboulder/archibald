@@ -17,7 +17,13 @@ from archibald.services import (
     MapLayer,
     MapService,
 )
-from tests.helpers import MAP_LAYER_PATH, SERVICE_PATH, MinimalService, StaticTokenAuth
+from tests.helpers import (
+    MAP_LAYER_PATH,
+    SERVICE_PATH,
+    MinimalService,
+    StaticTokenAuth,
+    make_attachment_info,
+)
 
 
 @pytest.fixture
@@ -140,6 +146,63 @@ def fields_result_with_domains(fields_result) -> FieldsResult:
             for f in fields_result.fields
         ]
     )
+
+
+@pytest.fixture
+def attachment_properties() -> list[dict]:
+    """Layer metadata's attachmentProperties crosswalk.
+
+    Maps each camelCase queryAttachments response property to its ESRI
+    attachment-table field name, with isEnabled flags. Mirrors a real Enterprise
+    feature service: id/globalId/name/size/contentType enabled,
+    keywords/exifInfo disabled.
+    """
+    return [
+        {"name": "id", "fieldName": "ATTACHMENTID", "isEnabled": True},
+        {"name": "globalId", "fieldName": "GLOBALID", "isEnabled": True},
+        {"name": "name", "fieldName": "ATT_NAME", "isEnabled": True},
+        {"name": "size", "fieldName": "DATA_SIZE", "isEnabled": True},
+        {"name": "contentType", "fieldName": "CONTENT_TYPE", "isEnabled": True},
+        {"name": "keywords", "fieldName": "KEYWORDS", "isEnabled": False},
+        {"name": "exifInfo", "fieldName": "EXIFINFO", "isEnabled": False},
+    ]
+
+
+@pytest.fixture
+def full_attachment_groups() -> list[dict]:
+    """Two attachmentGroups with dual-key attachmentInfos for to_frame tests.
+
+    Each attachmentInfo carries both camelCase property names and ESRI field
+    names, as a real Enterprise queryAttachments response does.
+    """
+    return [
+        {
+            "parentObjectId": 1,
+            "parentGlobalId": "g1",
+            "attachmentInfos": [make_attachment_info(10), make_attachment_info(11)],
+        },
+        {
+            "parentObjectId": 2,
+            "parentGlobalId": "g2",
+            "attachmentInfos": [make_attachment_info(12)],
+        },
+    ]
+
+
+@pytest.fixture
+def enabled_property_columns(attachment_properties) -> list[str]:
+    """Expected to_frame columns in property-name mode: parents + enabled names."""
+    enabled = [p["name"] for p in attachment_properties if p.get("isEnabled", True)]
+    return ["parentObjectId", "parentGlobalId", *enabled]
+
+
+@pytest.fixture
+def enabled_field_name_columns(attachment_properties) -> list[str]:
+    """Expected to_frame columns in field-name mode: parents + enabled fieldNames."""
+    enabled = [
+        p["fieldName"] for p in attachment_properties if p.get("isEnabled", True)
+    ]
+    return ["parentObjectId", "parentGlobalId", *enabled]
 
 
 @pytest.fixture
