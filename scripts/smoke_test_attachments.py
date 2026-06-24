@@ -1,7 +1,9 @@
-"""Attachment smoke-test script — uploads then deletes a file attachment on a real FeatureLayer.
+"""Attachment smoke-test script — adds, updates, then deletes a file attachment on a real FeatureLayer.
 
-If --file is not provided, a small synthetic text stub is generated in memory
-so the script requires no external data files.
+The script adds an attachment, replaces its contents via updateAttachment (when
+the layer supports updating), and finally deletes it so the layer is left as it
+was found. If --file / --update-file are not provided, small synthetic text
+stubs are generated in memory so the script requires no external data files.
 
 Usage:
     uv run python scripts/smoke_test_attachments.py \\
@@ -11,12 +13,12 @@ Usage:
         --password secret \\
         --portal-url https://gis.example.gov/portal
 
-    # Attach a real file to a specific feature:
+    # Add a real file then replace it with another on a specific feature:
     uv run python scripts/smoke_test_attachments.py \\
         --base-url https://gis.example.gov/ags/rest/services/ \\
         --service-path IT/SAMPS/FeatureServer \\
         --username user --password secret \\
-        --object-id 42 --file /path/to/photo.jpg
+        --object-id 42 --file /path/to/photo.jpg --update-file /path/to/new_photo.jpg
 
     # Public / unauthenticated service (omit credentials):
     uv run python scripts/smoke_test_attachments.py \\
@@ -37,11 +39,13 @@ from archibald.services import FeatureLayer
 _SEP = "-" * 60
 _SYNTHETIC_BYTES = b"archie smoke test attachment"
 _SYNTHETIC_FILENAME = "archie_smoke_test.txt"
+_SYNTHETIC_UPDATE_BYTES = b"archie smoke test attachment (updated contents)"
+_SYNTHETIC_UPDATE_FILENAME = "archie_smoke_test_updated.txt"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Attachment smoke test — uploads a file attachment to a FeatureLayer."
+        description="Attachment smoke test — adds, updates, and deletes a file attachment on a FeatureLayer."
     )
     parser.add_argument(
         "--portal-url",
@@ -89,6 +93,13 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Path to the file to attach. Uses a synthetic text stub if omitted.",
     )
+    parser.add_argument(
+        "--update-file",
+        type=Path,
+        default=None,
+        help="Path to the replacement file used in the update step. Uses a synthetic "
+        "text stub if omitted.",
+    )
     return parser.parse_args()
 
 
@@ -97,6 +108,18 @@ def _section(title: str) -> None:
     print(_SEP)
     print(f"  {title}")
     print(_SEP)
+
+
+def _resolve_file(
+    path: Path | None, synthetic_bytes: bytes, synthetic_filename: str
+) -> tuple[Path | bytes, str, str]:
+    """Resolve a CLI file path to (file_arg, filename, label).
+
+    Falls back to an in-memory synthetic stub when no path is provided.
+    """
+    if path is not None:
+        return path, path.name, str(path)
+    return synthetic_bytes, synthetic_filename, f"<synthetic> {synthetic_filename}"
 
 
 async def main(args: argparse.Namespace) -> None:
@@ -120,7 +143,9 @@ async def main(args: argparse.Namespace) -> None:
         # --- Capabilities ---
         _section("CAPABILITIES")
         supports = await layer.supports_attachments()
+        supports_update = await layer.supports_update()
         print(f"  supports_attachments : {supports}")
+        print(f"  supports_update      : {supports_update}")
         if not supports:
             raise SystemExit("ABORT: Layer does not support attachments.")
 
@@ -143,17 +168,15 @@ async def main(args: argparse.Namespace) -> None:
             object_id = seed.features[0]["attributes"][objectid_field]
             print(f"  using OBJECTID : {object_id}")
 
-        # --- Resolve file ---
-        if args.file is not None:
-            file_arg: Path | bytes = args.file
-            filename: str = args.file.name
-            file_label = str(args.file)
-        else:
-            file_arg = _SYNTHETIC_BYTES
-            filename = _SYNTHETIC_FILENAME
-            file_label = f"<synthetic> {_SYNTHETIC_FILENAME}"
+        # --- Resolve files ---
+        file_arg, filename, file_label = _resolve_file(
+            args.file, _SYNTHETIC_BYTES, _SYNTHETIC_FILENAME
+        )
+        update_file_arg, update_filename, update_label = _resolve_file(
+            args.update_file, _SYNTHETIC_UPDATE_BYTES, _SYNTHETIC_UPDATE_FILENAME
+        )
 
-        # --- Upload ---
+        # --- Add ---
         _section("ADD ATTACHMENT")
         print(f"  object_id : {object_id}")
         print(f"  file      : {file_label}")
@@ -165,12 +188,37 @@ async def main(args: argparse.Namespace) -> None:
         if add_result.has_failures:
             overall_passed = False
 
+        attachment_id = (
+            add_result.results[0].object_id
+            if add_result.results and not add_result.has_failures
+            else None
+        )
+
+        # --- Update ---
+        _section("UPDATE ATTACHMENT")
+        if attachment_id is None:
+            print("  SKIPPED — add step failed; nothing to update.")
+        elif not supports_update:
+            print("  SKIPPED — layer does not support updating attachments.")
+        else:
+            print(f"  object_id     : {object_id}")
+            print(f"  attachment_id : {attachment_id}")
+            print(f"  new file      : {update_label}")
+            update_result = await layer.update_attachment(
+                object_id, attachment_id, update_file_arg, filename=update_filename
+            )
+
+            print()
+            print(update_result.to_frame().to_string(index=False))
+
+            if update_result.has_failures:
+                overall_passed = False
+
         # --- Delete ---
         _section("DELETE ATTACHMENT")
-        if add_result.has_failures or not add_result.results:
+        if attachment_id is None:
             print("  SKIPPED — add step failed; nothing to delete.")
         else:
-            attachment_id = add_result.results[0].object_id
             print(f"  object_id     : {object_id}")
             print(f"  attachment_id : {attachment_id}")
             delete_result = await layer.delete_attachment(object_id, attachment_id)
@@ -184,7 +232,7 @@ async def main(args: argparse.Namespace) -> None:
         # --- Summary ---
         _section("SUMMARY")
         if overall_passed:
-            print("  PASSED — attachment added and deleted successfully.")
+            print("  PASSED — attachment added, updated, and deleted successfully.")
         else:
             print("  FAILED — one or more steps had errors (see above).")
 
