@@ -9,6 +9,7 @@ from archibald.operations.attachments import AddAttachmentsOperation
 from tests.helpers import (
     make_esri_add_attachment_response,
     make_esri_delete_attachments_response,
+    make_esri_update_attachment_response,
     make_response,
 )
 
@@ -58,7 +59,8 @@ class TestCoerceAttachments:
         result = add_attachments_op._coerce_attachments(
             [1, 2], [b"a", b"b"], ["a.jpg", "b.jpg"], [None, None]
         )
-        oids, _, names, _ = zip(*result)
+        oids, _, names, _, _ = zip(*result)
+
         assert list(oids) == [1, 2]
         assert list(names) == ["a.jpg", "b.jpg"]
 
@@ -68,9 +70,11 @@ class TestCoerceAttachments:
         result = add_attachments_op._coerce_attachments(
             [1], [Path("photo.jpg")], None, None
         )
-        oid, file, name, ct = result[0]
+        _, _, name, ct, att_id = result[0]
+
         assert name == "photo.jpg"
         assert ct == "image/jpeg"
+        assert att_id is None
 
     def test_guesses_content_type_from_resolved_filename(self, add_attachments_op):
         result = add_attachments_op._coerce_attachments(
@@ -98,20 +102,40 @@ class TestCoerceAttachments:
         assert result[0][3] == "application/pdf"
 
     @pytest.mark.parametrize(
-        "ids, files, names, cts, expected",
+        "ids, files, names, cts, att_ids, expected",
         [
-            ([1, 2], [b"a"], ["a.jpg", "b.jpg"], None, "got 2, 1, 2, 2"),
-            ([1], [b"a", b"b"], ["a.jpg"], None, "got 1, 2, 1, 1"),
-            ([1], [b"a"], ["a.jpg", "b.jpg"], None, "got 1, 1, 2, 1"),
-            ([1], [b"a"], ["a.jpg"], ["image/jpeg", "image/png"], "got 1, 1, 1, 2"),
+            ([1, 2], [b"a"], ["a.jpg", "b.jpg"], None, None, "got 2, 1, 2, 2, 2"),
+            ([1], [b"a", b"b"], ["a.jpg"], None, None, "got 1, 2, 1, 1, 1"),
+            ([1], [b"a"], ["a.jpg", "b.jpg"], None, None, "got 1, 1, 2, 1, 1"),
+            (
+                [1],
+                [b"a"],
+                ["a.jpg"],
+                ["image/jpeg", "image/png"],
+                None,
+                "got 1, 1, 1, 2, 1",
+            ),
+            ([1, 2], [b"a", b"b"], ["a.jpg", "b.jpg"], None, [10], "got 2, 2, 2, 2, 1"),
         ],
-        ids=["too-few-files", "too-few-ids", "too-many-names", "too-many-types"],
+        ids=[
+            "too-few-files",
+            "too-few-ids",
+            "too-many-names",
+            "too-many-types",
+            "too-few-attachment-ids",
+        ],
     )
     def test_raises_on_length_mismatch(
-        self, add_attachments_op, ids, files, names, cts, expected
+        self, add_attachments_op, ids, files, names, cts, att_ids, expected
     ):
         with pytest.raises(InvalidParameterError, match=expected):
-            add_attachments_op._coerce_attachments(ids, files, names, cts)
+            add_attachments_op._coerce_attachments(ids, files, names, cts, att_ids)
+
+    def test_threads_attachment_ids_into_tuples(self, add_attachments_op):
+        result = add_attachments_op._coerce_attachments(
+            [1, 2], [b"a", b"b"], ["a.jpg", "b.jpg"], None, [10, 11]
+        )
+        assert [row[4] for row in result] == [10, 11]
 
 
 class TestReadFile:
@@ -181,7 +205,7 @@ class TestAddAttachmentsExecute:
     async def test_returns_one_result_per_attachment_in_input_order(
         self, add_attachments_op, mocker
     ):
-        async def fake_post_one(oid, file, filename, content_type):
+        async def fake_post_one(oid, file, filename, content_type, attachment_id=None):
             return EditResultItem(
                 object_id=oid * 10, global_id=None, success=True, error=None
             )
@@ -202,7 +226,7 @@ class TestAddAttachmentsExecute:
     ):
         captured: dict[int, str] = {}
 
-        async def fake_post_one(oid, file, filename, content_type):
+        async def fake_post_one(oid, file, filename, content_type, attachment_id=None):
             captured[oid] = content_type
             return EditResultItem(
                 object_id=oid, global_id=None, success=True, error=None
@@ -224,6 +248,71 @@ class TestAddAttachmentsExecute:
     async def test_raises_on_length_mismatch(self, add_attachments_op):
         with pytest.raises(InvalidParameterError):
             await add_attachments_op.execute([1, 2], [b"a"])
+
+
+class TestUpdateAttachmentsPostOne:
+    @pytest.mark.anyio
+    async def test_posts_to_update_endpoint(self, update_attachments_op):
+        update_attachments_op._layer._client.post.return_value = make_response(
+            make_esri_update_attachment_response(99)
+        )
+
+        await update_attachments_op._post_one(5, b"data", "img.jpg", "image/jpeg", 42)
+        call = update_attachments_op._layer._client.post.call_args
+
+        assert (
+            call.kwargs["endpoint"]
+            == "services/MyService/FeatureServer/0/5/updateAttachment"
+        )
+
+    @pytest.mark.anyio
+    async def test_sends_attachment_id_in_form_data(self, update_attachments_op):
+        update_attachments_op._layer._client.post.return_value = make_response(
+            make_esri_update_attachment_response(99)
+        )
+
+        await update_attachments_op._post_one(5, b"data", "img.jpg", "image/jpeg", 42)
+        call = update_attachments_op._layer._client.post.call_args
+
+        assert call.kwargs["data"] == {"attachmentId": 42}
+
+    @pytest.mark.anyio
+    async def test_returns_parsed_edit_result_item(self, update_attachments_op):
+        update_attachments_op._layer._client.post.return_value = make_response(
+            make_esri_update_attachment_response(77)
+        )
+
+        result = await update_attachments_op._post_one(
+            5, b"data", "img.jpg", "image/jpeg", 42
+        )
+
+        assert isinstance(result, EditResultItem)
+        assert result.object_id == 77
+        assert result.success is True
+
+
+class TestUpdateAttachmentsExecute:
+    @pytest.mark.anyio
+    async def test_passes_attachment_ids_to_each_post(
+        self, update_attachments_op, mocker
+    ):
+        captured = {}
+
+        async def fake_post_one(oid, file, filename, content_type, attachment_id=None):
+            captured[oid] = attachment_id
+            return EditResultItem(
+                object_id=oid, global_id=None, success=True, error=None
+            )
+
+        mocker.patch.object(
+            update_attachments_op, "_post_one", side_effect=fake_post_one
+        )
+
+        await update_attachments_op.execute(
+            [1, 2], [b"a", b"b"], ["a.jpg", "b.jpg"], attachment_ids=[10, 11]
+        )
+
+        assert captured == {1: 10, 2: 11}
 
 
 class TestDeleteForObject:

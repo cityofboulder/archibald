@@ -6,6 +6,7 @@ from archibald.models import AttachmentsQueryResult, FieldsResult, QueryResult
 from archibald.operations import (
     AddAttachmentsOperation,
     DeleteAttachmentsOperation,
+    UpdateAttachmentsOperation,
     ApplyEditsOperation,
     QueryOperation,
     QueryAttachmentsOperation,
@@ -271,6 +272,12 @@ def mock_layer(mocker, fields_result, attachment_fields, attachment_properties):
 def add_attachments_op(mock_layer) -> AddAttachmentsOperation:
     """An AddAttachmentsOperation instance backed by mock_layer."""
     return AddAttachmentsOperation(mock_layer)
+
+
+@pytest.fixture
+def update_attachments_op(mock_layer) -> UpdateAttachmentsOperation:
+    """An UpdateAttachmentsOperation instance backed by mock_layer."""
+    return UpdateAttachmentsOperation(mock_layer)
 
 
 @pytest.fixture

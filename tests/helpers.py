@@ -187,6 +187,31 @@ def make_esri_add_attachment_response(
     }
 
 
+def make_esri_update_attachment_response(
+    object_id: int,
+    *,
+    success: bool = True,
+) -> dict:
+    """Build a raw ESRI updateAttachment response dict for use in tests.
+
+    Args:
+        object_id: Attachment OID returned by the server.
+        success: Whether the attachment operation succeeded.
+
+    Returns:
+        Dict with updateAttachmentResult key in the format expected by
+        EditResultItem._from_esri.
+    """
+    return {
+        "updateAttachmentResult": {
+            "objectId": object_id,
+            "globalId": None,
+            "success": success,
+            "error": None,
+        }
+    }
+
+
 def make_esri_delete_attachments_response(
     attachment_ids: list[int],
     *,
