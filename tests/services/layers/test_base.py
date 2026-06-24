@@ -118,6 +118,29 @@ class TestSupportsQuery:
         assert result is expected
 
 
+class TestSupportsAttachments:
+    @pytest.mark.parametrize(
+        "metadata,expected",
+        [
+            ({"hasAttachments": True}, True),
+            ({"hasAttachments": False}, False),
+            ({}, False),
+        ],
+        ids=[
+            "has_attachments_true",
+            "has_attachments_false",
+            "has_attachments_missing",
+        ],
+    )
+    @pytest.mark.anyio
+    async def test_returns_expected_value(
+        self, base_layer, mock_client, metadata, expected
+    ):
+        mock_client.get.return_value = make_response(metadata)
+
+        assert await base_layer.supports_attachments() is expected
+
+
 class TestFields:
     @pytest.mark.anyio
     async def test_returns_fields_result_with_names(self, base_layer, mock_client):
