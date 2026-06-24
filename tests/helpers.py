@@ -210,6 +210,52 @@ def make_esri_delete_attachments_response(
     }
 
 
+def make_attachment_info(
+    attachment_id: int,
+    *,
+    name: str = "photo.jpg",
+    content_type: str = "image/jpeg",
+    size: int = 1024,
+    global_id: str = "{00000000-0000-0000-0000-000000000000}",
+    url: str | None = None,
+) -> dict:
+    """Build a single attachmentInfo dict as returned by queryAttachments.
+
+    Mirrors a real Enterprise response, where each value appears under both its
+    camelCase property name and its ESRI attachment-table field name. When ``url``
+    is given it is included as the response-only ``url`` key (as with returnUrl).
+    """
+    info = {
+        "id": attachment_id,
+        "ATTACHMENTID": attachment_id,
+        "globalId": global_id,
+        "GLOBALID": global_id,
+        "name": name,
+        "ATT_NAME": name,
+        "contentType": content_type,
+        "CONTENT_TYPE": content_type,
+        "size": size,
+        "DATA_SIZE": size,
+    }
+    if url is not None:
+        info["url"] = url
+    return info
+
+
+def make_esri_query_attachments_response(attachment_groups: list[dict]) -> dict:
+    """Build a raw ESRI queryAttachments response dict for use in tests.
+
+    Args:
+        attachment_groups: The attachmentGroups list. Each group is either a full
+            group ({parentObjectId, parentGlobalId, attachmentInfos}) or a
+            count-only group ({parentObjectId, parentGlobalId, count}).
+
+    Returns:
+        Dict with an attachmentGroups key.
+    """
+    return {"attachmentGroups": attachment_groups}
+
+
 def make_small_feature(i: int = 1) -> dict:
     """Create a minimal ESRI feature dict for batch packing tests."""
     return {"attributes": {"id": i}}

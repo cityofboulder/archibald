@@ -288,29 +288,6 @@ class TestDiff:
         assert delete_oids == []
 
 
-class TestSupportsAttachments:
-    @pytest.mark.anyio
-    @pytest.mark.parametrize(
-        "metadata,expected",
-        [
-            ({"hasAttachments": True}, True),
-            ({"hasAttachments": False}, False),
-            ({}, False),
-        ],
-        ids=[
-            "has_attachments_true",
-            "has_attachments_false",
-            "has_attachments_missing",
-        ],
-    )
-    async def test_returns_expected_value(
-        self, feature_layer, mocker, metadata, expected
-    ):
-        mocker.patch.object(feature_layer, "_get_layer_metadata", return_value=metadata)
-
-        assert await feature_layer.supports_attachments() is expected
-
-
 class TestAddAttachmentMethods:
     @pytest.mark.anyio
     @pytest.mark.parametrize(

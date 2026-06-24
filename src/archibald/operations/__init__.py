@@ -6,10 +6,12 @@ from archibald.operations.attachments import (
 )
 from archibald.operations.apply_edits import ApplyEditsOperation
 from archibald.operations.query import QueryOperation
+from archibald.operations.query_attachments import QueryAttachmentsOperation
 
 __all__ = [
     "AddAttachmentsOperation",
     "DeleteAttachmentsOperation",
     "ApplyEditsOperation",
     "QueryOperation",
+    "QueryAttachmentsOperation",
 ]
