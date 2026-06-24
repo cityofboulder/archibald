@@ -2,12 +2,13 @@ import pytest
 
 from archibald.auth import ARCGIS_ONLINE_BASE_URL, UserTokenAuth
 from archibald.client import ArchieClient
-from archibald.models import FieldsResult, QueryResult
+from archibald.models import AttachmentsQueryResult, FieldsResult, QueryResult
 from archibald.operations import (
     AddAttachmentsOperation,
     DeleteAttachmentsOperation,
     ApplyEditsOperation,
     QueryOperation,
+    QueryAttachmentsOperation,
 )
 from archibald.services import (
     BaseLayer,
@@ -149,6 +150,44 @@ def fields_result_with_domains(fields_result) -> FieldsResult:
 
 
 @pytest.fixture
+def attachment_fields() -> list[dict]:
+    """Raw ESRI attachmentFields metadata for a layer's attachment table.
+
+    Uses the standard ESRI attachment table field names (ATTACHMENTID,
+    REL_OBJECTID, CONTENT_TYPE, ATT_NAME, DATA_SIZE, ...) as returned under the
+    layer metadata's attachmentFields key.
+    """
+    return [
+        {"name": "ATTACHMENTID", "type": "esriFieldTypeOID", "alias": "ATTACHMENTID"},
+        {"name": "GLOBALID", "type": "esriFieldTypeGlobalID", "alias": "GLOBALID"},
+        {
+            "name": "REL_OBJECTID",
+            "type": "esriFieldTypeInteger",
+            "alias": "REL_OBJECTID",
+        },
+        {
+            "name": "CONTENT_TYPE",
+            "type": "esriFieldTypeString",
+            "alias": "CONTENT_TYPE",
+            "length": 150,
+        },
+        {
+            "name": "ATT_NAME",
+            "type": "esriFieldTypeString",
+            "alias": "ATT_NAME",
+            "length": 250,
+        },
+        {"name": "DATA_SIZE", "type": "esriFieldTypeInteger", "alias": "DATA_SIZE"},
+        {
+            "name": "KEYWORDS",
+            "type": "esriFieldTypeString",
+            "alias": "KEYWORDS",
+            "length": 1024,
+        },
+    ]
+
+
+@pytest.fixture
 def attachment_properties() -> list[dict]:
     """Layer metadata's attachmentProperties crosswalk.
 
@@ -206,7 +245,7 @@ def enabled_field_name_columns(attachment_properties) -> list[str]:
 
 
 @pytest.fixture
-def mock_layer(mocker, fields_result):
+def mock_layer(mocker, fields_result, attachment_fields, attachment_properties):
     """A mock FeatureLayer with sensible async method defaults.
 
     Uses create_autospec so callers can assert on method signatures.
@@ -222,6 +261,9 @@ def mock_layer(mocker, fields_result):
     layer.crs.return_value = 3857
     layer.supports_rollback_on_failure.return_value = True
     layer.supports_async_apply_edits.return_value = False
+    layer.attachment_fields.return_value = FieldsResult(fields=attachment_fields)
+    layer.attachment_properties.return_value = attachment_properties
+    layer.supports_query_attachments_order_by_fields.return_value = True
     return layer
 
 
@@ -250,6 +292,12 @@ def query_op(mock_layer) -> QueryOperation:
 
 
 @pytest.fixture
+def query_attachments_op(mock_layer) -> QueryAttachmentsOperation:
+    """A QueryAttachmentsOperation instance backed by mock_layer."""
+    return QueryAttachmentsOperation(mock_layer)
+
+
+@pytest.fixture
 def feature_layer(mock_client) -> FeatureLayer:
     """A real FeatureLayer backed by mock_client, at layer 0."""
     return FeatureLayer(client=mock_client, service_path=SERVICE_PATH, layer_id=0)
@@ -273,4 +321,14 @@ def geojson_query_result(fields_result):
         fields=fields_result.filter(names=["OBJECTID", "Name"]),
         geojson=True,
         crs=4326,
+    )
+
+
+@pytest.fixture
+def attachments_query_result(attachment_properties):
+    """A minimal AttachmentsQueryResult for delegation tests."""
+    return AttachmentsQueryResult(
+        attachment_groups=[],
+        attachment_properties=attachment_properties,
+        return_count_only=False,
     )

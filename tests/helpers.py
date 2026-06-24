@@ -242,6 +242,20 @@ def make_attachment_info(
     return info
 
 
+def make_esri_query_attachments_response(attachment_groups: list[dict]) -> dict:
+    """Build a raw ESRI queryAttachments response dict for use in tests.
+
+    Args:
+        attachment_groups: The attachmentGroups list. Each group is either a full
+            group ({parentObjectId, parentGlobalId, attachmentInfos}) or a
+            count-only group ({parentObjectId, parentGlobalId, count}).
+
+    Returns:
+        Dict with an attachmentGroups key.
+    """
+    return {"attachmentGroups": attachment_groups}
+
+
 def make_small_feature(i: int = 1) -> dict:
     """Create a minimal ESRI feature dict for batch packing tests."""
     return {"attributes": {"id": i}}
