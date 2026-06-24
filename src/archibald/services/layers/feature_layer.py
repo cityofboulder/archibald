@@ -15,6 +15,7 @@ from archibald.models.attachments_result import AttachmentsResult
 from archibald.operations.attachments import (
     AddAttachmentsOperation,
     DeleteAttachmentsOperation,
+    UpdateAttachmentsOperation,
 )
 from archibald.operations.apply_edits import ApplyEditsOperation
 from archibald.services.feature_service import FeatureService
@@ -41,6 +42,7 @@ class FeatureLayer(FeatureService, BaseLayer):
         super().__init__(client, service_path, layer_id)
         self._apply_edits_op = ApplyEditsOperation(self)
         self._add_attachments_op = AddAttachmentsOperation(self)
+        self._update_attachments_op = UpdateAttachmentsOperation(self)
         self._delete_attachments_op = DeleteAttachmentsOperation(self)
 
     async def supports_apply_edits(self) -> bool:
@@ -51,6 +53,15 @@ class FeatureLayer(FeatureService, BaseLayer):
         """
         metadata = await self._get_layer_metadata()
         return "editing" in metadata.get("capabilities", "").lower()
+
+    async def supports_update(self) -> bool:
+        """Whether this layer supports updating existing features and attachments.
+
+        Returns:
+            True if the layer's capabilities include the Update operation.
+        """
+        metadata = await self._get_layer_metadata()
+        return "update" in metadata.get("capabilities", "").lower()
 
     async def supports_rollback_on_failure(self) -> bool:
         """Whether this layer supports the rollbackOnFailure parameter.
@@ -146,6 +157,96 @@ class FeatureLayer(FeatureService, BaseLayer):
         return await self._add_attachments_op.execute(
             object_ids, files, filenames, content_types
         )
+
+    async def update_attachment(
+        self,
+        object_id: int,
+        attachment_id: int,
+        file: Path | BinaryIO | bytes,
+        *,
+        filename: str | None = None,
+        content_type: str | None = None,
+    ) -> AttachmentsResult:
+        """Replace the file of a single existing attachment on one feature.
+
+        Args:
+            object_id: Feature OBJECTID owning the attachment.
+            attachment_id: ID of the existing attachment to replace.
+            file: Replacement file. May be a pathlib.Path, an open binary file
+                object, or raw bytes.
+            filename: Filename sent in the multipart form. Auto-detected from
+                Path.name or the file object's name attribute when omitted.
+                Required when file is raw bytes.
+            content_type: MIME type sent in the multipart form. When omitted,
+                guessed from the resolved filename and falls back to
+                ``application/octet-stream``.
+
+        Returns:
+            AttachmentsResult with a single result entry.
+
+        Raises:
+            LayerCapabilityError: If the layer does not support attachments or
+                does not support updating.
+            InvalidParameterError: If filename cannot be resolved.
+        """
+        await self._require_attachment_update_support()
+        return await self._update_attachments_op.execute(
+            [object_id], [file], [filename], [content_type], [attachment_id]
+        )
+
+    async def update_attachments(
+        self,
+        object_ids: Iterable[int],
+        attachment_ids: Iterable[int],
+        files: Iterable[Path | BinaryIO | bytes],
+        filenames: Iterable[str | None] | None = None,
+        content_types: Iterable[str | None] | None = None,
+    ) -> AttachmentsResult:
+        """Replace the files of existing attachments on multiple features concurrently.
+
+        Args:
+            object_ids: Feature OBJECTIDs owning the attachments. OBJECTIDs can be
+                repeated when updating multiple attachments on the same feature.
+            attachment_ids: IDs of the existing attachments to replace, one per
+                object_id entry.
+            files: Replacement files, one per object_id. Each item may be a
+                pathlib.Path, an open binary file object, or raw bytes.
+            filenames: Per-item filename overrides. When omitted, filenames are
+                inferred from each file (Path.name or file.name). Required
+                per-item for any raw bytes entries.
+            content_types: Per-item MIME type overrides. When omitted or None
+                for an item, the type is guessed from the resolved filename and
+                falls back to ``application/octet-stream``.
+
+        Returns:
+            AttachmentsResult with one result per input item, in input order.
+
+        Raises:
+            LayerCapabilityError: If the layer does not support attachments or
+                does not support updating.
+            InvalidParameterError: If any iterables differ in length, or if a
+                bytes file has no resolvable filename.
+        """
+        await self._require_attachment_update_support()
+        return await self._update_attachments_op.execute(
+            object_ids, files, filenames, content_types, attachment_ids
+        )
+
+    async def _require_attachment_update_support(self) -> None:
+        """Raise unless the layer supports both attachments and updating.
+
+        Raises:
+            LayerCapabilityError: If the layer does not support attachments or
+                does not support updating.
+        """
+        if not await self.supports_attachments():
+            raise LayerCapabilityError(
+                f"Layer {self._layer_path} does not support attachments."
+            )
+        if not await self.supports_update():
+            raise LayerCapabilityError(
+                f"Layer {self._layer_path} does not support updating attachments."
+            )
 
     async def delete_attachment(
         self,

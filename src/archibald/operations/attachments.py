@@ -1,4 +1,4 @@
-"""Attachment operations: add and delete file attachments on feature layer records."""
+"""Attachment operations: add, update, and delete file attachments on feature layer records."""
 
 from __future__ import annotations
 
@@ -16,12 +16,18 @@ if TYPE_CHECKING:
     from archibald.services import FeatureLayer
 
 
-class AddAttachmentsOperation:
-    """Post file attachments to one or more features via the addAttachment endpoint.
+class BaseAttachmentUploadOperation:
+    """Shared machinery for uploading file attachments to features.
 
-    Holds a reference to its owning FeatureLayer to access the client and layer
-    path. Instantiated once at FeatureLayer.__init__ time.
+    Concrete subclasses set ``_endpoint`` to the per-feature endpoint action
+    (e.g. ``addAttachment`` or ``updateAttachment``); the response key is derived
+    as ``f"{_endpoint}Result"``. Handles coercion of parallel iterables, filename
+    resolution, MIME-type guessing, file reading, and concurrent POSTs. Holds a
+    reference to its owning FeatureLayer to access the client and layer path.
+    Instantiated once at FeatureLayer.__init__ time.
     """
+
+    _endpoint: str
 
     def __init__(self, layer: FeatureLayer) -> None:
         self._layer = layer
@@ -32,12 +38,15 @@ class AddAttachmentsOperation:
         files: Iterable[Path | BinaryIO | bytes],
         filenames: Iterable[str | None] | None = None,
         content_types: Iterable[str | None] | None = None,
+        attachment_ids: Iterable[int] | None = None,
     ) -> AttachmentsResult:
-        """Post attachments to multiple features concurrently.
+        """Upload attachments to multiple features concurrently.
 
         Filenames and content types are fully resolved during coercion before
         any requests are made. Each attachment's content type is guessed from
-        its resolved filename when not provided explicitly.
+        its resolved filename when not provided explicitly. When ``attachment_ids``
+        is provided, each upload targets that existing attachment (update);
+        otherwise a new attachment is created (add).
 
         Args:
             object_ids: Feature OBJECTIDs to attach files to. OBJECTIDs can be repeated
@@ -50,6 +59,8 @@ class AddAttachmentsOperation:
             content_types: Per-item MIME type overrides. When omitted or None
                 for an item, the type is guessed from the resolved filename and
                 falls back to ``application/octet-stream``.
+            attachment_ids: Per-item existing attachment IDs to update. When
+                omitted, a new attachment is added for each item.
 
         Returns:
             AttachmentsResult with one result per input item, in input order.
@@ -58,17 +69,24 @@ class AddAttachmentsOperation:
             InvalidParameterError: If any iterables differ in length, or if a
                 bytes file has no resolvable filename.
         """
-        coerced = self._coerce_attachments(object_ids, files, filenames, content_types)
+        coerced = self._coerce_attachments(
+            object_ids, files, filenames, content_types, attachment_ids
+        )
         results: list[EditResultItem | None] = [None] * len(coerced)
 
         async def post_one(
-            idx: int, oid: int, file: Path | BinaryIO | bytes, name: str, ct: str
+            idx: int,
+            oid: int,
+            file: Path | BinaryIO | bytes,
+            name: str,
+            ct: str,
+            att_id: int | None,
         ) -> None:
-            results[idx] = await self._post_one(oid, file, name, ct)
+            results[idx] = await self._post_one(oid, file, name, ct, att_id)
 
         async with anyio.create_task_group() as tg:
-            for idx, (oid, file, name, ct) in enumerate(coerced):
-                tg.start_soon(post_one, idx, oid, file, name, ct)
+            for idx, (oid, file, name, ct, att_id) in enumerate(coerced):
+                tg.start_soon(post_one, idx, oid, file, name, ct, att_id)
 
         return AttachmentsResult(results=results)  # type: ignore[arg-type]
 
@@ -78,7 +96,8 @@ class AddAttachmentsOperation:
         files: Iterable[Path | BinaryIO | bytes],
         filenames: Iterable[str | None] | None,
         content_types: Iterable[str | None] | None,
-    ) -> list[tuple[int, Path | BinaryIO | bytes, str, str]]:
+        attachment_ids: Iterable[int] | None = None,
+    ) -> list[tuple[int, Path | BinaryIO | bytes, str, str, int | None]]:
         """Validate parallel iterables, resolve filenames, and guess content types.
 
         Materializes all iterables, checks equal lengths, resolves each filename
@@ -90,11 +109,14 @@ class AddAttachmentsOperation:
             files: Files to attach.
             filenames: Per-item filename overrides, or None to auto-detect all.
             content_types: Per-item MIME type overrides, or None to guess all.
+            attachment_ids: Per-item existing attachment IDs (update), or None to
+                add new attachments for all items.
 
         Returns:
-            List of (object_id, file, resolved_filename, resolved_content_type)
-            in input order. All filename and content type strings are fully
-            resolved — no None values remain after this call.
+            List of (object_id, file, resolved_filename, resolved_content_type,
+            attachment_id) in input order. All filename and content type strings
+            are fully resolved — no None values remain after this call.
+            attachment_id is None for every item when adding.
 
         Raises:
             InvalidParameterError: If any iterables differ in length, or if a
@@ -104,22 +126,24 @@ class AddAttachmentsOperation:
         fls = list(files)
         nms = list(filenames) if filenames is not None else [None] * len(ids)
         cts = list(content_types) if content_types is not None else [None] * len(ids)
+        att = list(attachment_ids) if attachment_ids is not None else [None] * len(ids)
 
-        if not (len(ids) == len(fls) == len(nms) == len(cts)):
+        if not (len(ids) == len(fls) == len(nms) == len(cts) == len(att)):
             raise InvalidParameterError(
-                "object_ids, files, filenames, and content_types must all be the "
-                f"same length (got {len(ids)}, {len(fls)}, {len(nms)}, {len(cts)})."
+                "object_ids, files, filenames, content_types, and attachment_ids "
+                "must all be the same length (got "
+                f"{len(ids)}, {len(fls)}, {len(nms)}, {len(cts)}, {len(att)})."
             )
 
         result = []
-        for oid, file, name, ct in zip(ids, fls, nms, cts):
+        for oid, file, name, ct, att_id in zip(ids, fls, nms, cts, att):
             resolved_name = self._resolve_filename(file, name)
             resolved_ct = (
                 ct
                 or mimetypes.guess_type(resolved_name)[0]
                 or "application/octet-stream"
             )
-            result.append((oid, file, resolved_name, resolved_ct))
+            result.append((oid, file, resolved_name, resolved_ct, att_id))
         return result
 
     @staticmethod
@@ -161,6 +185,7 @@ class AddAttachmentsOperation:
         file: Path | BinaryIO | bytes,
         filename: str,
         content_type: str,
+        attachment_id: int | None = None,
     ) -> EditResultItem:
         """POST a single file attachment to one feature and return the result.
 
@@ -169,18 +194,22 @@ class AddAttachmentsOperation:
             file: File to attach.
             filename: Resolved filename to send in the multipart form.
             content_type: Resolved MIME type to send in the multipart form.
+            attachment_id: Existing attachment ID to update. When None, a new
+                attachment is added; otherwise it is sent as the ``attachmentId``
+                form field to target the existing attachment.
 
         Returns:
-            EditResultItem parsed from the addAttachmentResult response.
+            EditResultItem parsed from the ``f"{self._endpoint}Result"`` response.
         """
-        endpoint = f"{self._layer._layer_path}/{object_id}/addAttachment"
-        data = await self._read_file(file)
+        endpoint = f"{self._layer._layer_path}/{object_id}/{self._endpoint}"
+        data = {} if attachment_id is None else {"attachmentId": attachment_id}
+        body = await self._read_file(file)
         response = await self._layer._client.post(
             endpoint=endpoint,
-            data={},
-            files={"attachment": (filename, data, content_type)},
+            data=data,
+            files={"attachment": (filename, body, content_type)},
         )
-        return EditResultItem._from_esri(response.json()["addAttachmentResult"])
+        return EditResultItem._from_esri(response.json()[f"{self._endpoint}Result"])
 
     @staticmethod
     async def _read_file(file: Path | BinaryIO | bytes) -> bytes:
@@ -197,6 +226,18 @@ class AddAttachmentsOperation:
         if isinstance(file, bytes):
             return file
         return file.read()  # type: ignore
+
+
+class AddAttachmentsOperation(BaseAttachmentUploadOperation):
+    """Add new file attachments to features via the addAttachment endpoint."""
+
+    _endpoint = "addAttachment"
+
+
+class UpdateAttachmentsOperation(BaseAttachmentUploadOperation):
+    """Replace existing file attachments on features via the updateAttachment endpoint."""
+
+    _endpoint = "updateAttachment"
 
 
 class DeleteAttachmentsOperation:
