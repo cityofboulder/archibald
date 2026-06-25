@@ -45,6 +45,10 @@ class FeatureLayer(FeatureService, BaseLayer):
         self._update_attachments_op = UpdateAttachmentsOperation(self)
         self._delete_attachments_op = DeleteAttachmentsOperation(self)
 
+    # ------------------------------------------------------------------
+    # Capability checks
+    # ------------------------------------------------------------------
+
     async def supports_apply_edits(self) -> bool:
         """Whether this layer supports applyEdits operations.
 
@@ -84,6 +88,10 @@ class FeatureLayer(FeatureService, BaseLayer):
         metadata = await self._get_layer_metadata()
         adv = metadata.get("advancedEditingCapabilities", {})
         return bool(adv.get("supportsAsyncApplyEdits", False))
+
+    # ------------------------------------------------------------------
+    # Attachment operations
+    # ------------------------------------------------------------------
 
     async def add_attachments(
         self,
@@ -182,107 +190,6 @@ class FeatureLayer(FeatureService, BaseLayer):
         )
         return await self._update_attachments_op.execute(oids, fs, fns, cts, att_ids)
 
-    @staticmethod
-    def _normalize_attachment_inputs(
-        object_ids: int | Iterable[int],
-        files: Path | BinaryIO | bytes | Iterable[Path | BinaryIO | bytes],
-        filenames: str | None | Iterable[str | None] = None,
-        content_types: str | None | Iterable[str | None] = None,
-        attachment_ids: int | Iterable[int] | None = None,
-    ) -> tuple[
-        Iterable[int],
-        Iterable[Path | BinaryIO | bytes],
-        Iterable[str | None] | None,
-        Iterable[str | None] | None,
-        Iterable[int] | None,
-    ]:
-        """Normalize attachment inputs across single, fan-out, and multi modes.
-
-        Single mode (scalar object_id + single file): wraps all scalars in lists.
-        Fan-out mode (scalar object_id + iterable files): broadcasts object_id.
-        Multi mode (iterable object_ids): passes all arguments through unchanged.
-
-        Args:
-            object_ids: Scalar or iterable of feature OBJECTIDs.
-            files: Single file or iterable of files.
-            filenames: Scalar filename (single mode) or iterable (fan-out/multi).
-            content_types: Scalar MIME type (single mode) or iterable (fan-out/multi).
-            attachment_ids: Scalar or iterable of attachment IDs (update only).
-
-        Returns:
-            Tuple of (object_ids, files, filenames, content_types, attachment_ids)
-            suitable for passing directly to an attachment operation's execute().
-        """
-        single_file = isinstance(files, (Path, bytes)) or hasattr(files, "read")
-        single_oid = isinstance(object_ids, int)
-
-        if single_oid and single_file:
-            return (
-                [object_ids],
-                [files],
-                [filenames],
-                [content_types],
-                [attachment_ids] if attachment_ids is not None else None,
-            )  # type: ignore
-
-        if single_oid:
-            fs = list(files)  # type: ignore
-            return (
-                [object_ids] * len(fs),
-                fs,
-                filenames,
-                content_types,
-                attachment_ids,
-            )  # type: ignore
-
-        return object_ids, files, filenames, content_types, attachment_ids  # type: ignore
-
-    @staticmethod
-    def _normalize_delete_inputs(
-        object_ids: int | Iterable[int],
-        attachment_ids: int | Iterable[int],
-    ) -> tuple[Iterable[int], Iterable[int]]:
-        """Normalize delete inputs across single, fan-out, and multi modes.
-
-        Single mode (both scalars): wraps in lists.
-        Fan-out mode (scalar object_id + iterable attachment_ids): broadcasts object_id.
-        Multi mode (iterable object_ids): passes both arguments through unchanged.
-
-        Args:
-            object_ids: Scalar or iterable of feature OBJECTIDs.
-            attachment_ids: Scalar or iterable of attachment IDs.
-
-        Returns:
-            Tuple of (object_ids, attachment_ids) suitable for
-            DeleteAttachmentsOperation.execute().
-        """
-        single_oid = isinstance(object_ids, int)
-        single_att = isinstance(attachment_ids, int)
-
-        if single_oid and single_att:
-            return [object_ids], [attachment_ids]
-
-        if single_oid:
-            return [object_ids] * len(attachment_ids), attachment_ids  # type: ignore
-
-        return object_ids, attachment_ids  # type: ignore
-
-    async def _require_attachment_update_support(self) -> None:
-        """Raise unless the layer supports both attachments and updating.
-
-        Raises:
-            LayerCapabilityError: If the layer does not support attachments or
-                does not support updating.
-        """
-        if not await self.supports_attachments():
-            raise LayerCapabilityError(
-                f"Layer {self._layer_path} does not support attachments."
-            )
-        if not await self.supports_update():
-            raise LayerCapabilityError(
-                f"Layer {self._layer_path} does not support updating attachments."
-            )
-
     async def delete_attachments(
         self,
         object_ids: int | Iterable[int],
@@ -321,6 +228,10 @@ class FeatureLayer(FeatureService, BaseLayer):
             )
         oids, att_ids = self._normalize_delete_inputs(object_ids, attachment_ids)
         return await self._delete_attachments_op.execute(oids, att_ids)
+
+    # ------------------------------------------------------------------
+    # Edit operations
+    # ------------------------------------------------------------------
 
     async def apply_edits(
         self,
@@ -453,6 +364,111 @@ class FeatureLayer(FeatureService, BaseLayer):
             deletes=delete_oids if delete_oids else None,
             apply_coded_values=apply_coded_values,
         )
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _normalize_attachment_inputs(
+        object_ids: int | Iterable[int],
+        files: Path | BinaryIO | bytes | Iterable[Path | BinaryIO | bytes],
+        filenames: str | None | Iterable[str | None] = None,
+        content_types: str | None | Iterable[str | None] = None,
+        attachment_ids: int | Iterable[int] | None = None,
+    ) -> tuple[
+        Iterable[int],
+        Iterable[Path | BinaryIO | bytes],
+        Iterable[str | None] | None,
+        Iterable[str | None] | None,
+        Iterable[int] | None,
+    ]:
+        """Normalize attachment inputs across single, fan-out, and multi modes.
+
+        Single mode (scalar object_id + single file): wraps all scalars in lists.
+        Fan-out mode (scalar object_id + iterable files): broadcasts object_id.
+        Multi mode (iterable object_ids): passes all arguments through unchanged.
+
+        Args:
+            object_ids: Scalar or iterable of feature OBJECTIDs.
+            files: Single file or iterable of files.
+            filenames: Scalar filename (single mode) or iterable (fan-out/multi).
+            content_types: Scalar MIME type (single mode) or iterable (fan-out/multi).
+            attachment_ids: Scalar or iterable of attachment IDs (update only).
+
+        Returns:
+            Tuple of (object_ids, files, filenames, content_types, attachment_ids)
+            suitable for passing directly to an attachment operation's execute().
+        """
+        single_file = isinstance(files, (Path, bytes)) or hasattr(files, "read")
+        single_oid = isinstance(object_ids, int)
+
+        if single_oid and single_file:
+            return (
+                [object_ids],
+                [files],
+                [filenames],
+                [content_types],
+                [attachment_ids] if attachment_ids is not None else None,
+            )  # type: ignore
+
+        if single_oid:
+            fs = list(files)  # type: ignore
+            return (
+                [object_ids] * len(fs),
+                fs,
+                filenames,
+                content_types,
+                attachment_ids,
+            )  # type: ignore
+
+        return object_ids, files, filenames, content_types, attachment_ids  # type: ignore
+
+    @staticmethod
+    def _normalize_delete_inputs(
+        object_ids: int | Iterable[int],
+        attachment_ids: int | Iterable[int],
+    ) -> tuple[Iterable[int], Iterable[int]]:
+        """Normalize delete inputs across single, fan-out, and multi modes.
+
+        Single mode (both scalars): wraps in lists.
+        Fan-out mode (scalar object_id + iterable attachment_ids): broadcasts object_id.
+        Multi mode (iterable object_ids): passes both arguments through unchanged.
+
+        Args:
+            object_ids: Scalar or iterable of feature OBJECTIDs.
+            attachment_ids: Scalar or iterable of attachment IDs.
+
+        Returns:
+            Tuple of (object_ids, attachment_ids) suitable for
+            DeleteAttachmentsOperation.execute().
+        """
+        single_oid = isinstance(object_ids, int)
+        single_att = isinstance(attachment_ids, int)
+
+        if single_oid and single_att:
+            return [object_ids], [attachment_ids]
+
+        if single_oid:
+            return [object_ids] * len(attachment_ids), attachment_ids  # type: ignore
+
+        return object_ids, attachment_ids  # type: ignore
+
+    async def _require_attachment_update_support(self) -> None:
+        """Raise unless the layer supports both attachments and updating.
+
+        Raises:
+            LayerCapabilityError: If the layer does not support attachments or
+                does not support updating.
+        """
+        if not await self.supports_attachments():
+            raise LayerCapabilityError(
+                f"Layer {self._layer_path} does not support attachments."
+            )
+        if not await self.supports_update():
+            raise LayerCapabilityError(
+                f"Layer {self._layer_path} does not support updating attachments."
+            )
 
     @staticmethod
     def _validate_key_fields(
