@@ -413,10 +413,9 @@ class FeatureLayer(FeatureService, BaseLayer):
             )  # type: ignore
 
         if single_oid:
-            fs = list(files)  # type: ignore
             return (
-                [object_ids] * len(fs),
-                fs,
+                [object_ids] * len(files),  # type: ignore
+                files,
                 filenames,
                 content_types,
                 attachment_ids,
