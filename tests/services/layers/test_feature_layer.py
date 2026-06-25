@@ -401,9 +401,10 @@ class TestDeleteAttachmentMethods:
         "object_ids,attachment_ids,expected_oids,expected_att_ids",
         [
             (1, 10, [1], [10]),
+            (1, [10, 11], [1, 1], [10, 11]),
             ([1, 2], [10, 11], [1, 2], [10, 11]),
         ],
-        ids=["single", "multi"],
+        ids=["single", "fan_out", "multi"],
     )
     async def test_dispatches_to_operation(
         self,

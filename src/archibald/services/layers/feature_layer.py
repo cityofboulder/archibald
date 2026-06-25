@@ -242,9 +242,10 @@ class FeatureLayer(FeatureService, BaseLayer):
         object_ids: int | Iterable[int],
         attachment_ids: int | Iterable[int],
     ) -> tuple[Iterable[int], Iterable[int]]:
-        """Normalize delete inputs across single and multi modes.
+        """Normalize delete inputs across single, fan-out, and multi modes.
 
         Single mode (both scalars): wraps in lists.
+        Fan-out mode (scalar object_id + iterable attachment_ids): broadcasts object_id.
         Multi mode (iterable object_ids): passes both arguments through unchanged.
 
         Args:
@@ -255,8 +256,15 @@ class FeatureLayer(FeatureService, BaseLayer):
             Tuple of (object_ids, attachment_ids) suitable for
             DeleteAttachmentsOperation.execute().
         """
-        if isinstance(object_ids, int) and isinstance(attachment_ids, int):
+        single_oid = isinstance(object_ids, int)
+        single_att = isinstance(attachment_ids, int)
+
+        if single_oid and single_att:
             return [object_ids], [attachment_ids]
+
+        if single_oid:
+            return [object_ids] * len(attachment_ids), attachment_ids  # type: ignore
+
         return object_ids, attachment_ids  # type: ignore
 
     async def _require_attachment_update_support(self) -> None:
@@ -285,10 +293,13 @@ class FeatureLayer(FeatureService, BaseLayer):
         Pairs are grouped by OBJECTID so that all attachments on the same
         feature are removed in a single request.
 
-        Accepts two calling modes:
+        Accepts three calling modes:
 
         * **Single** — scalar ``object_id`` and ``attachment_id``: delete one
           attachment from one feature.
+        * **Fan-out** — scalar ``object_id`` and an iterable of
+          ``attachment_ids``: delete multiple attachments from the same feature
+          in a single batched request.
         * **Multi** — iterables of object_ids and attachment_ids: delete one
           attachment per pair, concurrently. Object IDs may be repeated when
           deleting multiple attachments from the same feature.
