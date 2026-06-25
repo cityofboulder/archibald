@@ -114,7 +114,7 @@ archibald wraps Esri's REST endpoints with typed service and layer classes:
 
 | Class | Description |
 |---|---|
-| `FeatureLayer` | Query, add, update, delete, upsert features; spatial and non-spatial |
+| `FeatureLayer` | Query, add, update, delete, upsert, and sync features; attach, update, and delete attachments |
 | `MapLayer` | Query-only access to map service layers |
 | `FeatureService` | Service-level metadata and capabilities |
 | `MapService` | Map service metadata and operations |
@@ -124,6 +124,7 @@ All layers expose:
 - `query()` — retrieve features with optional filtering and field selection
 - `fields()` — introspect layer schema
 - `crs()` — coordinate reference system metadata
+- `query_attachments()` — list attachment metadata for one or more features
 
 `FeatureLayer` additionally supports a layered write API:
 
@@ -132,6 +133,9 @@ All layers expose:
 - `upsert()` — insert or update based on key fields
 - `sync()` — reconcile a DataFrame with the service: adds missing records, updates changed
   ones, deletes removed ones
+- `add_attachments()` — attach files to one or more features
+- `update_attachments()` — replace existing attachment files
+- `delete_attachments()` — remove attachments from features
 
 ## Data Models
 
@@ -171,6 +175,37 @@ numeric_fields = fields.filter(
 df = fields.to_frame()
 ```
 
+**AttachmentsQueryResult** — returned by `query_attachments()`:
+
+```python
+result = await layer.query_attachments(definition_expression="status = 'open'")
+
+df = result.to_frame()                          # camelCase column names
+df = result.to_frame(use_field_names=True)      # ESRI attachment-table field names
+```
+
+**AttachmentsResult** — returned by `add_attachments()`, `update_attachments()`, and
+`delete_attachments()`:
+
+```python
+result = await layer.add_attachments(
+    object_ids=42,
+    files=Path("photo.jpg"),
+)
+
+if result.has_failures:
+    print("Failed attachments:", result.failed)
+
+df = result.to_frame()
+```
+
+All three attachment write methods accept the same three calling modes:
+
+- **Single** — one object ID and one file
+- **Fan-out** — one object ID and multiple files (all attached to the same feature)
+- **Multi** — parallel iterables of object IDs and files (one file per feature, run
+  concurrently)
+
 ## Error Handling
 
 archibald raises typed exceptions for both Esri service errors and client-side errors, including
@@ -198,8 +233,7 @@ unsupported capabilities, etc.).
 
 ## Roadmap
 
-1. **Attachment support** — query, add, and delete attachments on feature layers
-2. **Geocoding operations** — suggest and batch geocode endpoints
+1. **Geocoding operations** — suggest and batch geocode endpoints
 
 ## Contributing
 
