@@ -363,6 +363,199 @@ Each item in those lists is an `EditResultItem` with `object_id`, `success`, and
 
 ---
 
+## Attachments
+
+Attachment operations are available on both `FeatureLayer` and `MapLayer` (querying only). Uploading and deleting attachments requires a `FeatureLayer`.
+
+### Checking capabilities
+
+Before working with attachments, confirm the layer supports them:
+
+```python
+if await layer.supports_attachments():
+    # safe to add, update, delete, or query attachments
+    ...
+
+if await layer.supports_query_attachments():
+    # safe to call layer.query_attachments()
+    ...
+```
+
+All attachment edit operations check against these properties before attempting the edits and fail loudly if the layer does not support the requested operations.
+
+### Attachment schema
+
+Layers with attachment support expose additional schema metadata:
+
+```python
+# Fields available on each attachment (ATT_NAME, DATA_SIZE, CONTENT_TYPE, etc.)
+fields = await layer.attachment_fields()
+print(fields.names)
+
+# Crosswalk mapping camelCase response properties to ESRI attachment-table field names
+props = await layer.attachment_properties()
+```
+
+### Querying attachments
+
+Use `layer.query_attachments()` to retrieve attachment metadata. At least one feature selector — `object_ids`, `global_ids`, or `definition_expression` — is required. `object_ids` and `global_ids` are mutually exclusive.
+
+```python
+result = await layer.query_attachments(object_ids=[1, 2, 3])
+
+# One row per attachment; parentObjectId propagated onto every row
+df = result.to_frame()
+
+# Rename columns from camelCase properties to ESRI attachment-table field names
+df = result.to_frame(use_field_names=True)
+```
+
+#### Filtering attachments
+
+```python
+# Only JPEG attachments larger than 50 KB
+result = await layer.query_attachments(
+    object_ids=[1, 2, 3],
+    attachment_types=["image/jpeg"],
+    size=(51200,),          # minimum size in bytes; (min, max) for a range
+)
+
+# Paginate through a large result set
+result = await layer.query_attachments(
+    definition_expression="status = 'open'",
+    result_offset=100,
+    result_record_count=50,
+)
+```
+
+#### Counting attachments
+
+```python
+# Return per-feature counts rather than full attachment rows (FeatureLayer only)
+result = await layer.query_attachments(
+    object_ids=[1, 2, 3],
+    return_count_only=True,
+)
+count_df = result.to_frame()  # one row per feature with a count column
+```
+
+#### Including URLs and metadata
+
+```python
+result = await layer.query_attachments(
+    object_ids=[1],
+    return_url=True,       # include download URLs
+    return_metadata=True,  # include EXIF metadata when available
+)
+```
+
+### Adding attachments
+
+`add_attachments()` uploads files concurrently. Each file can be a `Path`, an open binary file object, or raw `bytes`. Three calling modes are supported:
+
+```python
+# Single — one file to one feature
+result = await layer.add_attachments(
+    object_ids=42,
+    files=Path("photo.jpg"),
+)
+
+# Fan-out — multiple files to the same feature
+result = await layer.add_attachments(
+    object_ids=42,
+    files=[Path("photo1.jpg"), Path("photo2.jpg"), Path("doc.pdf")],
+)
+
+# Multi — one file per feature, pairwise
+result = await layer.add_attachments(
+    object_ids=[42, 43, 44],
+    files=[Path("a.jpg"), Path("b.jpg"), Path("c.pdf")],
+)
+```
+
+Object IDs may repeat in multi mode to attach several files to the same feature:
+
+```python
+result = await layer.add_attachments(
+    object_ids=[42, 42, 43],
+    files=[Path("front.jpg"), Path("back.jpg"), Path("report.pdf")],
+)
+```
+
+For raw `bytes`, supply an explicit filename so the MIME type can be resolved:
+
+```python
+result = await layer.add_attachments(
+    object_ids=42,
+    files=image_bytes,
+    filenames="capture.png",
+)
+```
+
+### Updating attachments
+
+`update_attachments()` replaces the file of an existing attachment identified by its attachment ID. The calling modes mirror `add_attachments()`, with an added `attachment_ids` argument:
+
+```python
+# Single — replace one attachment
+result = await layer.update_attachments(
+    object_ids=42,
+    attachment_ids=101,
+    files=Path("revised.pdf"),
+)
+
+# Fan-out — replace multiple attachments on the same feature
+result = await layer.update_attachments(
+    object_ids=42,
+    attachment_ids=[101, 102],
+    files=[Path("revised_1.pdf"), Path("revised_2.pdf")],
+)
+
+# Multi — replace one attachment per feature
+result = await layer.update_attachments(
+    object_ids=[42, 43],
+    attachment_ids=[101, 201],
+    files=[Path("new_a.jpg"), Path("new_b.jpg")],
+)
+```
+
+### Deleting attachments
+
+`delete_attachments()` groups pairs by OBJECTID and fires one batched request per unique feature:
+
+```python
+# Single — delete one attachment
+result = await layer.delete_attachments(object_ids=42, attachment_ids=101)
+
+# Fan-out — delete multiple attachments from the same feature
+result = await layer.delete_attachments(
+    object_ids=42,
+    attachment_ids=[101, 102, 103],
+)
+
+# Multi — delete one attachment per feature
+result = await layer.delete_attachments(
+    object_ids=[42, 43, 44],
+    attachment_ids=[101, 201, 301],
+)
+```
+
+### Checking for failures
+
+`add_attachments()`, `update_attachments()`, and `delete_attachments()` all return an `AttachmentsResult`. Like `ApplyEditsResult`, the server can return HTTP 200 while still reporting per-attachment failures:
+
+```python
+if result.has_failures:
+    for item in result.failed:
+        print(f"Attachment {item.object_id} failed: {item.error}")
+
+# Inspect all results as a DataFrame
+df = result.to_frame()
+# Columns: object_id, global_id, success, error_code, error_description
+```
+
+---
+
 ## Error handling
 
 ### ESRI errors
