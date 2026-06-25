@@ -316,25 +316,61 @@ class TestDiff:
 
 class TestAddAttachmentMethods:
     @pytest.mark.anyio
-    @pytest.mark.parametrize(
-        "call",
-        [
-            lambda layer: layer.add_attachment(1, b"data", filename="f.jpg"),
-            lambda layer: layer.add_attachments([1], [b"data"], ["f.jpg"]),
-        ],
-        ids=["add_attachment", "add_attachments"],
-    )
-    async def test_raises_when_layer_has_no_attachments(
-        self, feature_layer, mocker, call
-    ):
+    async def test_raises_when_layer_has_no_attachments(self, feature_layer, mocker):
         mocker.patch.object(feature_layer, "supports_attachments", return_value=False)
 
         with pytest.raises(LayerCapabilityError, match="does not support attachments"):
-            await call(feature_layer)
+            await feature_layer.add_attachments(1, b"data", "f.jpg")
 
     @pytest.mark.anyio
-    async def test_add_attachment_wraps_single_args_and_delegates(
-        self, feature_layer, mocker
+    @pytest.mark.parametrize(
+        "object_ids,files,filenames,content_types,expected_oids,expected_files,expected_fns,expected_cts",
+        [
+            (
+                1,
+                b"data",
+                "img.jpg",
+                "image/jpeg",
+                [1],
+                [b"data"],
+                ["img.jpg"],
+                ["image/jpeg"],
+            ),
+            (
+                1,
+                [b"a", b"b"],
+                ["a.jpg", "b.jpg"],
+                None,
+                [1, 1],
+                [b"a", b"b"],
+                ["a.jpg", "b.jpg"],
+                None,
+            ),
+            (
+                [1, 2],
+                [b"a", b"b"],
+                ["a.jpg", "b.jpg"],
+                None,
+                [1, 2],
+                [b"a", b"b"],
+                ["a.jpg", "b.jpg"],
+                None,
+            ),
+        ],
+        ids=["single", "fan_out", "multi"],
+    )
+    async def test_dispatches_to_operation(
+        self,
+        feature_layer,
+        mocker,
+        object_ids,
+        files,
+        filenames,
+        content_types,
+        expected_oids,
+        expected_files,
+        expected_fns,
+        expected_cts,
     ):
         mocker.patch.object(feature_layer, "supports_attachments", return_value=True)
         expected = make_attachments_result([make_attachment_result_item(99)])
@@ -342,54 +378,42 @@ class TestAddAttachmentMethods:
             feature_layer._add_attachments_op, "execute", return_value=expected
         )
 
-        result = await feature_layer.add_attachment(
-            5, b"data", filename="img.jpg", content_type="image/jpeg"
+        result = await feature_layer.add_attachments(
+            object_ids, files, filenames, content_types
         )
 
         mock_execute.assert_called_once_with(
-            [5], [b"data"], ["img.jpg"], ["image/jpeg"]
+            expected_oids, expected_files, expected_fns, expected_cts
         )
-        assert result is expected
-
-    @pytest.mark.anyio
-    async def test_add_attachments_passes_iterables_to_operation(
-        self, feature_layer, mocker
-    ):
-        mocker.patch.object(feature_layer, "supports_attachments", return_value=True)
-        expected = make_attachments_result([make_attachment_result_item(10)])
-        mock_execute = mocker.patch.object(
-            feature_layer._add_attachments_op, "execute", return_value=expected
-        )
-
-        result = await feature_layer.add_attachments(
-            [1], [b"data"], ["f.jpg"], content_types=["image/jpeg"]
-        )
-
-        mock_execute.assert_called_once_with([1], [b"data"], ["f.jpg"], ["image/jpeg"])
         assert result is expected
 
 
 class TestDeleteAttachmentMethods:
     @pytest.mark.anyio
-    @pytest.mark.parametrize(
-        "call",
-        [
-            lambda layer: layer.delete_attachment(1, 10),
-            lambda layer: layer.delete_attachments([1], [10]),
-        ],
-        ids=["delete_attachment", "delete_attachments"],
-    )
-    async def test_raises_when_layer_has_no_attachments(
-        self, feature_layer, mocker, call
-    ):
+    async def test_raises_when_layer_has_no_attachments(self, feature_layer, mocker):
         mocker.patch.object(feature_layer, "supports_attachments", return_value=False)
 
         with pytest.raises(LayerCapabilityError, match="does not support attachments"):
-            await call(feature_layer)
+            await feature_layer.delete_attachments(1, 10)
 
     @pytest.mark.anyio
-    async def test_delete_attachment_wraps_single_args_and_delegates(
-        self, feature_layer, mocker
+    @pytest.mark.parametrize(
+        "object_ids,attachment_ids,expected_oids,expected_att_ids",
+        [
+            (1, 10, [1], [10]),
+            (1, [10, 11], [1, 1], [10, 11]),
+            ([1, 2], [10, 11], [1, 2], [10, 11]),
+        ],
+        ids=["single", "fan_out", "multi"],
+    )
+    async def test_dispatches_to_operation(
+        self,
+        feature_layer,
+        mocker,
+        object_ids,
+        attachment_ids,
+        expected_oids,
+        expected_att_ids,
     ):
         mocker.patch.object(feature_layer, "supports_attachments", return_value=True)
         expected = make_attachments_result([make_attachment_result_item(10)])
@@ -397,56 +421,23 @@ class TestDeleteAttachmentMethods:
             feature_layer._delete_attachments_op, "execute", return_value=expected
         )
 
-        result = await feature_layer.delete_attachment(5, 10)
+        result = await feature_layer.delete_attachments(object_ids, attachment_ids)
 
-        mock_execute.assert_called_once_with([5], [10])
-        assert result is expected
-
-    @pytest.mark.anyio
-    async def test_delete_attachments_passes_iterables_to_operation(
-        self, feature_layer, mocker
-    ):
-        mocker.patch.object(feature_layer, "supports_attachments", return_value=True)
-        expected = make_attachments_result([make_attachment_result_item(10)])
-        mock_execute = mocker.patch.object(
-            feature_layer._delete_attachments_op, "execute", return_value=expected
-        )
-
-        result = await feature_layer.delete_attachments([1, 2], [10, 11])
-
-        mock_execute.assert_called_once_with([1, 2], [10, 11])
+        mock_execute.assert_called_once_with(expected_oids, expected_att_ids)
         assert result is expected
 
 
 class TestUpdateAttachmentMethods:
     @pytest.mark.anyio
-    @pytest.mark.parametrize(
-        "call",
-        [
-            lambda layer: layer.update_attachment(1, 10, b"data", filename="f.jpg"),
-            lambda layer: layer.update_attachments([1], [10], [b"data"], ["f.jpg"]),
-        ],
-        ids=["update_attachment", "update_attachments"],
-    )
-    async def test_raises_when_layer_has_no_attachments(
-        self, feature_layer, mocker, call
-    ):
+    async def test_raises_when_layer_has_no_attachments(self, feature_layer, mocker):
         mocker.patch.object(feature_layer, "supports_attachments", return_value=False)
 
         with pytest.raises(LayerCapabilityError, match="does not support attachments"):
-            await call(feature_layer)
+            await feature_layer.update_attachments(1, 10, b"data", "f.jpg")
 
     @pytest.mark.anyio
-    @pytest.mark.parametrize(
-        "call",
-        [
-            lambda layer: layer.update_attachment(1, 10, b"data", filename="f.jpg"),
-            lambda layer: layer.update_attachments([1], [10], [b"data"], ["f.jpg"]),
-        ],
-        ids=["update_attachment", "update_attachments"],
-    )
     async def test_raises_when_layer_does_not_support_update(
-        self, feature_layer, mocker, call
+        self, feature_layer, mocker
     ):
         mocker.patch.object(feature_layer, "supports_attachments", return_value=True)
         mocker.patch.object(feature_layer, "supports_update", return_value=False)
@@ -454,11 +445,65 @@ class TestUpdateAttachmentMethods:
         with pytest.raises(
             LayerCapabilityError, match="does not support updating attachments"
         ):
-            await call(feature_layer)
+            await feature_layer.update_attachments(1, 10, b"data", "f.jpg")
 
     @pytest.mark.anyio
-    async def test_update_attachment_wraps_single_args_and_delegates(
-        self, feature_layer, mocker
+    @pytest.mark.parametrize(
+        "object_ids,attachment_ids,files,filenames,content_types,expected_oids,expected_files,expected_fns,expected_cts,expected_att_ids",
+        [
+            (
+                1,
+                42,
+                b"data",
+                "img.jpg",
+                "image/jpeg",
+                [1],
+                [b"data"],
+                ["img.jpg"],
+                ["image/jpeg"],
+                [42],
+            ),
+            (
+                1,
+                [42, 43],
+                [b"a", b"b"],
+                ["a.jpg", "b.jpg"],
+                None,
+                [1, 1],
+                [b"a", b"b"],
+                ["a.jpg", "b.jpg"],
+                None,
+                [42, 43],
+            ),
+            (
+                [1, 2],
+                [42, 43],
+                [b"a", b"b"],
+                ["a.jpg", "b.jpg"],
+                None,
+                [1, 2],
+                [b"a", b"b"],
+                ["a.jpg", "b.jpg"],
+                None,
+                [42, 43],
+            ),
+        ],
+        ids=["single", "fan_out", "multi"],
+    )
+    async def test_dispatches_to_operation(
+        self,
+        feature_layer,
+        mocker,
+        object_ids,
+        attachment_ids,
+        files,
+        filenames,
+        content_types,
+        expected_oids,
+        expected_files,
+        expected_fns,
+        expected_cts,
+        expected_att_ids,
     ):
         mocker.patch.object(feature_layer, "supports_attachments", return_value=True)
         mocker.patch.object(feature_layer, "supports_update", return_value=True)
@@ -467,31 +512,11 @@ class TestUpdateAttachmentMethods:
             feature_layer._update_attachments_op, "execute", return_value=expected
         )
 
-        result = await feature_layer.update_attachment(
-            5, 42, b"data", filename="img.jpg", content_type="image/jpeg"
-        )
-
-        mock_execute.assert_called_once_with(
-            [5], [b"data"], ["img.jpg"], ["image/jpeg"], [42]
-        )
-        assert result is expected
-
-    @pytest.mark.anyio
-    async def test_update_attachments_passes_iterables_to_operation(
-        self, feature_layer, mocker
-    ):
-        mocker.patch.object(feature_layer, "supports_attachments", return_value=True)
-        mocker.patch.object(feature_layer, "supports_update", return_value=True)
-        expected = make_attachments_result([make_attachment_result_item(10)])
-        mock_execute = mocker.patch.object(
-            feature_layer._update_attachments_op, "execute", return_value=expected
-        )
-
         result = await feature_layer.update_attachments(
-            [1, 2], [10, 11], [b"a", b"b"], ["a.jpg", "b.jpg"]
+            object_ids, attachment_ids, files, filenames, content_types
         )
 
         mock_execute.assert_called_once_with(
-            [1, 2], [b"a", b"b"], ["a.jpg", "b.jpg"], None, [10, 11]
+            expected_oids, expected_files, expected_fns, expected_cts, expected_att_ids
         )
         assert result is expected
