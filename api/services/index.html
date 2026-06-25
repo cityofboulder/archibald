@@ -490,17 +490,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#archibald.services.FeatureLayer.add_attachment" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        add_attachment
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#archibald.services.FeatureLayer.add_attachments" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -527,17 +516,6 @@
     <span class="md-ellipsis">
       
         apply_edits
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#archibald.services.FeatureLayer.delete_attachment" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        delete_attachment
       
     </span>
   </a>
@@ -604,17 +582,6 @@
     <span class="md-ellipsis">
       
         sync
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#archibald.services.FeatureLayer.update_attachment" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        update_attachment
       
     </span>
   </a>
@@ -1035,17 +1002,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#archibald.services.FeatureLayer.add_attachment" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        add_attachment
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#archibald.services.FeatureLayer.add_attachments" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1072,17 +1028,6 @@
     <span class="md-ellipsis">
       
         apply_edits
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#archibald.services.FeatureLayer.delete_attachment" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        delete_attachment
       
     </span>
   </a>
@@ -1149,17 +1094,6 @@
     <span class="md-ellipsis">
       
         sync
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#archibald.services.FeatureLayer.update_attachment" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        update_attachment
       
     </span>
   </a>
@@ -1599,168 +1533,6 @@ Adds editing operations (applyEdits, upsert, sync).</p>
 <div class="doc doc-object doc-function">
 
 
-<h3 id="archibald.services.FeatureLayer.add_attachment" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">add_attachment</span><span class="p">(</span><span class="n">object_id</span><span class="p">,</span> <span class="n">file</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">content_type</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-async"><code>async</code></small>
-  </span>
-
-</h3>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Attach a single file to one feature.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>object_id</code>
-            </td>
-            <td>
-                  <code><span title="int">int</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Feature OBJECTID to attach the file to.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>file</code>
-            </td>
-            <td>
-                  <code><span title="pathlib.Path">Path</span> | <span title="typing.BinaryIO">BinaryIO</span> | <span title="bytes">bytes</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>File to attach. May be a pathlib.Path, an open binary file
-object, or raw bytes.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>filename</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Filename sent in the multipart form. Auto-detected from
-Path.name or the file object's name attribute when omitted.
-Required when file is raw bytes.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>content_type</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>MIME type sent in the multipart form. When omitted,
-guessed from the resolved filename and falls back to
-<code>application/octet-stream</code>.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>AttachmentsResult with a single result entry.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<p><span class="doc-section-title">Raises:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="archibald.exceptions.LayerCapabilityError" href="../exceptions/#archibald.exceptions.LayerCapabilityError">LayerCapabilityError</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If the layer does not support attachments.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="archibald.exceptions.InvalidParameterError" href="../exceptions/#archibald.exceptions.InvalidParameterError">InvalidParameterError</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If filename cannot be resolved.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
 <h3 id="archibald.services.FeatureLayer.add_attachments" class="doc doc-heading">
             <code class="highlight language-python"><span class="n">add_attachments</span><span class="p">(</span><span class="n">object_ids</span><span class="p">,</span> <span class="n">files</span><span class="p">,</span> <span class="n">filenames</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">content_types</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
@@ -1773,7 +1545,17 @@ guessed from the resolved filename and falls back to
 
     <div class="doc doc-contents ">
 
-        <p>Attach files to multiple features concurrently.</p>
+        <p>Attach one or more files to one or more features.</p>
+<p>Accepts three calling modes:</p>
+<ul>
+<li><strong>Single</strong> — one <code>int</code> object_id and one file object: attach a
+  single file to one feature.</li>
+<li><strong>Fan-out</strong> — one <code>int</code> object_id and an iterable of files: attach
+  multiple files to the same feature concurrently.</li>
+<li><strong>Multi</strong> — iterables of object_ids and files: attach one file per
+  feature, all concurrently. Object IDs may be repeated to attach
+  multiple files to the same feature.</li>
+</ul>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -1792,12 +1574,11 @@ guessed from the resolved filename and falls back to
                 <code>object_ids</code>
             </td>
             <td>
-                  <code><span title="typing.Iterable">Iterable</span>[<span title="int">int</span>]</code>
+                  <code><span title="int">int</span> | <span title="typing.Iterable">Iterable</span>[<span title="int">int</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Feature OBJECTIDs to attach files to. OBJECTIDs can be repeated
-if multiple files are to be attached to the same feature.</p>
+                <p>Feature OBJECTID(s) to attach files to.</p>
               </div>
             </td>
             <td>
@@ -1809,12 +1590,12 @@ if multiple files are to be attached to the same feature.</p>
                 <code>files</code>
             </td>
             <td>
-                  <code><span title="typing.Iterable">Iterable</span>[<span title="pathlib.Path">Path</span> | <span title="typing.BinaryIO">BinaryIO</span> | <span title="bytes">bytes</span>]</code>
+                  <code><span title="pathlib.Path">Path</span> | <span title="typing.BinaryIO">BinaryIO</span> | <span title="bytes">bytes</span> | <span title="typing.Iterable">Iterable</span>[<span title="pathlib.Path">Path</span> | <span title="typing.BinaryIO">BinaryIO</span> | <span title="bytes">bytes</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Files to attach, one per object_id. Each item may be a
-pathlib.Path, an open binary file object, or raw bytes.</p>
+                <p>File(s) to attach. Each item may be a pathlib.Path, an open
+binary file object, or raw bytes.</p>
               </div>
             </td>
             <td>
@@ -1826,13 +1607,14 @@ pathlib.Path, an open binary file object, or raw bytes.</p>
                 <code>filenames</code>
             </td>
             <td>
-                  <code><span title="typing.Iterable">Iterable</span>[<span title="str">str</span> | None] | None</code>
+                  <code><span title="str">str</span> | None | <span title="typing.Iterable">Iterable</span>[<span title="str">str</span> | None]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Per-item filename overrides. When omitted, filenames are
-inferred from each file (Path.name or file.name). Required
-per-item for any raw bytes entries.</p>
+                <p>Filename override(s). In single mode, a plain <code>str</code>
+(or <code>None</code> to auto-detect). In fan-out / multi mode, an
+iterable of per-item overrides (or <code>None</code> to auto-detect
+all). Required per-item for any raw bytes entries.</p>
               </div>
             </td>
             <td>
@@ -1844,12 +1626,12 @@ per-item for any raw bytes entries.</p>
                 <code>content_types</code>
             </td>
             <td>
-                  <code><span title="typing.Iterable">Iterable</span>[<span title="str">str</span> | None] | None</code>
+                  <code><span title="str">str</span> | None | <span title="typing.Iterable">Iterable</span>[<span title="str">str</span> | None]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Per-item MIME type overrides. When omitted or None
-for an item, the type is guessed from the resolved filename and
+                <p>MIME type override(s). When omitted or <code>None</code> for
+an item, the type is guessed from the resolved filename and
 falls back to <code>application/octet-stream</code>.</p>
               </div>
             </td>
@@ -1876,7 +1658,7 @@ falls back to <code>application/octet-stream</code>.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>AttachmentsResult with one result per input item, in input order.</p>
+                <p>AttachmentsResult with one result per input file, in input order.</p>
               </div>
             </td>
           </tr>
@@ -2198,121 +1980,6 @@ in the DataFrame back to their raw codes before serialization.</p>
 <div class="doc doc-object doc-function">
 
 
-<h3 id="archibald.services.FeatureLayer.delete_attachment" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">delete_attachment</span><span class="p">(</span><span class="n">object_id</span><span class="p">,</span> <span class="n">attachment_id</span><span class="p">)</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-async"><code>async</code></small>
-  </span>
-
-</h3>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Delete a single attachment from one feature.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>object_id</code>
-            </td>
-            <td>
-                  <code><span title="int">int</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Feature OBJECTID whose attachment is being deleted.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>attachment_id</code>
-            </td>
-            <td>
-                  <code><span title="int">int</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Attachment ID to delete.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>AttachmentsResult with a single result entry.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<p><span class="doc-section-title">Raises:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="archibald.exceptions.LayerCapabilityError" href="../exceptions/#archibald.exceptions.LayerCapabilityError">LayerCapabilityError</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If the layer does not support attachments.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
 <h3 id="archibald.services.FeatureLayer.delete_attachments" class="doc doc-heading">
             <code class="highlight language-python"><span class="n">delete_attachments</span><span class="p">(</span><span class="n">object_ids</span><span class="p">,</span> <span class="n">attachment_ids</span><span class="p">)</span></code>
 
@@ -2325,9 +1992,20 @@ in the DataFrame back to their raw codes before serialization.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Delete attachments from multiple features concurrently.</p>
-<p>Pairs are grouped by OBJECTID so that all attachments on the same feature
-are removed in a single request.</p>
+        <p>Delete one or more attachments from one or more features.</p>
+<p>Pairs are grouped by OBJECTID so that all attachments on the same
+feature are removed in a single request.</p>
+<p>Accepts three calling modes:</p>
+<ul>
+<li><strong>Single</strong> — scalar <code>object_id</code> and <code>attachment_id</code>: delete one
+  attachment from one feature.</li>
+<li><strong>Fan-out</strong> — scalar <code>object_id</code> and an iterable of
+  <code>attachment_ids</code>: delete multiple attachments from the same feature
+  in a single batched request.</li>
+<li><strong>Multi</strong> — iterables of object_ids and attachment_ids: delete one
+  attachment per pair, concurrently. Object IDs may be repeated when
+  deleting multiple attachments from the same feature.</li>
+</ul>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -2346,12 +2024,11 @@ are removed in a single request.</p>
                 <code>object_ids</code>
             </td>
             <td>
-                  <code><span title="typing.Iterable">Iterable</span>[<span title="int">int</span>]</code>
+                  <code><span title="int">int</span> | <span title="typing.Iterable">Iterable</span>[<span title="int">int</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Feature OBJECTIDs. May be repeated when multiple
-attachments on the same feature are to be deleted.</p>
+                <p>Feature OBJECTID(s) whose attachments are being deleted.</p>
               </div>
             </td>
             <td>
@@ -2363,11 +2040,11 @@ attachments on the same feature are to be deleted.</p>
                 <code>attachment_ids</code>
             </td>
             <td>
-                  <code><span title="typing.Iterable">Iterable</span>[<span title="int">int</span>]</code>
+                  <code><span title="int">int</span> | <span title="typing.Iterable">Iterable</span>[<span title="int">int</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Attachment IDs to delete, one per object_id entry.</p>
+                <p>Attachment ID(s) to delete, one per object_id entry.</p>
               </div>
             </td>
             <td>
@@ -2792,185 +2469,6 @@ back to their raw codes before serialization.</p>
 <div class="doc doc-object doc-function">
 
 
-<h3 id="archibald.services.FeatureLayer.update_attachment" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">update_attachment</span><span class="p">(</span><span class="n">object_id</span><span class="p">,</span> <span class="n">attachment_id</span><span class="p">,</span> <span class="n">file</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">content_type</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-async"><code>async</code></small>
-  </span>
-
-</h3>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Replace the file of a single existing attachment on one feature.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>object_id</code>
-            </td>
-            <td>
-                  <code><span title="int">int</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Feature OBJECTID owning the attachment.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>attachment_id</code>
-            </td>
-            <td>
-                  <code><span title="int">int</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>ID of the existing attachment to replace.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>file</code>
-            </td>
-            <td>
-                  <code><span title="pathlib.Path">Path</span> | <span title="typing.BinaryIO">BinaryIO</span> | <span title="bytes">bytes</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Replacement file. May be a pathlib.Path, an open binary file
-object, or raw bytes.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>filename</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Filename sent in the multipart form. Auto-detected from
-Path.name or the file object's name attribute when omitted.
-Required when file is raw bytes.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>content_type</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>MIME type sent in the multipart form. When omitted,
-guessed from the resolved filename and falls back to
-<code>application/octet-stream</code>.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>AttachmentsResult with a single result entry.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<p><span class="doc-section-title">Raises:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="archibald.exceptions.LayerCapabilityError" href="../exceptions/#archibald.exceptions.LayerCapabilityError">LayerCapabilityError</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If the layer does not support attachments or
-does not support updating.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="archibald.exceptions.InvalidParameterError" href="../exceptions/#archibald.exceptions.InvalidParameterError">InvalidParameterError</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If filename cannot be resolved.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
 <h3 id="archibald.services.FeatureLayer.update_attachments" class="doc doc-heading">
             <code class="highlight language-python"><span class="n">update_attachments</span><span class="p">(</span><span class="n">object_ids</span><span class="p">,</span> <span class="n">attachment_ids</span><span class="p">,</span> <span class="n">files</span><span class="p">,</span> <span class="n">filenames</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">content_types</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
@@ -2983,7 +2481,18 @@ does not support updating.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Replace the files of existing attachments on multiple features concurrently.</p>
+        <p>Replace the files of one or more existing attachments.</p>
+<p>Accepts three calling modes:</p>
+<ul>
+<li><strong>Single</strong> — scalar <code>object_id</code>, <code>attachment_id</code>, and one file:
+  replace a single attachment on one feature.</li>
+<li><strong>Fan-out</strong> — scalar <code>object_id</code>, an iterable of <code>attachment_ids</code>
+  and an iterable of files: replace multiple attachments on the same
+  feature concurrently.</li>
+<li><strong>Multi</strong> — iterables of object_ids, attachment_ids, and files:
+  replace one attachment per entry, all concurrently. Object IDs may be
+  repeated when updating multiple attachments on the same feature.</li>
+</ul>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -3002,12 +2511,11 @@ does not support updating.</p>
                 <code>object_ids</code>
             </td>
             <td>
-                  <code><span title="typing.Iterable">Iterable</span>[<span title="int">int</span>]</code>
+                  <code><span title="int">int</span> | <span title="typing.Iterable">Iterable</span>[<span title="int">int</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Feature OBJECTIDs owning the attachments. OBJECTIDs can be
-repeated when updating multiple attachments on the same feature.</p>
+                <p>Feature OBJECTID(s) owning the attachments.</p>
               </div>
             </td>
             <td>
@@ -3019,12 +2527,11 @@ repeated when updating multiple attachments on the same feature.</p>
                 <code>attachment_ids</code>
             </td>
             <td>
-                  <code><span title="typing.Iterable">Iterable</span>[<span title="int">int</span>]</code>
+                  <code><span title="int">int</span> | <span title="typing.Iterable">Iterable</span>[<span title="int">int</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>IDs of the existing attachments to replace, one per
-object_id entry.</p>
+                <p>ID(s) of the existing attachments to replace.</p>
               </div>
             </td>
             <td>
@@ -3036,12 +2543,12 @@ object_id entry.</p>
                 <code>files</code>
             </td>
             <td>
-                  <code><span title="typing.Iterable">Iterable</span>[<span title="pathlib.Path">Path</span> | <span title="typing.BinaryIO">BinaryIO</span> | <span title="bytes">bytes</span>]</code>
+                  <code><span title="pathlib.Path">Path</span> | <span title="typing.BinaryIO">BinaryIO</span> | <span title="bytes">bytes</span> | <span title="typing.Iterable">Iterable</span>[<span title="pathlib.Path">Path</span> | <span title="typing.BinaryIO">BinaryIO</span> | <span title="bytes">bytes</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Replacement files, one per object_id. Each item may be a
-pathlib.Path, an open binary file object, or raw bytes.</p>
+                <p>Replacement file(s). Each item may be a pathlib.Path, an
+open binary file object, or raw bytes.</p>
               </div>
             </td>
             <td>
@@ -3053,13 +2560,14 @@ pathlib.Path, an open binary file object, or raw bytes.</p>
                 <code>filenames</code>
             </td>
             <td>
-                  <code><span title="typing.Iterable">Iterable</span>[<span title="str">str</span> | None] | None</code>
+                  <code><span title="str">str</span> | None | <span title="typing.Iterable">Iterable</span>[<span title="str">str</span> | None]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Per-item filename overrides. When omitted, filenames are
-inferred from each file (Path.name or file.name). Required
-per-item for any raw bytes entries.</p>
+                <p>Filename override(s). In single mode, a plain <code>str</code>
+(or <code>None</code> to auto-detect). In fan-out / multi mode, an
+iterable of per-item overrides (or <code>None</code> to auto-detect
+all). Required per-item for any raw bytes entries.</p>
               </div>
             </td>
             <td>
@@ -3071,12 +2579,12 @@ per-item for any raw bytes entries.</p>
                 <code>content_types</code>
             </td>
             <td>
-                  <code><span title="typing.Iterable">Iterable</span>[<span title="str">str</span> | None] | None</code>
+                  <code><span title="str">str</span> | None | <span title="typing.Iterable">Iterable</span>[<span title="str">str</span> | None]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Per-item MIME type overrides. When omitted or None
-for an item, the type is guessed from the resolved filename and
+                <p>MIME type override(s). When omitted or <code>None</code> for
+an item, the type is guessed from the resolved filename and
 falls back to <code>application/octet-stream</code>.</p>
               </div>
             </td>
@@ -3103,7 +2611,7 @@ falls back to <code>application/octet-stream</code>.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>AttachmentsResult with one result per input item, in input order.</p>
+                <p>AttachmentsResult with one result per input file, in input order.</p>
               </div>
             </td>
           </tr>
