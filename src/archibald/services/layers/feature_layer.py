@@ -85,65 +85,39 @@ class FeatureLayer(FeatureService, BaseLayer):
         adv = metadata.get("advancedEditingCapabilities", {})
         return bool(adv.get("supportsAsyncApplyEdits", False))
 
-    async def add_attachment(
-        self,
-        object_id: int,
-        file: Path | BinaryIO | bytes,
-        *,
-        filename: str | None = None,
-        content_type: str | None = None,
-    ) -> AttachmentsResult:
-        """Attach a single file to one feature.
-
-        Args:
-            object_id: Feature OBJECTID to attach the file to.
-            file: File to attach. May be a pathlib.Path, an open binary file
-                object, or raw bytes.
-            filename: Filename sent in the multipart form. Auto-detected from
-                Path.name or the file object's name attribute when omitted.
-                Required when file is raw bytes.
-            content_type: MIME type sent in the multipart form. When omitted,
-                guessed from the resolved filename and falls back to
-                ``application/octet-stream``.
-
-        Returns:
-            AttachmentsResult with a single result entry.
-
-        Raises:
-            LayerCapabilityError: If the layer does not support attachments.
-            InvalidParameterError: If filename cannot be resolved.
-        """
-        if not await self.supports_attachments():
-            raise LayerCapabilityError(
-                f"Layer {self._layer_path} does not support attachments."
-            )
-        return await self._add_attachments_op.execute(
-            [object_id], [file], [filename], [content_type]
-        )
-
     async def add_attachments(
         self,
-        object_ids: Iterable[int],
-        files: Iterable[Path | BinaryIO | bytes],
-        filenames: Iterable[str | None] | None = None,
-        content_types: Iterable[str | None] | None = None,
+        object_ids: int | Iterable[int],
+        files: Path | BinaryIO | bytes | Iterable[Path | BinaryIO | bytes],
+        filenames: str | None | Iterable[str | None] = None,
+        content_types: str | None | Iterable[str | None] = None,
     ) -> AttachmentsResult:
-        """Attach files to multiple features concurrently.
+        """Attach one or more files to one or more features.
+
+        Accepts three calling modes:
+
+        * **Single** — one ``int`` object_id and one file object: attach a
+          single file to one feature.
+        * **Fan-out** — one ``int`` object_id and an iterable of files: attach
+          multiple files to the same feature concurrently.
+        * **Multi** — iterables of object_ids and files: attach one file per
+          feature, all concurrently. Object IDs may be repeated to attach
+          multiple files to the same feature.
 
         Args:
-            object_ids: Feature OBJECTIDs to attach files to. OBJECTIDs can be repeated
-                if multiple files are to be attached to the same feature.
-            files: Files to attach, one per object_id. Each item may be a
-                pathlib.Path, an open binary file object, or raw bytes.
-            filenames: Per-item filename overrides. When omitted, filenames are
-                inferred from each file (Path.name or file.name). Required
-                per-item for any raw bytes entries.
-            content_types: Per-item MIME type overrides. When omitted or None
-                for an item, the type is guessed from the resolved filename and
+            object_ids: Feature OBJECTID(s) to attach files to.
+            files: File(s) to attach. Each item may be a pathlib.Path, an open
+                binary file object, or raw bytes.
+            filenames: Filename override(s). In single mode, a plain ``str``
+                (or ``None`` to auto-detect). In fan-out / multi mode, an
+                iterable of per-item overrides (or ``None`` to auto-detect
+                all). Required per-item for any raw bytes entries.
+            content_types: MIME type override(s). When omitted or ``None`` for
+                an item, the type is guessed from the resolved filename and
                 falls back to ``application/octet-stream``.
 
         Returns:
-            AttachmentsResult with one result per input item, in input order.
+            AttachmentsResult with one result per input file, in input order.
 
         Raises:
             LayerCapabilityError: If the layer does not support attachments.
@@ -154,72 +128,47 @@ class FeatureLayer(FeatureService, BaseLayer):
             raise LayerCapabilityError(
                 f"Layer {self._layer_path} does not support attachments."
             )
-        return await self._add_attachments_op.execute(
+        oids, fs, fns, cts, _ = self._normalize_attachment_inputs(
             object_ids, files, filenames, content_types
         )
-
-    async def update_attachment(
-        self,
-        object_id: int,
-        attachment_id: int,
-        file: Path | BinaryIO | bytes,
-        *,
-        filename: str | None = None,
-        content_type: str | None = None,
-    ) -> AttachmentsResult:
-        """Replace the file of a single existing attachment on one feature.
-
-        Args:
-            object_id: Feature OBJECTID owning the attachment.
-            attachment_id: ID of the existing attachment to replace.
-            file: Replacement file. May be a pathlib.Path, an open binary file
-                object, or raw bytes.
-            filename: Filename sent in the multipart form. Auto-detected from
-                Path.name or the file object's name attribute when omitted.
-                Required when file is raw bytes.
-            content_type: MIME type sent in the multipart form. When omitted,
-                guessed from the resolved filename and falls back to
-                ``application/octet-stream``.
-
-        Returns:
-            AttachmentsResult with a single result entry.
-
-        Raises:
-            LayerCapabilityError: If the layer does not support attachments or
-                does not support updating.
-            InvalidParameterError: If filename cannot be resolved.
-        """
-        await self._require_attachment_update_support()
-        return await self._update_attachments_op.execute(
-            [object_id], [file], [filename], [content_type], [attachment_id]
-        )
+        return await self._add_attachments_op.execute(oids, fs, fns, cts)
 
     async def update_attachments(
         self,
-        object_ids: Iterable[int],
-        attachment_ids: Iterable[int],
-        files: Iterable[Path | BinaryIO | bytes],
-        filenames: Iterable[str | None] | None = None,
-        content_types: Iterable[str | None] | None = None,
+        object_ids: int | Iterable[int],
+        attachment_ids: int | Iterable[int],
+        files: Path | BinaryIO | bytes | Iterable[Path | BinaryIO | bytes],
+        filenames: str | None | Iterable[str | None] = None,
+        content_types: str | None | Iterable[str | None] = None,
     ) -> AttachmentsResult:
-        """Replace the files of existing attachments on multiple features concurrently.
+        """Replace the files of one or more existing attachments.
+
+        Accepts three calling modes:
+
+        * **Single** — scalar ``object_id``, ``attachment_id``, and one file:
+          replace a single attachment on one feature.
+        * **Fan-out** — scalar ``object_id``, an iterable of ``attachment_ids``
+          and an iterable of files: replace multiple attachments on the same
+          feature concurrently.
+        * **Multi** — iterables of object_ids, attachment_ids, and files:
+          replace one attachment per entry, all concurrently. Object IDs may be
+          repeated when updating multiple attachments on the same feature.
 
         Args:
-            object_ids: Feature OBJECTIDs owning the attachments. OBJECTIDs can be
-                repeated when updating multiple attachments on the same feature.
-            attachment_ids: IDs of the existing attachments to replace, one per
-                object_id entry.
-            files: Replacement files, one per object_id. Each item may be a
-                pathlib.Path, an open binary file object, or raw bytes.
-            filenames: Per-item filename overrides. When omitted, filenames are
-                inferred from each file (Path.name or file.name). Required
-                per-item for any raw bytes entries.
-            content_types: Per-item MIME type overrides. When omitted or None
-                for an item, the type is guessed from the resolved filename and
+            object_ids: Feature OBJECTID(s) owning the attachments.
+            attachment_ids: ID(s) of the existing attachments to replace.
+            files: Replacement file(s). Each item may be a pathlib.Path, an
+                open binary file object, or raw bytes.
+            filenames: Filename override(s). In single mode, a plain ``str``
+                (or ``None`` to auto-detect). In fan-out / multi mode, an
+                iterable of per-item overrides (or ``None`` to auto-detect
+                all). Required per-item for any raw bytes entries.
+            content_types: MIME type override(s). When omitted or ``None`` for
+                an item, the type is guessed from the resolved filename and
                 falls back to ``application/octet-stream``.
 
         Returns:
-            AttachmentsResult with one result per input item, in input order.
+            AttachmentsResult with one result per input file, in input order.
 
         Raises:
             LayerCapabilityError: If the layer does not support attachments or
@@ -228,9 +177,87 @@ class FeatureLayer(FeatureService, BaseLayer):
                 bytes file has no resolvable filename.
         """
         await self._require_attachment_update_support()
-        return await self._update_attachments_op.execute(
+        oids, fs, fns, cts, att_ids = self._normalize_attachment_inputs(
             object_ids, files, filenames, content_types, attachment_ids
         )
+        return await self._update_attachments_op.execute(oids, fs, fns, cts, att_ids)
+
+    @staticmethod
+    def _normalize_attachment_inputs(
+        object_ids: int | Iterable[int],
+        files: Path | BinaryIO | bytes | Iterable[Path | BinaryIO | bytes],
+        filenames: str | None | Iterable[str | None] = None,
+        content_types: str | None | Iterable[str | None] = None,
+        attachment_ids: int | Iterable[int] | None = None,
+    ) -> tuple[
+        Iterable[int],
+        Iterable[Path | BinaryIO | bytes],
+        Iterable[str | None] | None,
+        Iterable[str | None] | None,
+        Iterable[int] | None,
+    ]:
+        """Normalize attachment inputs across single, fan-out, and multi modes.
+
+        Single mode (scalar object_id + single file): wraps all scalars in lists.
+        Fan-out mode (scalar object_id + iterable files): broadcasts object_id.
+        Multi mode (iterable object_ids): passes all arguments through unchanged.
+
+        Args:
+            object_ids: Scalar or iterable of feature OBJECTIDs.
+            files: Single file or iterable of files.
+            filenames: Scalar filename (single mode) or iterable (fan-out/multi).
+            content_types: Scalar MIME type (single mode) or iterable (fan-out/multi).
+            attachment_ids: Scalar or iterable of attachment IDs (update only).
+
+        Returns:
+            Tuple of (object_ids, files, filenames, content_types, attachment_ids)
+            suitable for passing directly to an attachment operation's execute().
+        """
+        single_file = isinstance(files, (Path, bytes)) or hasattr(files, "read")
+        single_oid = isinstance(object_ids, int)
+
+        if single_oid and single_file:
+            return (
+                [object_ids],
+                [files],
+                [filenames],
+                [content_types],
+                [attachment_ids] if attachment_ids is not None else None,
+            )  # type: ignore
+
+        if single_oid:
+            fs = list(files)  # type: ignore
+            return (
+                [object_ids] * len(fs),
+                fs,
+                filenames,
+                content_types,
+                attachment_ids,
+            )  # type: ignore
+
+        return object_ids, files, filenames, content_types, attachment_ids  # type: ignore
+
+    @staticmethod
+    def _normalize_delete_inputs(
+        object_ids: int | Iterable[int],
+        attachment_ids: int | Iterable[int],
+    ) -> tuple[Iterable[int], Iterable[int]]:
+        """Normalize delete inputs across single and multi modes.
+
+        Single mode (both scalars): wraps in lists.
+        Multi mode (iterable object_ids): passes both arguments through unchanged.
+
+        Args:
+            object_ids: Scalar or iterable of feature OBJECTIDs.
+            attachment_ids: Scalar or iterable of attachment IDs.
+
+        Returns:
+            Tuple of (object_ids, attachment_ids) suitable for
+            DeleteAttachmentsOperation.execute().
+        """
+        if isinstance(object_ids, int) and isinstance(attachment_ids, int):
+            return [object_ids], [attachment_ids]
+        return object_ids, attachment_ids  # type: ignore
 
     async def _require_attachment_update_support(self) -> None:
         """Raise unless the layer supports both attachments and updating.
@@ -248,43 +275,27 @@ class FeatureLayer(FeatureService, BaseLayer):
                 f"Layer {self._layer_path} does not support updating attachments."
             )
 
-    async def delete_attachment(
-        self,
-        object_id: int,
-        attachment_id: int,
-    ) -> AttachmentsResult:
-        """Delete a single attachment from one feature.
-
-        Args:
-            object_id: Feature OBJECTID whose attachment is being deleted.
-            attachment_id: Attachment ID to delete.
-
-        Returns:
-            AttachmentsResult with a single result entry.
-
-        Raises:
-            LayerCapabilityError: If the layer does not support attachments.
-        """
-        if not await self.supports_attachments():
-            raise LayerCapabilityError(
-                f"Layer {self._layer_path} does not support attachments."
-            )
-        return await self._delete_attachments_op.execute([object_id], [attachment_id])
-
     async def delete_attachments(
         self,
-        object_ids: Iterable[int],
-        attachment_ids: Iterable[int],
+        object_ids: int | Iterable[int],
+        attachment_ids: int | Iterable[int],
     ) -> AttachmentsResult:
-        """Delete attachments from multiple features concurrently.
+        """Delete one or more attachments from one or more features.
 
-        Pairs are grouped by OBJECTID so that all attachments on the same feature
-        are removed in a single request.
+        Pairs are grouped by OBJECTID so that all attachments on the same
+        feature are removed in a single request.
+
+        Accepts two calling modes:
+
+        * **Single** — scalar ``object_id`` and ``attachment_id``: delete one
+          attachment from one feature.
+        * **Multi** — iterables of object_ids and attachment_ids: delete one
+          attachment per pair, concurrently. Object IDs may be repeated when
+          deleting multiple attachments from the same feature.
 
         Args:
-            object_ids: Feature OBJECTIDs. May be repeated when multiple
-                attachments on the same feature are to be deleted.
-            attachment_ids: Attachment IDs to delete, one per object_id entry.
+            object_ids: Feature OBJECTID(s) whose attachments are being deleted.
+            attachment_ids: Attachment ID(s) to delete, one per object_id entry.
 
         Returns:
             AttachmentsResult with one result per input pair, in input order.
@@ -297,7 +308,8 @@ class FeatureLayer(FeatureService, BaseLayer):
             raise LayerCapabilityError(
                 f"Layer {self._layer_path} does not support attachments."
             )
-        return await self._delete_attachments_op.execute(object_ids, attachment_ids)
+        oids, att_ids = self._normalize_delete_inputs(object_ids, attachment_ids)
+        return await self._delete_attachments_op.execute(oids, att_ids)
 
     async def apply_edits(
         self,
