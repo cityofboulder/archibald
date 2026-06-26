@@ -202,14 +202,19 @@ class TestPostBatch:
 
 class TestPollStatus:
     @pytest.mark.anyio
-    async def test_returns_results_body_on_completed(
-        self, apply_edits_op, mock_layer, mocker
+    @pytest.mark.parametrize(
+        "status",
+        ["Completed", "CompletedWithErrors"],
+        ids=["completed", "completed_with_errors"],
+    )
+    async def test_returns_results_body_on_success_terminal_status(
+        self, apply_edits_op, mock_layer, mocker, status
     ):
         mocker.patch("archibald.operations.apply_edits.anyio.sleep")
         results_body = make_esri_apply_edits_response(add_ids=[1])
         mock_layer._client.get.side_effect = [
             make_response(
-                {"status": "COMPLETED", "resultUrl": "https://results.example.com/1"}
+                {"status": status, "resultUrl": "https://results.example.com/1"}
             ),
             make_response(results_body),
         ]
@@ -221,14 +226,19 @@ class TestPollStatus:
         assert result == results_body
 
     @pytest.mark.anyio
-    async def test_fetches_result_url_on_completed(
-        self, apply_edits_op, mock_layer, mocker
+    @pytest.mark.parametrize(
+        "status",
+        ["Completed", "CompletedWithErrors"],
+        ids=["completed", "completed_with_errors"],
+    )
+    async def test_fetches_result_url_on_success_terminal_status(
+        self, apply_edits_op, mock_layer, mocker, status
     ):
         mocker.patch("archibald.operations.apply_edits.anyio.sleep")
         mock_layer._client.get.side_effect = [
             make_response(
                 {
-                    "status": "COMPLETED",
+                    "status": status,
                     "resultUrl": "https://results.example.com/job/42.json",
                 }
             ),
@@ -242,40 +252,28 @@ class TestPollStatus:
         )
 
     @pytest.mark.anyio
-    async def test_raises_service_error_on_error_in_body(
+    async def test_raises_service_error_on_failed_status(
         self, apply_edits_op, mock_layer, mocker
     ):
         mocker.patch("archibald.operations.apply_edits.anyio.sleep")
-        mock_layer._client.get.return_value = make_response(
-            {"error": {"code": 400, "message": "Quota exceeded"}}
-        )
-
-        with pytest.raises(ServiceError, match="Quota exceeded"):
-            await apply_edits_op._poll_status(
-                "https://status.example.com/1", timeout=300.0
-            )
-
-    @pytest.mark.anyio
-    async def test_raises_service_error_uses_default_message_when_absent(
-        self, apply_edits_op, mock_layer, mocker
-    ):
-        mocker.patch("archibald.operations.apply_edits.anyio.sleep")
-        mock_layer._client.get.return_value = make_response({"error": {}})
+        mock_layer._client.get.return_value = make_response({"status": "Failed"})
 
         with pytest.raises(ServiceError, match="Async applyEdits job failed"):
             await apply_edits_op._poll_status(
                 "https://status.example.com/1", timeout=300.0
             )
 
+        assert mock_layer._client.get.call_count == 1
+
     @pytest.mark.anyio
     async def test_polls_until_completed(self, apply_edits_op, mock_layer, mocker):
         mocker.patch("archibald.operations.apply_edits.anyio.sleep")
         results_body = make_esri_apply_edits_response()
         mock_layer._client.get.side_effect = [
-            make_response({"status": "PROCESSING"}),
-            make_response({"status": "PROCESSING"}),
+            make_response({"status": "Pending"}),
+            make_response({"status": "InProgress"}),
             make_response(
-                {"status": "COMPLETED", "resultUrl": "https://results.example.com/1"}
+                {"status": "Completed", "resultUrl": "https://results.example.com/1"}
             ),
             make_response(results_body),
         ]
@@ -295,7 +293,7 @@ class TestPollStatus:
         mock_layer._client.get.side_effect = [
             make_response(
                 {
-                    "status": "COMPLETED",
+                    "status": "Completed",
                     "resultUrl": "https://results.example.com/1",
                 }
             ),
@@ -316,7 +314,7 @@ class TestPollStatus:
     ):
         # anyio.sleep is NOT mocked so it creates a real checkpoint where
         # anyio.fail_after can deliver cancellation.
-        mock_layer._client.get.return_value = make_response({"status": "PROCESSING"})
+        mock_layer._client.get.return_value = make_response({"status": "InProgress"})
 
         with pytest.raises(TimeoutError):
             await apply_edits_op._poll_status(
@@ -328,11 +326,11 @@ class TestPollStatus:
         mock_sleep = mocker.patch("archibald.operations.apply_edits.anyio.sleep")
         results_body = make_esri_apply_edits_response()
         mock_layer._client.get.side_effect = [
-            make_response({"status": "PROCESSING"}),
-            make_response({"status": "PROCESSING"}),
-            make_response({"status": "PROCESSING"}),
+            make_response({"status": "InProgress"}),
+            make_response({"status": "InProgress"}),
+            make_response({"status": "InProgress"}),
             make_response(
-                {"status": "COMPLETED", "resultUrl": "https://results.example.com/1"}
+                {"status": "Completed", "resultUrl": "https://results.example.com/1"}
             ),
             make_response(results_body),
         ]
@@ -347,14 +345,14 @@ class TestPollStatus:
         mock_sleep = mocker.patch("archibald.operations.apply_edits.anyio.sleep")
         results_body = make_esri_apply_edits_response()
         mock_layer._client.get.side_effect = [
-            make_response({"status": "PROCESSING"}),
-            make_response({"status": "PROCESSING"}),
-            make_response({"status": "PROCESSING"}),
-            make_response({"status": "PROCESSING"}),
-            make_response({"status": "PROCESSING"}),
-            make_response({"status": "PROCESSING"}),
+            make_response({"status": "InProgress"}),
+            make_response({"status": "InProgress"}),
+            make_response({"status": "InProgress"}),
+            make_response({"status": "InProgress"}),
+            make_response({"status": "InProgress"}),
+            make_response({"status": "InProgress"}),
             make_response(
-                {"status": "COMPLETED", "resultUrl": "https://results.example.com/1"}
+                {"status": "Completed", "resultUrl": "https://results.example.com/1"}
             ),
             make_response(results_body),
         ]
