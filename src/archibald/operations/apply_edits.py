@@ -198,15 +198,19 @@ class ApplyEditsOperation:
         return ApplyEditsResult.from_esri_response(response_body)
 
     async def _poll_status(self, status_url: str, *, timeout: float) -> dict:
-        """Poll an async job status URL until the job completes.
+        """Poll an async job status URL until the job reaches a terminal state.
 
         Uses exponential backoff starting at 0.5 s, doubling each retry up to
         a 5 s cap. The url= kwarg on client.get bypasses the base URL so the
         full status URL is used as-is.
 
-        When status is "COMPLETED", fetches the resultUrl from the status body
-        and returns that response body (which contains addResults/updateResults/
-        deleteResults).
+        Terminal states per the ESRI async operations spec:
+        - "Completed" / "CompletedWithErrors": fetches resultUrl and returns the body.
+        - "Failed": raises ServiceError immediately.
+
+        All other statuses ("Pending", "InProgress", etc.) are non-terminal and
+        continue polling. HTTP-level and ESRI envelope errors are handled upstream
+        by the client's @handle_esri_errors decorator.
 
         Args:
             status_url: Full URL of the async job status endpoint.
@@ -216,8 +220,8 @@ class ApplyEditsOperation:
             Edit results body dict fetched from the resultUrl on completion.
 
         Raises:
-            ServiceError: If the status response contains an error object.
-            TimeoutError: If the job does not complete within timeout seconds.
+            ServiceError: If the job status is "Failed".
+            TimeoutError: If the job does not reach a terminal state within timeout seconds.
         """
         delay = 0.5
         max_delay = 5.0
@@ -225,18 +229,18 @@ class ApplyEditsOperation:
             while True:
                 response = await self._layer._client.get(url=status_url)
                 body = response.json()
-                if "error" in body:
-                    error = body["error"]
-                    raise ServiceError(
-                        code=error.get("code", -1),
-                        message=error.get("message", "Async applyEdits job failed."),
-                        raw_response=body,
-                    )
-                if body.get("status") == "COMPLETED":
+                status = body.get("status")
+                if status in ("Completed", "CompletedWithErrors"):
                     result_response = await self._layer._client.get(
                         url=body["resultUrl"]
                     )
                     return result_response.json()
+                if status == "Failed":
+                    raise ServiceError(
+                        code=-1,
+                        message="Async applyEdits job failed.",
+                        raw_response=body,
+                    )
                 await anyio.sleep(delay)
                 delay = min(delay * 2, max_delay)
 
