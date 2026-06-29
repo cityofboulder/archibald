@@ -19,9 +19,24 @@ class ArchieClient:
     latter case call aclose() manually when done.
     """
 
-    def __init__(self, base_url: str, auth: ArcGISAuth) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        auth: ArcGISAuth,
+        timeout: float | httpx.Timeout | None = 60.0,
+    ) -> None:
+        """Construct an ArchieClient.
+
+        Args:
+            base_url: Base URL ending in 'rest/services'.
+            auth: Authentication handler for token injection.
+            timeout: Default request timeout in seconds, an explicit
+                httpx.Timeout for fine-grained control, or None for no timeout.
+                Applied to all requests unless overridden per-request via kwargs.
+        """
         self._base_url = self._validate_base_url(base_url.rstrip("/"))
         self._auth = auth
+        self._timeout = timeout
         self._client: httpx.AsyncClient | None = None
 
     def _validate_base_url(self, url: str) -> str:
@@ -39,7 +54,7 @@ class ArchieClient:
     async def _get_client(self) -> httpx.AsyncClient:
         """Return the shared httpx.AsyncClient, creating it lazily on first call."""
         if self._client is None:
-            self._client = httpx.AsyncClient(auth=self._auth)
+            self._client = httpx.AsyncClient(auth=self._auth, timeout=self._timeout)
         return self._client
 
     def _build_url(self, url: str | None, endpoint: str | None) -> str:

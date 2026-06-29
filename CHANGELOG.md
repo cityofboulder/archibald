@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-06-29
+
+### Fixed
+
+- `ArchieClient` now defaults to a 60-second request timeout instead of httpx's built-in
+  5-second default. The timeout is configurable via a new `timeout` constructor parameter
+  (`float`, `httpx.Timeout`, or `None` to disable). Large `applyEdits` batches no longer
+  raise `ReadTimeoutError` under the default configuration.
+
 ## [1.1.1] - 2026-06-26
 
 ### Fixed
@@ -96,7 +105,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - When an async `applyEdits` job completes, the operation now follows the `resultUrl` returned in the status body to fetch the actual edit results (`addResults`, `updateResults`, `deleteResults`). Previously the status body itself was parsed as the result, which always produced empty result sets.
 - Async polling loop is now bounded by `anyio.fail_after`; previously it could spin indefinitely if the server never returned a terminal status.
 
-[Unreleased]: https://github.com/cityofboulder/archie/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/cityofboulder/archie/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/cityofboulder/archie/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/cityofboulder/archie/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/cityofboulder/archie/releases/tag/v1.1.0
 [1.0.0]: https://github.com/cityofboulder/archie/releases/tag/v1.0.0
