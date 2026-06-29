@@ -317,3 +317,43 @@ class TestLifecycle:
             mock = inject_mock_client(client, make_response({}), mocker)
 
         mock.aclose.assert_awaited_once()
+
+
+class TestInit:
+    @pytest.mark.anyio
+    async def test_default_timeout_is_60(self):
+        client = ArchieClient(
+            base_url="https://example.com/arcgis/rest/services",
+            auth=StaticTokenAuth("token"),
+        )
+
+        inner = await client._get_client()
+
+        assert inner.timeout.read == 60.0
+        await client.aclose()
+
+    @pytest.mark.anyio
+    async def test_custom_timeout_forwarded(self):
+        client = ArchieClient(
+            base_url="https://example.com/arcgis/rest/services",
+            auth=StaticTokenAuth("token"),
+            timeout=120.0,
+        )
+
+        inner = await client._get_client()
+
+        assert inner.timeout.read == 120.0
+        await client.aclose()
+
+    @pytest.mark.anyio
+    async def test_no_timeout_accepted(self):
+        client = ArchieClient(
+            base_url="https://example.com/arcgis/rest/services",
+            auth=StaticTokenAuth("token"),
+            timeout=None,
+        )
+
+        inner = await client._get_client()
+
+        assert inner.timeout == httpx.Timeout(None)
+        await client.aclose()
