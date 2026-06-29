@@ -434,6 +434,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#archibald.client.ArchieClient.__init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __init__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#archibald.client.ArchieClient.aclose" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -660,6 +671,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#archibald.client.ArchieClient.__init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __init__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#archibald.client.ArchieClient.aclose" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -802,6 +824,89 @@ latter case call aclose() manually when done.</p>
     <div class="doc doc-contents ">
 
         <p>Exit the async context manager, closing the internal client.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="archibald.client.ArchieClient.__init__" class="doc doc-heading">
+            <code class="highlight language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">base_url</span><span class="p">,</span> <span class="n">auth</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">60.0</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Construct an ArchieClient.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>base_url</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Base URL ending in 'rest/services'.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>auth</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="archibald.auth.ArcGISAuth" href="../auth/#archibald.auth.ArcGISAuth">ArcGISAuth</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Authentication handler for token injection.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>timeout</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span> | <span title="httpx.Timeout">Timeout</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Default request timeout in seconds, an explicit
+httpx.Timeout for fine-grained control, or None for no timeout.
+Applied to all requests unless overridden per-request via kwargs.</p>
+              </div>
+            </td>
+            <td>
+                  <code>60.0</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
     </div>
