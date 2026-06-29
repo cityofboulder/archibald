@@ -38,7 +38,34 @@ def _coerce_datetime(series: pd.Series) -> pd.Series:
     Emits a UserWarning when the Series is timezone-naive, as the conversion
     will assume UTC. NaT values become None. Returns an object-dtype Series so
     None is preserved rather than coerced back to NaN.
+
+    Object-dtype series (e.g. containing Python datetime objects, pd.Timestamps,
+    or ISO-format strings) are first passed through pd.to_datetime(errors="coerce").
+    Values that cannot be parsed become null; a UserWarning is emitted with a count
+    and examples. If all values resolve to NaT (including all-null input), an
+    all-None Series is returned without a tz warning.
     """
+    if not pd.api.types.is_datetime64_any_dtype(series):
+        null_mask = series.isna()
+        parsed = pd.to_datetime(series, errors="coerce")
+
+        failed_mask = ~null_mask & parsed.isna()
+        if failed_mask.any():
+            examples = series[failed_mask].unique().tolist()[:5]
+            warnings.warn(
+                f"Column '{series.name}': {int(failed_mask.sum())} value(s) could not be "
+                f"parsed as datetime and will be sent as null. Examples: {examples}",
+                UserWarning,
+                stacklevel=5,
+            )
+
+        if parsed.isna().all():
+            result = parsed.astype(object)
+            result[:] = None
+            return result
+
+        series = parsed
+
     if isinstance(series.dtype, pd.DatetimeTZDtype):
         utc = series.dt.tz_convert("UTC")
     else:
