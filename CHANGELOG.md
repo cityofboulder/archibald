@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `_coerce_datetime` no longer raises `AttributeError` when serializing a date column that contains only null values (object-dtype Series with no `.dt` accessor). Object-dtype Series are now passed through `pd.to_datetime(errors="coerce")` before the timezone logic runs, enabling columns sourced from uncontrolled inputs — Python `datetime` objects, `pd.Timestamp` values, or ISO-format strings — to be coerced correctly. Values that cannot be parsed are sent as null with a `UserWarning`; Series that resolve entirely to `NaT` (all-null or all-unparseable) are returned as all-`None` without a spurious timezone warning.
+
 ## [1.1.2] - 2026-06-29
 
 ### Fixed

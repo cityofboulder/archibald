@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import warnings
+from datetime import datetime
 
 import pandas as pd
 import pytest
@@ -73,6 +74,97 @@ class TestCoerceDatetime:
     )
     def test_tz_aware_does_not_warn(self, tz):
         series = pd.Series([pd.to_datetime("2024-01-01").tz_localize(tz)], name="col")
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            _coerce_datetime(series)
+
+    def test_result_is_all_none_when_object_series_is_all_null(self):
+        series = pd.Series([None, None], name="col")
+
+        result = _coerce_datetime(series)
+
+        assert result.tolist() == [None, None]
+
+    def test_no_warning_emitted_when_object_series_is_all_null(self):
+        series = pd.Series([None, None], name="col")
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            _coerce_datetime(series)
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            pd.Timestamp("1970-01-01 00:00:01", tz="UTC"),
+            "1970-01-01T00:00:01+00:00",
+        ],
+        ids=["timestamp-utc", "iso-string-utc"],
+    )
+    def test_converts_to_ms_without_warning_when_object_series_is_tz_aware(self, value):
+        series = pd.Series([value], name="col", dtype=object)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            result = _coerce_datetime(series)
+
+        assert result.iloc[0] == 1000
+
+    def test_converts_to_ms_when_object_series_contains_naive_datetime_objects(self):
+        series = pd.Series([datetime(1970, 1, 1, 0, 0, 1)], name="col", dtype=object)
+
+        with pytest.warns(UserWarning, match="col"):
+            result = _coerce_datetime(series)
+
+        assert result.iloc[0] == 1000
+
+    def test_warns_tz_naive_when_object_series_contains_naive_strings(self):
+        series = pd.Series(["1970-01-01T00:00:01"], name="EventDate", dtype=object)
+
+        with pytest.warns(UserWarning, match="EventDate"):
+            _coerce_datetime(series)
+
+    def test_returns_none_and_warns_when_object_series_values_are_unparseable(self):
+        series = pd.Series(["not-a-date"], name="col", dtype=object)
+
+        with pytest.warns(UserWarning) as record:
+            result = _coerce_datetime(series)
+
+        assert result.iloc[0] is None
+        assert len(record) == 1
+        assert "1 value" in str(record[0].message)
+
+    def test_warns_parse_failure_and_tz_naive_when_object_series_is_partially_unparseable(
+        self,
+    ):
+        series = pd.Series(["2024-01-01", "bad"], name="col", dtype=object)
+
+        with pytest.warns(UserWarning) as record:
+            _coerce_datetime(series)
+
+        messages = [str(w.message) for w in record]
+        assert any("1 value" in m for m in messages)
+        assert any("timezone-naive" in m for m in messages)
+
+    def test_preserves_valid_values_as_ms_when_object_series_is_partially_unparseable(
+        self,
+    ):
+        series = pd.Series(
+            ["1970-01-01T00:00:01+00:00", "bad"], name="col", dtype=object
+        )
+
+        with pytest.warns(UserWarning):
+            result = _coerce_datetime(series)
+
+        assert result.iloc[0] == 1000
+        assert result.iloc[1] is None
+
+    def test_no_parse_failure_warning_when_object_series_has_null_and_valid_values(
+        self,
+    ):
+        series = pd.Series(
+            [None, pd.Timestamp("2024-01-01", tz="UTC")], name="col", dtype=object
+        )
 
         with warnings.catch_warnings():
             warnings.simplefilter("error", UserWarning)
