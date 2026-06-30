@@ -111,9 +111,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - When an async `applyEdits` job completes, the operation now follows the `resultUrl` returned in the status body to fetch the actual edit results (`addResults`, `updateResults`, `deleteResults`). Previously the status body itself was parsed as the result, which always produced empty result sets.
 - Async polling loop is now bounded by `anyio.fail_after`; previously it could spin indefinitely if the server never returned a terminal status.
 
-[Unreleased]: https://github.com/cityofboulder/archie/compare/v1.1.3...HEAD
-[1.1.3]: https://github.com/cityofboulder/archie/compare/v1.1.1...v1.1.3
-[1.1.2]: https://github.com/cityofboulder/archie/compare/v1.1.1...v1.1.2
-[1.1.1]: https://github.com/cityofboulder/archie/compare/v1.1.0...v1.1.1
-[1.1.0]: https://github.com/cityofboulder/archie/releases/tag/v1.1.0
-[1.0.0]: https://github.com/cityofboulder/archie/releases/tag/v1.0.0
+[Unreleased]: https://github.com/cityofboulder/archibald/compare/v1.1.3...HEAD
+[1.1.3]: https://github.com/cityofboulder/archibald/compare/v1.1.2...v1.1.3
+[1.1.2]: https://github.com/cityofboulder/archibald/compare/v1.1.1...v1.1.2
+[1.1.1]: https://github.com/cityofboulder/archibald/compare/v1.1.0...v1.1.1
+[1.1.0]: https://github.com/cityofboulder/archibald/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/cityofboulder/archibald/releases/tag/v1.0.0
