@@ -470,6 +470,29 @@ class FeatureLayer(FeatureService, BaseLayer):
             )
 
     @staticmethod
+    def _composite_key(
+        df: pd.DataFrame | gpd.GeoDataFrame, key_fields: list[str]
+    ) -> pd.Series:
+        """Build a composite key Series by joining key_fields values row-wise.
+
+        Vectorized string concatenation (rather than `.agg(join, axis=1)`) so
+        the result is always a Series, even for a 0-row df — pandas' `.agg`
+        with axis=1 degrades to returning a DataFrame when there are no rows
+        to sample the reduction shape from.
+
+        Args:
+            df: Input DataFrame or GeoDataFrame.
+            key_fields: Column names that jointly identify a feature.
+
+        Returns:
+            Series of "val1||val2||..." strings, indexed like df.
+        """
+        keys = df[key_fields[0]].astype(str)
+        for field in key_fields[1:]:
+            keys = keys + "||" + df[field].astype(str)
+        return keys
+
+    @staticmethod
     def _validate_key_fields(
         df: pd.DataFrame | gpd.GeoDataFrame,
         key_fields: list[str],
@@ -494,7 +517,7 @@ class FeatureLayer(FeatureService, BaseLayer):
                 f"key_fields contains columns not present in df: {missing_repr}."
             )
 
-        composite = df[key_fields].astype(str).agg("||".join, axis=1)
+        composite = FeatureLayer._composite_key(df, key_fields)
         dupes = composite[composite.duplicated()].unique().tolist()
         if dupes:
             raise InvalidParameterError(
@@ -538,9 +561,8 @@ class FeatureLayer(FeatureService, BaseLayer):
         )
         existing_df = existing_result.to_frame()
 
-        # Composite key Series: each row becomes "val1||val2||..."
-        input_keys = df[key_fields].astype(str).agg("||".join, axis=1)
-        existing_keys = existing_df[key_fields].astype(str).agg("||".join, axis=1)
+        input_keys = self._composite_key(df, key_fields)
+        existing_keys = self._composite_key(existing_df, key_fields)
 
         adds = df[~input_keys.isin(existing_keys)]
 

@@ -50,6 +50,11 @@ class TestValidateKeyFields:
         df = pd.DataFrame({"Name": ["Alice", "Bob"]})
         FeatureLayer._validate_key_fields(df, ["Name"])
 
+    def test_passes_for_empty_df_with_matching_columns(self):
+        df = pd.DataFrame(columns=["Name"])
+
+        FeatureLayer._validate_key_fields(df, ["Name"])
+
 
 class TestSupportsUpdate:
     @pytest.mark.parametrize(
@@ -312,6 +317,21 @@ class TestDiff:
         assert updates["Status"].tolist() == ["Active"]
         assert updates["OBJECTID"].tolist() == [1]
         assert delete_oids == []
+
+    @pytest.mark.anyio
+    async def test_empty_input_df_produces_all_deletes(self, feature_layer, mocker):
+        input_df = pd.DataFrame(columns=["Name"])
+        existing_df = pd.DataFrame({"OBJECTID": [1, 2], "Name": ["Alice", "Bob"]})
+        mocker.patch.object(feature_layer, "objectid_field", return_value="OBJECTID")
+        mock_result = mocker.MagicMock()
+        mock_result.to_frame.return_value = existing_df
+        mocker.patch.object(feature_layer, "query", return_value=mock_result)
+
+        adds, updates, delete_oids = await feature_layer._diff(input_df, ["Name"])
+
+        assert adds.empty
+        assert updates.empty
+        assert delete_oids == [1, 2]
 
 
 class TestAddAttachmentMethods:
