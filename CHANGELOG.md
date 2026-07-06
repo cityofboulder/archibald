@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-07-06
+
+### Fixed
+
+- `FeatureLayer._validate_key_fields` and `FeatureLayer._diff` no longer raise `AttributeError` when `upsert()`/`sync()` are called with an empty (0-row) `DataFrame`. Composite key construction previously used `.astype(str).agg("||".join, axis=1)`, which pandas silently degrades to returning an empty `DataFrame` instead of a `Series` when there are no rows to infer the row-wise reduction shape from. Extracted into `_composite_key`, using vectorized string concatenation that always returns a `Series` regardless of row count. `sync()` called with an empty `DataFrame` now correctly deletes every existing feature in the layer, with no added guard against full-layer deletion.
+
 ## [1.1.3] - 2026-06-29
 
 ### Fixed
@@ -111,7 +117,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - When an async `applyEdits` job completes, the operation now follows the `resultUrl` returned in the status body to fetch the actual edit results (`addResults`, `updateResults`, `deleteResults`). Previously the status body itself was parsed as the result, which always produced empty result sets.
 - Async polling loop is now bounded by `anyio.fail_after`; previously it could spin indefinitely if the server never returned a terminal status.
 
-[Unreleased]: https://github.com/cityofboulder/archibald/compare/v1.1.3...HEAD
+[Unreleased]: https://github.com/cityofboulder/archibald/compare/v1.1.4...HEAD
+[1.1.4]: https://github.com/cityofboulder/archibald/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/cityofboulder/archibald/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/cityofboulder/archibald/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/cityofboulder/archibald/compare/v1.1.0...v1.1.1
