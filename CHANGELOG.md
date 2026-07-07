@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-07
+
 ### Added
 
 - `QueryOperation.execute()` now validates `where` clauses that reference `esriFieldTypeDate`, `esriFieldTypeDateOnly`, `esriFieldTypeTimeOnly`, or `esriFieldTypeTimestampOffset` fields, raising `InvalidParameterError` when a date/time literal is bare (missing the `DATE`/`TIMESTAMP`/`TIME` keyword), uses a keyword not valid for the field's type, or doesn't match the required value format. Covers simple comparisons (`=`, `<>`, `!=`, `>=`, `<=`, `>`, `<`), `[NOT] BETWEEN ... AND ...`, and `[NOT] IN (...)`. No auto-reformatting — this only catches the mistake early instead of letting ESRI reject or silently mishandle the query.
@@ -125,7 +127,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - When an async `applyEdits` job completes, the operation now follows the `resultUrl` returned in the status body to fetch the actual edit results (`addResults`, `updateResults`, `deleteResults`). Previously the status body itself was parsed as the result, which always produced empty result sets.
 - Async polling loop is now bounded by `anyio.fail_after`; previously it could spin indefinitely if the server never returned a terminal status.
 
-[Unreleased]: https://github.com/cityofboulder/archibald/compare/v1.1.4...HEAD
+[Unreleased]: https://github.com/cityofboulder/archibald/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/cityofboulder/archibald/compare/v1.1.4...v1.2.0
 [1.1.4]: https://github.com/cityofboulder/archibald/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/cityofboulder/archibald/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/cityofboulder/archibald/compare/v1.1.1...v1.1.2
