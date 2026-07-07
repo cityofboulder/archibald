@@ -355,8 +355,14 @@ class FeatureLayer(FeatureService, BaseLayer):
 
         Raises:
             LayerCapabilityError: If the layer does not support applyEdits or query operations.
-            InvalidParameterError: If key_fields is invalid.
+            InvalidParameterError: If key_fields is invalid, or if df is empty.
         """
+        if df.empty:
+            raise InvalidParameterError(
+                "sync() received an empty DataFrame, which would delete every "
+                "feature in the layer. Use overwrite() to intentionally "
+                "truncate the layer."
+            )
         adds_df, updates_df, delete_oids = await self._diff(df, key_fields)
         return await self.apply_edits(
             adds=adds_df if not adds_df.empty else None,
@@ -364,6 +370,53 @@ class FeatureLayer(FeatureService, BaseLayer):
             deletes=delete_oids if delete_oids else None,
             apply_coded_values=apply_coded_values,
         )
+
+    async def truncate(self) -> ApplyEditsResult:
+        """Delete every feature currently in the layer.
+
+        Queries all existing OBJECTIDs, then deletes them via apply_edits.
+
+        Returns:
+            ApplyEditsResult with delete results for every existing feature
+            (empty result if the layer was already empty).
+
+        Raises:
+            LayerCapabilityError: If the layer does not support applyEdits or query operations.
+        """
+        objectid_field = await self.objectid_field()
+        existing_df = (
+            await self.query(out_fields=[objectid_field], return_geometry=False)
+        ).to_frame()
+        existing_oids = existing_df[objectid_field].tolist()
+        return await self.apply_edits(deletes=existing_oids if existing_oids else None)
+
+    async def overwrite(
+        self,
+        df: pd.DataFrame | gpd.GeoDataFrame,
+        *,
+        apply_coded_values: bool = False,
+    ) -> ApplyEditsResult:
+        """Replace the layer's entire contents with df.
+
+        Truncates all existing features, then appends every row in df (if
+        any). An empty df truncates the layer with nothing added back.
+
+        Args:
+            df: Desired full contents of the layer. Empty truncates only.
+            apply_coded_values: When True, translate human-readable domain names
+                back to their raw codes before serialization.
+
+        Returns:
+            ApplyEditsResult merging the truncate deletes with any append adds.
+
+        Raises:
+            LayerCapabilityError: If the layer does not support applyEdits or query operations.
+        """
+        delete_result = await self.truncate()
+        if df.empty:
+            return delete_result
+        add_result = await self.append(df, apply_coded_values=apply_coded_values)
+        return ApplyEditsResult.merge([delete_result, add_result])
 
     # ------------------------------------------------------------------
     # Private helpers
