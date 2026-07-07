@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `FieldsResult.filter(types=...)` now accepts `esriFieldTypeDateOnly`, `esriFieldTypeTimeOnly`, and `esriFieldTypeTimestampOffset`, which were missing from the valid ESRI field type list. The `InvalidParameterError` raised for an unrecognized type now points to the ArcGIS web map specification's field object reference instead of a stale enterprise-sdk link.
+
 ## [1.1.4] - 2026-07-06
 
 ### Fixed

@@ -16,6 +16,9 @@ _ESRI_FIELD_TYPES = [
     "esriFieldTypeSingle",
     "esriFieldTypeDouble",
     "esriFieldTypeDate",
+    "esriFieldTypeDateOnly",
+    "esriFieldTypeTimeOnly",
+    "esriFieldTypeTimestampOffset",
     "esriFieldTypeGUID",
     "esriFieldTypeGlobalID",
     "esriFieldTypeXML",
@@ -110,7 +113,7 @@ class FieldsResult:
                 raise InvalidParameterError(
                     f"Invalid ESRI type(s): {', '.join(sorted(invalid))}. "
                     "Field types must match standard ESRI types found here: "
-                    "https://developers.arcgis.com/enterprise-sdk/api-reference/net/esriFieldType/"
+                    "https://developers.arcgis.com/web-map-specification/objects/field/"
                 )
 
         name_set = set(names) if names is not None else None

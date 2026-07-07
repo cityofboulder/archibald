@@ -212,3 +212,19 @@ class TestFilter:
     ):
         with pytest.raises(InvalidParameterError, match="Invalid ESRI type"):
             fields_result.filter(types=types)
+
+    @pytest.mark.parametrize(
+        "esri_type",
+        [
+            "esriFieldTypeDateOnly",
+            "esriFieldTypeTimeOnly",
+            "esriFieldTypeTimestampOffset",
+        ],
+        ids=["date-only", "time-only", "timestamp-offset"],
+    )
+    def test_filter_accepts_newer_esri_date_types_without_raising(
+        self, fields_result, esri_type
+    ):
+        result = fields_result.filter(types=esri_type)
+
+        assert result.names == []
