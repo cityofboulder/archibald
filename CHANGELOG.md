@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `QueryOperation.execute()` now validates `where` clauses that reference `esriFieldTypeDate`, `esriFieldTypeDateOnly`, `esriFieldTypeTimeOnly`, or `esriFieldTypeTimestampOffset` fields, raising `InvalidParameterError` when a date/time literal is bare (missing the `DATE`/`TIMESTAMP`/`TIME` keyword), uses a keyword not valid for the field's type, or doesn't match the required value format. Covers simple comparisons (`=`, `<>`, `!=`, `>=`, `<=`, `>`, `<`), `[NOT] BETWEEN ... AND ...`, and `[NOT] IN (...)`. No auto-reformatting — this only catches the mistake early instead of letting ESRI reject or silently mishandle the query.
+
+### Fixed
+
+- `FieldsResult.filter(types=...)` now accepts `esriFieldTypeDateOnly`, `esriFieldTypeTimeOnly`, and `esriFieldTypeTimestampOffset`, which were missing from the valid ESRI field type list. The `InvalidParameterError` raised for an unrecognized type now points to the ArcGIS web map specification's field object reference instead of a stale enterprise-sdk link.
+
 ## [1.1.4] - 2026-07-06
 
 ### Fixed

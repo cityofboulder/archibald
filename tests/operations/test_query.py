@@ -3,7 +3,7 @@
 import pytest
 
 from archibald.exceptions import InvalidParameterError
-from archibald.models import QueryResult
+from archibald.models import FieldsResult, QueryResult
 from tests.helpers import make_feature, make_response
 
 
@@ -61,6 +61,126 @@ class TestValidateFields:
     async def test_raises_for_unknown_fields(self, query_op, out_fields, match):
         with pytest.raises(InvalidParameterError, match=match):
             await query_op._validate_fields(out_fields)
+
+
+class TestValidateDateLiterals:
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "where",
+        [
+            "Status = 1",
+            "EventDate = DATE '2020-01-01'",
+            "EventDate = TIMESTAMP '2020-01-01 10:00:00'",
+            "EventDate BETWEEN DATE '2020-01-01' AND DATE '2020-01-05'",
+            "EventDate NOT BETWEEN DATE '2020-01-01' AND DATE '2020-01-05'",
+            "EventDate IN (DATE '2020-01-01', DATE '2020-01-02')",
+            "EventDate NOT IN (DATE '2020-01-01')",
+            "Name = '2020-01-01'",
+        ],
+        ids=[
+            "no_date_field_referenced",
+            "date_keyword",
+            "timestamp_keyword",
+            "between_valid",
+            "not_between_valid",
+            "in_list_valid",
+            "not_in_list_valid",
+            "string_field_resembling_date_ignored",
+        ],
+    )
+    async def test_passes_for_valid_where_clauses(self, query_op, where):
+        await query_op._validate_date_literals(where)
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "where, match",
+        [
+            ("EventDate = '2020-01-01'", "bare string literal"),
+            ("EventDate = DATE '01/01/2020'", "malformed DATE literal"),
+            ("EventDate = TIMESTAMP '2020-01-01'", "malformed TIMESTAMP literal"),
+            (
+                "EventDate BETWEEN DATE '2020/01/01' AND DATE '2020-01-05'",
+                "malformed DATE literal",
+            ),
+            (
+                "EventDate BETWEEN '2020-01-01' AND DATE '2020-01-05'",
+                "bare string literal",
+            ),
+            (
+                "EventDate NOT BETWEEN DATE '2020-01-01' AND DATE '2020/01/05'",
+                "malformed DATE literal",
+            ),
+            (
+                "EventDate IN (DATE '2020-01-01', DATE '2020/01/02')",
+                "malformed DATE literal",
+            ),
+            (
+                "EventDate IN (DATE '2020-01-01', '2020-01-02')",
+                "bare string literal",
+            ),
+            (
+                "EventDate NOT IN (DATE '2020/01/01')",
+                "malformed DATE literal",
+            ),
+            ("EventDate = TIME '14:35:00'", "does not support the 'TIME' keyword"),
+        ],
+        ids=[
+            "bare_literal",
+            "malformed_date_format",
+            "timestamp_missing_time",
+            "between_first_literal_malformed",
+            "between_first_literal_bare",
+            "not_between_second_literal_malformed",
+            "in_list_contains_malformed_literal",
+            "in_list_contains_bare_literal",
+            "not_in_list_contains_malformed_literal",
+            "wrong_keyword_for_field_type",
+        ],
+    )
+    async def test_raises_for_invalid_where_clauses(self, query_op, where, match):
+        with pytest.raises(InvalidParameterError, match=match):
+            await query_op._validate_date_literals(where)
+
+    @pytest.mark.anyio
+    async def test_raises_when_dateonly_field_given_timestamp_keyword(
+        self, query_op, mock_layer
+    ):
+        mock_layer.fields.return_value = FieldsResult(
+            fields=[{"name": "EventDateOnly", "type": "esriFieldTypeDateOnly"}]
+        )
+
+        with pytest.raises(
+            InvalidParameterError, match="does not support the 'TIMESTAMP' keyword"
+        ):
+            await query_op._validate_date_literals(
+                "EventDateOnly = TIMESTAMP '2020-01-01 10:00:00'"
+            )
+
+    @pytest.mark.anyio
+    async def test_raises_when_timeonly_field_given_date_keyword(
+        self, query_op, mock_layer
+    ):
+        mock_layer.fields.return_value = FieldsResult(
+            fields=[{"name": "EventTimeOnly", "type": "esriFieldTypeTimeOnly"}]
+        )
+
+        with pytest.raises(
+            InvalidParameterError, match="does not support the 'DATE' keyword"
+        ):
+            await query_op._validate_date_literals("EventTimeOnly = DATE '2020-01-01'")
+
+    @pytest.mark.anyio
+    async def test_raises_when_timestamp_offset_literal_missing_offset(
+        self, query_op, mock_layer
+    ):
+        mock_layer.fields.return_value = FieldsResult(
+            fields=[{"name": "EventTsOffset", "type": "esriFieldTypeTimestampOffset"}]
+        )
+
+        with pytest.raises(InvalidParameterError, match="malformed TIMESTAMP literal"):
+            await query_op._validate_date_literals(
+                "EventTsOffset = TIMESTAMP '2020-01-01 10:00:00'"
+            )
 
 
 class TestBuildParams:
@@ -285,3 +405,12 @@ class TestExecute:
         await query_op.execute(out_fields=["OBJECTID", "Name"])
 
         mock_fetch.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_raises_invalid_parameter_error_when_where_clause_has_bad_date_literal(
+        self, query_op, mock_layer
+    ):
+        with pytest.raises(InvalidParameterError, match="bare string literal"):
+            await query_op.execute(where="EventDate = '2020-01-01'")
+
+        mock_layer._client.get.assert_not_called()
