@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 from archibald.exceptions import InvalidParameterError, LayerCapabilityError
+from archibald.models.apply_edits_result import ApplyEditsResult
 from archibald.services import FeatureLayer
 from tests.helpers import (
     make_attachments_result,
@@ -237,6 +238,93 @@ class TestSync:
         mock_apply.assert_called_once_with(
             adds=adds_df, updates=updates_df, deletes=None, apply_coded_values=False
         )
+
+    @pytest.mark.anyio
+    async def test_raises_on_empty_df(self, feature_layer, mocker):
+        empty_df = pd.DataFrame(columns=["Name"])
+        mock_diff = mocker.patch.object(feature_layer, "_diff")
+        mock_apply = mocker.patch.object(feature_layer, "apply_edits")
+
+        with pytest.raises(InvalidParameterError, match="delete every feature"):
+            await feature_layer.sync(empty_df, ["Name"])
+
+        mock_diff.assert_not_called()
+        mock_apply.assert_not_called()
+
+
+class TestTruncate:
+    @pytest.mark.anyio
+    async def test_deletes_all_existing_object_ids(self, feature_layer, mocker):
+        existing_df = pd.DataFrame({"OBJECTID": [1, 2, 3]})
+        mocker.patch.object(feature_layer, "objectid_field", return_value="OBJECTID")
+        mock_result = mocker.MagicMock()
+        mock_result.to_frame.return_value = existing_df
+        mock_query = mocker.patch.object(
+            feature_layer, "query", return_value=mock_result
+        )
+        expected = make_apply_edits_result()
+        mock_apply = mocker.patch.object(
+            feature_layer, "apply_edits", return_value=expected
+        )
+
+        result = await feature_layer.truncate()
+
+        mock_query.assert_called_once_with(
+            out_fields=["OBJECTID"], return_geometry=False
+        )
+        mock_apply.assert_called_once_with(deletes=[1, 2, 3])
+        assert result is expected
+
+    @pytest.mark.anyio
+    async def test_passes_none_when_layer_already_empty(self, feature_layer, mocker):
+        existing_df = pd.DataFrame(columns=["OBJECTID"])
+        mocker.patch.object(feature_layer, "objectid_field", return_value="OBJECTID")
+        mock_result = mocker.MagicMock()
+        mock_result.to_frame.return_value = existing_df
+        mocker.patch.object(feature_layer, "query", return_value=mock_result)
+        mock_apply = mocker.patch.object(
+            feature_layer, "apply_edits", return_value=make_apply_edits_result()
+        )
+
+        await feature_layer.truncate()
+
+        mock_apply.assert_called_once_with(deletes=None)
+
+
+class TestOverwrite:
+    @pytest.mark.anyio
+    async def test_truncates_only_when_df_empty(self, feature_layer, mocker):
+        empty_df = pd.DataFrame(columns=["Name"])
+        delete_result = make_apply_edits_result()
+        mock_truncate = mocker.patch.object(
+            feature_layer, "truncate", return_value=delete_result
+        )
+        mock_append = mocker.patch.object(feature_layer, "append")
+
+        result = await feature_layer.overwrite(empty_df)
+
+        mock_truncate.assert_called_once_with()
+        mock_append.assert_not_called()
+        assert result is delete_result
+
+    @pytest.mark.anyio
+    async def test_truncates_then_appends_when_df_has_data(self, feature_layer, mocker):
+        df = pd.DataFrame({"Name": ["Alice"]})
+        delete_result = make_apply_edits_result()
+        add_result = make_apply_edits_result()
+        mocker.patch.object(feature_layer, "truncate", return_value=delete_result)
+        mock_append = mocker.patch.object(
+            feature_layer, "append", return_value=add_result
+        )
+        mock_merge = mocker.patch.object(
+            ApplyEditsResult, "merge", return_value=make_apply_edits_result()
+        )
+
+        result = await feature_layer.overwrite(df, apply_coded_values=True)
+
+        mock_append.assert_called_once_with(df, apply_coded_values=True)
+        mock_merge.assert_called_once_with([delete_result, add_result])
+        assert result is mock_merge.return_value
 
 
 class TestDiff:

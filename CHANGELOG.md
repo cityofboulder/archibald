@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `FeatureLayer.truncate()` deletes every feature currently in the layer by querying all existing OBJECTIDs and deleting them via `apply_edits()`.
+- `FeatureLayer.overwrite(df)` replaces a layer's entire contents: truncates all existing features, then appends every row in `df` (an empty `df` truncates only, with nothing added back).
+
+### Changed
+
+- `FeatureLayer.sync()` now raises `InvalidParameterError` when called with an empty `DataFrame`, rather than deleting every feature in the layer as a side effect (the behavior introduced in 1.1.4). Use the new `overwrite()` to intentionally truncate a layer.
+
 ## [1.1.4] - 2026-07-06
 
 ### Fixed
