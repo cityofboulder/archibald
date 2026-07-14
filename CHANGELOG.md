@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Versioning is now tracked differently inside `pyproject.toml`: the tool will present clear dev tags if someone ever builds directly from main. Uses the `no-guess-dev` version scheme.
+
 ## [1.2.0] - 2026-07-07
 
 ### Added
