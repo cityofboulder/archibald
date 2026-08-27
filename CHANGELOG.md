@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-08-27
+
 ### Fixed
 
 - Versioning is now tracked differently inside `pyproject.toml`: the tool will present clear dev tags if someone ever builds directly from main. Uses the `no-guess-dev` version scheme.
@@ -132,7 +134,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - When an async `applyEdits` job completes, the operation now follows the `resultUrl` returned in the status body to fetch the actual edit results (`addResults`, `updateResults`, `deleteResults`). Previously the status body itself was parsed as the result, which always produced empty result sets.
 - Async polling loop is now bounded by `anyio.fail_after`; previously it could spin indefinitely if the server never returned a terminal status.
 
-[Unreleased]: https://github.com/cityofboulder/archibald/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/cityofboulder/archibald/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/cityofboulder/archibald/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/cityofboulder/archibald/compare/v1.1.4...v1.2.0
 [1.1.4]: https://github.com/cityofboulder/archibald/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/cityofboulder/archibald/compare/v1.1.2...v1.1.3
