@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import anyio
 import httpx
 
 from archibald.auth import ArcGISAuth
@@ -13,7 +14,9 @@ class ArchieClient:
     Manages an internal httpx.AsyncClient with lazy initialization. Enforces
     f=json on all requests (preserving f=geojson when explicitly set), handles
     token refresh on 498/499 responses, and raises for HTTP-level errors before
-    ESRI envelope errors are inspected.
+    ESRI envelope errors are inspected. Bounds the number of concurrent
+    in-flight requests so fan-out callers (batched applyEdits, paged query,
+    bulk attachment operations) can't overrun the connection pool.
 
     Can be used as an async context manager or instantiated directly; in the
     latter case call aclose() manually when done.
@@ -24,6 +27,7 @@ class ArchieClient:
         base_url: str,
         auth: ArcGISAuth,
         timeout: float | httpx.Timeout | None = 60.0,
+        max_concurrent_requests: int = 20,
     ) -> None:
         """Construct an ArchieClient.
 
@@ -33,10 +37,20 @@ class ArchieClient:
             timeout: Default request timeout in seconds, an explicit
                 httpx.Timeout for fine-grained control, or None for no timeout.
                 Applied to all requests unless overridden per-request via kwargs.
+            max_concurrent_requests: Maximum number of requests in flight at
+                once, shared across all callers (query paging, attachment
+                fan-out, applyEdits batching, ...). Defaults to 20, matching
+                httpx's own max_keepalive_connections default — comfortably
+                under its max_connections=100 pool ceiling, so this cannot
+                reproduce a PoolTimeout regardless of how many batches/pages/
+                attachments a caller fans out. Raise or lower it based on what
+                the target ArcGIS Server instance's own service concurrency
+                is known to tolerate.
         """
         self._base_url = self._validate_base_url(base_url.rstrip("/"))
         self._auth = auth
         self._timeout = timeout
+        self._limiter = anyio.CapacityLimiter(max_concurrent_requests)
         self._client: httpx.AsyncClient | None = None
 
     def _validate_base_url(self, url: str) -> str:
@@ -83,11 +97,15 @@ class ArchieClient:
         """Execute an HTTP request and return the response.
 
         URL construction and format enforcement are the caller's responsibility.
-        Raises for HTTP-level errors before returning; @handle_esri_errors then
-        inspects the body for ESRI envelope errors.
+        The network call is gated by self._limiter so no more than
+        max_concurrent_requests are in flight at once, regardless of how many
+        callers fan out concurrently. Raises for HTTP-level errors before
+        returning; @handle_esri_errors then inspects the body for ESRI
+        envelope errors.
         """
         client = await self._get_client()
-        response = await client.request(method, url, **kwargs)
+        async with self._limiter:
+            response = await client.request(method, url, **kwargs)
         response.raise_for_status()
         return response
 
