@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Versioning is now tracked differently inside `pyproject.toml`: the tool will present clear dev tags if someone ever builds directly from main. Uses the `no-guess-dev` version scheme.
+- `_coerce_guid` now used for `esriFieldTypeGUID`/`esriFieldTypeGlobalID` fields instead of `_coerce_string`. The previous coercer would fail if the GUIDs in question were not formatted correctly. This function upper-cases incoming guids, wraps them in braces if they are not already present, and handles null entries cleanly.
 
 ## [1.2.0] - 2026-07-07
 
