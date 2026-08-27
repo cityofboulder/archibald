@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import anyio
 import httpx
 import pytest
 from unittest.mock import AsyncMock
@@ -357,3 +358,57 @@ class TestInit:
 
         assert inner.timeout == httpx.Timeout(None)
         await client.aclose()
+
+    def test_default_max_concurrent_requests_is_20(self):
+        client = ArchieClient(
+            base_url="https://example.com/arcgis/rest/services",
+            auth=StaticTokenAuth("token"),
+        )
+
+        assert client._limiter.total_tokens == 20
+
+    def test_custom_max_concurrent_requests_forwarded(self):
+        client = ArchieClient(
+            base_url="https://example.com/arcgis/rest/services",
+            auth=StaticTokenAuth("token"),
+            max_concurrent_requests=2,
+        )
+
+        assert client._limiter.total_tokens == 2
+
+
+class TestRequestConcurrencyLimit:
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "max_concurrent_requests,num_requests",
+        [(1, 5), (3, 8)],
+        ids=["cap-of-1", "cap-of-3"],
+    )
+    async def test_concurrent_requests_never_exceed_cap(
+        self, mocker, max_concurrent_requests, num_requests
+    ):
+        client = ArchieClient(
+            base_url="https://example.com/arcgis/rest/services",
+            auth=StaticTokenAuth("token"),
+            max_concurrent_requests=max_concurrent_requests,
+        )
+        in_flight = 0
+        max_observed = 0
+
+        async def tracking_request(*args, **kwargs):
+            nonlocal in_flight, max_observed
+            in_flight += 1
+            max_observed = max(max_observed, in_flight)
+            await anyio.sleep(0.01)
+            in_flight -= 1
+            return make_response({})
+
+        mock_client = mocker.AsyncMock(spec=httpx.AsyncClient)
+        mock_client.request.side_effect = tracking_request
+        client._client = mock_client
+
+        async with anyio.create_task_group() as tg:
+            for _ in range(num_requests):
+                tg.start_soon(client._request, "GET", "https://example.com")
+
+        assert max_observed == max_concurrent_requests
