@@ -219,8 +219,10 @@ def _coerce_guid(series: pd.Series) -> pd.Series:
     null_mask = series.isna()
     result = series.astype(str).str.upper().astype(object)
 
-    needs_braces = ~null_mask & ~result.str.startswith("{")
-    result[needs_braces] = "{" + result[needs_braces] + "}"
+    non_null = result[~null_mask]
+    needs_braces = ~non_null.str.startswith("{")
+    non_null[needs_braces] = "{" + non_null[needs_braces] + "}"
+    result[~null_mask] = non_null
     result[null_mask] = None
 
     return result
