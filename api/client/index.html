@@ -761,7 +761,9 @@
 <p>Manages an internal httpx.AsyncClient with lazy initialization. Enforces
 f=json on all requests (preserving f=geojson when explicitly set), handles
 token refresh on 498/499 responses, and raises for HTTP-level errors before
-ESRI envelope errors are inspected.</p>
+ESRI envelope errors are inspected. Bounds the number of concurrent
+in-flight requests so fan-out callers (batched applyEdits, paged query,
+bulk attachment operations) can't overrun the connection pool.</p>
 <p>Can be used as an async context manager or instantiated directly; in the
 latter case call aclose() manually when done.</p>
 
@@ -834,7 +836,7 @@ latter case call aclose() manually when done.</p>
 
 
 <h3 id="archibald.client.ArchieClient.__init__" class="doc doc-heading">
-            <code class="highlight language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">base_url</span><span class="p">,</span> <span class="n">auth</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">60.0</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">base_url</span><span class="p">,</span> <span class="n">auth</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">60.0</span><span class="p">,</span> <span class="n">max_concurrent_requests</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span></code>
 
 </h3>
 
@@ -903,6 +905,30 @@ Applied to all requests unless overridden per-request via kwargs.</p>
             </td>
             <td>
                   <code>60.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_concurrent_requests</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Maximum number of requests in flight at
+once, shared across all callers (query paging, attachment
+fan-out, applyEdits batching, ...). Defaults to 20, matching
+httpx's own max_keepalive_connections default — comfortably
+under its max_connections=100 pool ceiling, so this cannot
+reproduce a PoolTimeout regardless of how many batches/pages/
+attachments a caller fans out. Raise or lower it based on what
+the target ArcGIS Server instance's own service concurrency
+is known to tolerate.</p>
+              </div>
+            </td>
+            <td>
+                  <code>20</code>
             </td>
           </tr>
       </tbody>
