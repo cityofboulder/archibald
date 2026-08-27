@@ -204,6 +204,28 @@ def _coerce_string(series: pd.Series, max_length: int | None = None) -> pd.Serie
     return result
 
 
+def _coerce_guid(series: pd.Series) -> pd.Series:
+    """Coerce a Series to GUID strings for ESRI JSON serialization.
+
+    Null values (None, pd.NA, NaN) are preserved as None rather than converted
+    to the strings "None", "<NA>", or "nan". Non-null values are cast to str,
+    uppercased, and braces are added if missing.
+
+    Args:
+        series: Source Series.
+    Returns:
+        Object-dtype Series with Python str values and None for nulls.
+    """
+    null_mask = series.isna()
+    result = series.astype(str).str.upper().astype(object)
+
+    needs_braces = ~null_mask & ~result.str.startswith("{")
+    result[needs_braces] = "{" + result[needs_braces] + "}"
+    result[null_mask] = None
+
+    return result
+
+
 # Dispatch: maps each ESRI type to callable(series, field_def) → object Series.
 # field_def is the raw field dict from FieldsResult.fields (may be None).
 PANDAS_TO_ESRI: dict[str, Callable[[pd.Series, dict | None], pd.Series]] = {
@@ -214,8 +236,8 @@ PANDAS_TO_ESRI: dict[str, Callable[[pd.Series, dict | None], pd.Series]] = {
     "esriFieldTypeSingle": lambda s, f: _coerce_float(s),
     "esriFieldTypeDouble": lambda s, f: _coerce_float(s),
     "esriFieldTypeDate": lambda s, f: _coerce_datetime(s),
-    "esriFieldTypeGUID": lambda s, f: _coerce_string(s),
-    "esriFieldTypeGlobalID": lambda s, f: _coerce_string(s),
+    "esriFieldTypeGUID": lambda s, f: _coerce_guid(s),
+    "esriFieldTypeGlobalID": lambda s, f: _coerce_guid(s),
     "esriFieldTypeXML": lambda s, f: _coerce_string(s),
     "esriFieldTypeString": lambda s, f: _coerce_string(s, (f or {}).get("length")),
     # esriFieldTypeGeometry: handled by geopandas, not in the editable field set
