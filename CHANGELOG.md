@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-08-27
+
+### Fixed
+
+- `ArchieClient` now bounds the number of concurrent in-flight requests (default 20, matching httpx's own `max_keepalive_connections` default; tunable via the new `max_concurrent_requests` constructor parameter). Previously, fan-out callers like `apply_edits()` batching launched every batch POST at once with no cap, which could exhaust the underlying `httpx` connection pool on large payloads (e.g. ~188k records split into dozens of batches) and raise `httpx.PoolTimeout`, aborting the whole operation via `anyio`'s task-group cancellation. The limit is enforced once in `ArchieClient._request()`, so it also protects query paging and bulk attachment operations.
+
 ## [1.2.1] - 2026-08-27
 
 ### Fixed
@@ -134,7 +140,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - When an async `applyEdits` job completes, the operation now follows the `resultUrl` returned in the status body to fetch the actual edit results (`addResults`, `updateResults`, `deleteResults`). Previously the status body itself was parsed as the result, which always produced empty result sets.
 - Async polling loop is now bounded by `anyio.fail_after`; previously it could spin indefinitely if the server never returned a terminal status.
 
-[Unreleased]: https://github.com/cityofboulder/archibald/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/cityofboulder/archibald/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/cityofboulder/archibald/compare/v1.2.2...v1.2.1
 [1.2.1]: https://github.com/cityofboulder/archibald/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/cityofboulder/archibald/compare/v1.1.4...v1.2.0
 [1.1.4]: https://github.com/cityofboulder/archibald/compare/v1.1.3...v1.1.4
