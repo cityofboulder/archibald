@@ -11,6 +11,7 @@ import pytest
 from archibald.serializers._coercions import (
     _coerce_datetime,
     _coerce_float,
+    _coerce_guid,
     _coerce_integer,
     _coerce_string,
     enforce_types,
@@ -383,6 +384,44 @@ class TestCoerceString:
         result = _coerce_string(series)
 
         assert result.tolist() == ["1", "2", "3"]
+
+
+class TestCoerceGuid:
+    @pytest.mark.parametrize(
+        "value, expected",
+        [
+            ("abc-123", "{ABC-123}"),
+            ("{abc-123}", "{ABC-123}"),
+            ("{ABC-123}", "{ABC-123}"),
+        ],
+        ids=["no-braces-lowercase", "braces-lowercase", "braces-uppercase"],
+    )
+    def test_value_uppercased_with_braces(self, value, expected):
+        series = pd.Series([value], name="col")
+
+        result = _coerce_guid(series)
+
+        assert result.iloc[0] == expected
+
+    @pytest.mark.parametrize(
+        "null_value",
+        [None, pd.NA, float("nan")],
+        ids=["none", "pd-na", "float-nan"],
+    )
+    def test_null_values_become_none_not_string(self, null_value):
+        series = pd.Series([null_value], name="col", dtype=object)
+
+        result = _coerce_guid(series)
+
+        assert result.iloc[0] is None
+
+    def test_mixed_null_and_valid_values(self):
+        series = pd.Series([None, "abc-123"], name="col", dtype=object)
+
+        result = _coerce_guid(series)
+
+        assert result.iloc[0] is None
+        assert result.iloc[1] == "{ABC-123}"
 
 
 class TestEnforceTypes:
