@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `add_attachments()` and `update_attachments()` no longer abort the whole batch when ESRI rejects a single file (e.g. an [unsupported attachment type](https://developers.arcgis.com/documentation/glossary/attachment/), which the server answers with an `AuthorizationError`). Previously the exception was raised inside the `anyio` task group, cancelling every sibling upload and discarding all per-item results. Server rejections are now returned as `success=False` items in `AttachmentsResult` carrying the raw server error dict, so `has_failures` and `failed` report them. Callers that wrapped these methods in `try/except AuthorizationError` (or `ArcGISError`) should check `has_failures` instead.
+
 ## [1.2.2] - 2026-08-27
 
 ### Fixed
