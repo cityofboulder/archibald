@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 from archibald.auth import ArcGISAuth, UserTokenAuth
 from archibald.client import ArchieClient
 from archibald.errors import handle_esri_errors
+from archibald.exceptions import ArcGISError, AuthorizationError
 from archibald.models import (
     AttachmentsResult,
     ApplyEditsResult,
@@ -210,6 +211,53 @@ def make_esri_update_attachment_response(
             "error": None,
         }
     }
+
+
+def make_arcgis_error(
+    exc_class: type[ArcGISError] = AuthorizationError,
+    code: int = 403,
+    message: str = "Unsupported attachment type.",
+) -> ArcGISError:
+    """Build an ArcGISError the way parse_esri_error does, for use in tests.
+
+    Args:
+        exc_class: ArcGISError subclass to instantiate.
+        code: ESRI error code.
+        message: ESRI error message.
+
+    Returns:
+        Exception whose ``raw_response`` is the full ``{"error": {...}}`` envelope.
+    """
+    return exc_class(
+        code=code,
+        message=message,
+        raw_response={"error": {"code": code, "message": message}},
+    )
+
+
+def make_rejecting_post(
+    rejected_filenames: set[str],
+    exc: Exception,
+    success_body: dict,
+):
+    """Build an async ``client.post`` side effect that rejects chosen filenames.
+
+    Args:
+        rejected_filenames: Multipart attachment filenames that should raise.
+        exc: Exception raised for a rejected filename.
+        success_body: JSON body returned for every other filename.
+
+    Returns:
+        Async callable usable as ``client.post.side_effect``.
+    """
+
+    async def post(*, endpoint: str, files: dict, **kwargs) -> httpx.Response:
+        """Raise exc for rejected filenames, otherwise return success_body."""
+        if files["attachment"][0] in rejected_filenames:
+            raise exc
+        return make_response(success_body)
+
+    return post
 
 
 def make_esri_delete_attachments_response(

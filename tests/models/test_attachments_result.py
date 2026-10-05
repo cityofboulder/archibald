@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from archibald.models.attachments_result import AttachmentsResult
 from tests.helpers import make_attachment_result_item
@@ -77,11 +78,16 @@ class TestAttachmentsResultToFrame:
         assert df.loc[0, "global_id"] == "{ABC}"
         assert bool(df.loc[0, "success"]) is True
 
-    def test_flattens_error_dict_into_prefixed_columns(self):
+    @pytest.mark.parametrize(
+        "message_key",
+        ["description", "message"],
+        ids=["per-item-description", "envelope-message"],
+    )
+    def test_flattens_error_dict_into_prefixed_columns(self, message_key):
         result = AttachmentsResult(
             results=[
                 make_attachment_result_item(
-                    1, success=False, error={"code": 400, "description": "Bad request"}
+                    1, success=False, error={"code": 400, message_key: "Bad request"}
                 ),
             ]
         )
@@ -89,7 +95,7 @@ class TestAttachmentsResultToFrame:
         df = result.to_frame()
 
         assert df.loc[0, "error_code"] == 400
-        assert df.loc[0, "error_description"] == "Bad request"
+        assert df.loc[0, f"error_{message_key}"] == "Bad request"
 
     def test_error_columns_are_nan_for_successful_rows(self):
         result = AttachmentsResult(

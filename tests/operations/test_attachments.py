@@ -3,15 +3,28 @@ from pathlib import Path
 
 import pytest
 
-from archibald.exceptions import InvalidParameterError
+from archibald.exceptions import (
+    AuthorizationError,
+    InvalidParameterError,
+    NotFoundError,
+    ServiceError,
+)
 from archibald.models.edit_result_item import EditResultItem
 from archibald.operations.attachments import AddAttachmentsOperation
 from tests.helpers import (
+    make_arcgis_error,
     make_esri_add_attachment_response,
     make_esri_delete_attachments_response,
     make_esri_update_attachment_response,
+    make_rejecting_post,
     make_response,
 )
+
+ESRI_ERROR_CASES = [
+    pytest.param(AuthorizationError, 403, id="authorization"),
+    pytest.param(NotFoundError, 404, id="not-found"),
+    pytest.param(ServiceError, 500, id="service"),
+]
 
 
 class TestResolveFilename:
@@ -199,6 +212,29 @@ class TestAddAttachmentsPostOne:
         assert result.object_id == 77
         assert result.success is True
 
+    @pytest.mark.anyio
+    @pytest.mark.parametrize("exc_class, code", ESRI_ERROR_CASES)
+    async def test_post_one_returns_failed_item_when_server_rejects(
+        self, add_attachments_op, exc_class, code
+    ):
+        add_attachments_op._layer._client.post.side_effect = make_arcgis_error(
+            exc_class, code, "Rejected."
+        )
+
+        result = await add_attachments_op._post_one(5, b"data", "img.exe", "image/jpeg")
+
+        assert result.success is False
+        assert result.object_id == -1
+        assert result.global_id is None
+        assert result.error == {"code": code, "message": "Rejected."}
+
+    @pytest.mark.anyio
+    async def test_post_one_raises_when_error_is_not_arcgis(self, add_attachments_op):
+        add_attachments_op._layer._client.post.side_effect = OSError("boom")
+
+        with pytest.raises(OSError, match="boom"):
+            await add_attachments_op._post_one(5, b"data", "img.jpg", "image/jpeg")
+
 
 class TestAddAttachmentsExecute:
     @pytest.mark.anyio
@@ -249,6 +285,38 @@ class TestAddAttachmentsExecute:
         with pytest.raises(InvalidParameterError):
             await add_attachments_op.execute([1, 2], [b"a"])
 
+    @pytest.mark.anyio
+    async def test_execute_reports_rejected_file_in_position_when_siblings_succeed(
+        self, add_attachments_op
+    ):
+        add_attachments_op._layer._client.post.side_effect = make_rejecting_post(
+            {"bad.exe"}, make_arcgis_error(), make_esri_add_attachment_response(99)
+        )
+
+        result = await add_attachments_op.execute(
+            [1, 2, 3], [b"a", b"b", b"c"], ["a.jpg", "bad.exe", "c.jpg"]
+        )
+
+        assert [r.success for r in result.results] == [True, False, True]
+        assert result.has_failures is True
+        assert result.failed == [result.results[1]]
+
+    @pytest.mark.anyio
+    async def test_execute_does_not_raise_when_all_files_rejected(
+        self, add_attachments_op
+    ):
+        add_attachments_op._layer._client.post.side_effect = make_rejecting_post(
+            {"a.exe", "b.exe"},
+            make_arcgis_error(),
+            make_esri_add_attachment_response(99),
+        )
+
+        result = await add_attachments_op.execute(
+            [1, 2], [b"a", b"b"], ["a.exe", "b.exe"]
+        )
+
+        assert len(result.failed) == 2
+
 
 class TestUpdateAttachmentsPostOne:
     @pytest.mark.anyio
@@ -290,6 +358,25 @@ class TestUpdateAttachmentsPostOne:
         assert result.object_id == 77
         assert result.success is True
 
+    @pytest.mark.anyio
+    @pytest.mark.parametrize("exc_class, code", ESRI_ERROR_CASES)
+    async def test_post_one_returns_failed_item_when_server_rejects(
+        self, update_attachments_op, exc_class, code
+    ):
+        update_attachments_op._layer._client.post.side_effect = make_arcgis_error(
+            exc_class, code, "Rejected."
+        )
+
+        result = await update_attachments_op._post_one(
+            5, b"data", "img.exe", "image/jpeg", 42
+        )
+        call = update_attachments_op._layer._client.post.call_args
+
+        assert result.success is False
+        assert result.object_id == -1
+        assert result.error == {"code": code, "message": "Rejected."}
+        assert call.kwargs["data"] == {"attachmentId": 42}
+
 
 class TestUpdateAttachmentsExecute:
     @pytest.mark.anyio
@@ -313,6 +400,24 @@ class TestUpdateAttachmentsExecute:
         )
 
         assert captured == {1: 10, 2: 11}
+
+    @pytest.mark.anyio
+    async def test_execute_reports_rejected_file_in_position_when_siblings_succeed(
+        self, update_attachments_op
+    ):
+        update_attachments_op._layer._client.post.side_effect = make_rejecting_post(
+            {"bad.exe"}, make_arcgis_error(), make_esri_update_attachment_response(99)
+        )
+
+        result = await update_attachments_op.execute(
+            [1, 2, 3],
+            [b"a", b"b", b"c"],
+            ["a.jpg", "bad.exe", "c.jpg"],
+            attachment_ids=[10, 11, 12],
+        )
+
+        assert [r.success for r in result.results] == [True, False, True]
+        assert result.failed == [result.results[1]]
 
 
 class TestDeleteForObject:
