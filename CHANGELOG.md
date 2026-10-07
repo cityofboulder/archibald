@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `QueryOperation` now sends `/query` requests (initial, count, and paging) as POST with a form-encoded body instead of GET. Long `where` clauses, such as large `OBJECTID IN (...)` lists, previously exceeded server and proxy URL length limits and failed.
+
 ## [1.2.2] - 2026-08-27
 
 ### Fixed
