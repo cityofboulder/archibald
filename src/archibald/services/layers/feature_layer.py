@@ -126,6 +126,11 @@ class FeatureLayer(FeatureService, BaseLayer):
 
         Returns:
             AttachmentsResult with one result per input file, in input order.
+            ESRI only accepts a fixed set of file formats (see
+            https://developers.arcgis.com/documentation/glossary/attachment/).
+            Files the server rejects, such as unsupported types, are returned
+            as ``success=False`` results (see ``has_failures`` and ``failed``)
+            rather than raised, and do not abort the other uploads.
 
         Raises:
             LayerCapabilityError: If the layer does not support attachments.
@@ -177,6 +182,11 @@ class FeatureLayer(FeatureService, BaseLayer):
 
         Returns:
             AttachmentsResult with one result per input file, in input order.
+            ESRI only accepts a fixed set of file formats (see
+            https://developers.arcgis.com/documentation/glossary/attachment/).
+            Files the server rejects, such as unsupported types, are returned
+            as ``success=False`` results (see ``has_failures`` and ``failed``)
+            rather than raised, and do not abort the other updates.
 
         Raises:
             LayerCapabilityError: If the layer does not support attachments or

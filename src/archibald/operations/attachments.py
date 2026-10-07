@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, BinaryIO, Iterable
 
 import anyio
 
-from archibald.exceptions import InvalidParameterError
+from archibald.exceptions import ArcGISError, InvalidParameterError
 from archibald.models.attachments_result import AttachmentsResult
 from archibald.models.edit_result_item import EditResultItem
 
@@ -25,6 +25,11 @@ class BaseAttachmentUploadOperation:
     resolution, MIME-type guessing, file reading, and concurrent POSTs. Holds a
     reference to its owning FeatureLayer to access the client and layer path.
     Instantiated once at FeatureLayer.__init__ time.
+
+    ESRI rejects some uploads outright (e.g. unsupported file types, see
+    https://developers.arcgis.com/documentation/glossary/attachment/). Such
+    rejections are captured per item as ``success=False`` results rather than
+    raised, so one bad file never aborts the other concurrent uploads.
     """
 
     _endpoint: str
@@ -64,6 +69,8 @@ class BaseAttachmentUploadOperation:
 
         Returns:
             AttachmentsResult with one result per input item, in input order.
+            Items ESRI rejected (e.g. unsupported file types) appear as
+            ``success=False`` results carrying the server's error dict.
 
         Raises:
             InvalidParameterError: If any iterables differ in length, or if a
@@ -200,16 +207,24 @@ class BaseAttachmentUploadOperation:
 
         Returns:
             EditResultItem parsed from the ``f"{self._endpoint}Result"`` response.
+            If ESRI rejects the request with an error envelope (e.g. an
+            unsupported file type), a ``success=False`` item carrying the raw
+            server error dict is returned instead of raising. Its ``object_id``
+            is ``-1``.
         """
         endpoint = f"{self._layer._layer_path}/{object_id}/{self._endpoint}"
         data = {} if attachment_id is None else {"attachmentId": attachment_id}
         body = await self._read_file(file)
-        response = await self._layer._client.post(
-            endpoint=endpoint,
-            data=data,
-            files={"attachment": (filename, body, content_type)},
-        )
-        return EditResultItem._from_esri(response.json()[f"{self._endpoint}Result"])
+        try:
+            response = await self._layer._client.post(
+                endpoint=endpoint,
+                data=data,
+                files={"attachment": (filename, body, content_type)},
+            )
+            item = response.json()[f"{self._endpoint}Result"]
+        except ArcGISError as exc:
+            item = exc.raw_response
+        return EditResultItem._from_esri(item)  # type: ignore[arg-type]
 
     @staticmethod
     async def _read_file(file: Path | BinaryIO | bytes) -> bytes:

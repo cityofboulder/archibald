@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-10-07
+
+### Fixed
+
+- `add_attachments()` and `update_attachments()` no longer abort the whole batch when ESRI rejects a single file (e.g. an [unsupported attachment type](https://developers.arcgis.com/documentation/glossary/attachment/), which the server answers with an `AuthorizationError`). Previously the exception was raised inside the `anyio` task group, cancelling every sibling upload and discarding all per-item results. Server rejections are now returned as `success=False` items in `AttachmentsResult` carrying the raw server error dict, so `has_failures` and `failed` report them. Callers that wrapped these methods in `try/except AuthorizationError` (or `ArcGISError`) should check `has_failures` instead.
+
 ## [1.2.2] - 2026-08-27
 
 ### Fixed
@@ -140,7 +146,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - When an async `applyEdits` job completes, the operation now follows the `resultUrl` returned in the status body to fetch the actual edit results (`addResults`, `updateResults`, `deleteResults`). Previously the status body itself was parsed as the result, which always produced empty result sets.
 - Async polling loop is now bounded by `anyio.fail_after`; previously it could spin indefinitely if the server never returned a terminal status.
 
-[Unreleased]: https://github.com/cityofboulder/archibald/compare/v1.2.2...HEAD
+[Unreleased]: https://github.com/cityofboulder/archibald/compare/v1.2.3...HEAD
+[1.2.3]: https://github.com/cityofboulder/archibald/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/cityofboulder/archibald/compare/v1.2.2...v1.2.1
 [1.2.1]: https://github.com/cityofboulder/archibald/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/cityofboulder/archibald/compare/v1.1.4...v1.2.0

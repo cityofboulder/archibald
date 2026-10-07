@@ -492,6 +492,10 @@ result = await layer.add_attachments(
 )
 ```
 
+#### Supported file types
+
+ESRI only accepts a fixed set of attachment formats; see the [ESRI attachment glossary](https://developers.arcgis.com/documentation/glossary/attachment/) for the current list. `archibald` does not validate file types itself. The server decides, and a file it rejects is reported in the result rather than raised (see [Checking for failures](#checking-for-failures_1)), so one unsupported file never aborts the other uploads in the same call.
+
 ### Updating attachments
 
 `update_attachments()` replaces the file of an existing attachment identified by its attachment ID. The calling modes mirror `add_attachments()`, with an added `attachment_ids` argument:
@@ -551,8 +555,26 @@ if result.has_failures:
 
 # Inspect all results as a DataFrame
 df = result.to_frame()
-# Columns: object_id, global_id, success, error_code, error_description
+# Columns: object_id, global_id, success, plus error_* columns for failed rows
 ```
+
+`add_attachments()` and `update_attachments()` also record requests that ESRI rejects outright, such as a file with an unsupported type, as `success=False` items instead of raising an exception. Results are always one per input file, in input order, so a failure lines up with the file that caused it:
+
+```python
+files = [Path("a.jpg"), Path("macro.exe"), Path("c.pdf")]
+result = await layer.add_attachments(object_ids=[42, 43, 44], files=files)
+
+for path, item in zip(files, result.results):
+    if not item.success:
+        print(f"{path} rejected: {item.error}")
+```
+
+Two details differ for these rejected items:
+
+- `object_id` is `-1`, because no attachment was created or identified. This applies to `update_attachments()` too.
+- `error` is the server's raw error dict, which uses a `message` key (`{"code": 403, "message": "..."}`). Per-attachment failures that ESRI reports inside a normal response use `description` instead, so `to_frame()` has `error_message` or `error_description` columns respectively.
+
+Because every ESRI error from these two methods is captured this way, always check `has_failures`. A `try/except arc.AuthorizationError` around `add_attachments()` or `update_attachments()` will no longer fire, and a systemic problem such as a bad token shows up as every item failed. `delete_attachments()` is unchanged and still raises on a rejected request.
 
 ---
 
@@ -575,6 +597,8 @@ except arc.ArcGISError as e:
 ```
 
 Token errors (`TokenExpiredError`, `TokenMissingError`) are handled internally by `ArchieClient` — it will attempt a refresh before propagating the exception, so you typically won't need to catch them.
+
+`add_attachments()` and `update_attachments()` are the exception to this rule: retries will still happen, but `ArcGISError` will no longer be raised, instead it is captured per file and returned as a failed item in the `AttachmentsResult` (see [Attachments](#checking-for-failures_1)).
 
 ### Client errors
 
