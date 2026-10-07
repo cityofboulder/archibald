@@ -771,6 +771,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Adding attachments">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#supported-file-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supported file types
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
           <li class="md-nav__item">
@@ -1536,6 +1553,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Adding attachments">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#supported-file-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supported file types
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
           <li class="md-nav__item">
@@ -2026,6 +2060,8 @@
 <a id="__codelineno-30-4" name="__codelineno-30-4" href="#__codelineno-30-4"></a>    <span class="n">filenames</span><span class="o">=</span><span class="s2">&quot;capture.png&quot;</span><span class="p">,</span>
 <a id="__codelineno-30-5" name="__codelineno-30-5" href="#__codelineno-30-5"></a><span class="p">)</span>
 </code></pre></div>
+<h4 id="supported-file-types">Supported file types</h4>
+<p>ESRI only accepts a fixed set of attachment formats; see the <a href="https://developers.arcgis.com/documentation/glossary/attachment/">ESRI attachment glossary</a> for the current list. <code>archibald</code> does not validate file types itself. The server decides, and a file it rejects is reported in the result rather than raised (see <a href="#checking-for-failures_1">Checking for failures</a>), so one unsupported file never aborts the other uploads in the same call.</p>
 <h3 id="updating-attachments">Updating attachments</h3>
 <p><code>update_attachments()</code> replaces the file of an existing attachment identified by its attachment ID. The calling modes mirror <code>add_attachments()</code>, with an added <code>attachment_ids</code> argument:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a><span class="c1"># Single — replace one attachment</span>
@@ -2074,33 +2110,48 @@
 <a id="__codelineno-33-4" name="__codelineno-33-4" href="#__codelineno-33-4"></a>
 <a id="__codelineno-33-5" name="__codelineno-33-5" href="#__codelineno-33-5"></a><span class="c1"># Inspect all results as a DataFrame</span>
 <a id="__codelineno-33-6" name="__codelineno-33-6" href="#__codelineno-33-6"></a><span class="n">df</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">to_frame</span><span class="p">()</span>
-<a id="__codelineno-33-7" name="__codelineno-33-7" href="#__codelineno-33-7"></a><span class="c1"># Columns: object_id, global_id, success, error_code, error_description</span>
+<a id="__codelineno-33-7" name="__codelineno-33-7" href="#__codelineno-33-7"></a><span class="c1"># Columns: object_id, global_id, success, plus error_* columns for failed rows</span>
 </code></pre></div>
+<p><code>add_attachments()</code> and <code>update_attachments()</code> also record requests that ESRI rejects outright, such as a file with an unsupported type, as <code>success=False</code> items instead of raising an exception. Results are always one per input file, in input order, so a failure lines up with the file that caused it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a><span class="n">files</span> <span class="o">=</span> <span class="p">[</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;a.jpg&quot;</span><span class="p">),</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;macro.exe&quot;</span><span class="p">),</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;c.pdf&quot;</span><span class="p">)]</span>
+<a id="__codelineno-34-2" name="__codelineno-34-2" href="#__codelineno-34-2"></a><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">layer</span><span class="o">.</span><span class="n">add_attachments</span><span class="p">(</span><span class="n">object_ids</span><span class="o">=</span><span class="p">[</span><span class="mi">42</span><span class="p">,</span> <span class="mi">43</span><span class="p">,</span> <span class="mi">44</span><span class="p">],</span> <span class="n">files</span><span class="o">=</span><span class="n">files</span><span class="p">)</span>
+<a id="__codelineno-34-3" name="__codelineno-34-3" href="#__codelineno-34-3"></a>
+<a id="__codelineno-34-4" name="__codelineno-34-4" href="#__codelineno-34-4"></a><span class="k">for</span> <span class="n">path</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">files</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">results</span><span class="p">):</span>
+<a id="__codelineno-34-5" name="__codelineno-34-5" href="#__codelineno-34-5"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">item</span><span class="o">.</span><span class="n">success</span><span class="p">:</span>
+<a id="__codelineno-34-6" name="__codelineno-34-6" href="#__codelineno-34-6"></a>        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2"> rejected: </span><span class="si">{</span><span class="n">item</span><span class="o">.</span><span class="n">error</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p>Two details differ for these rejected items:</p>
+<ul>
+<li><code>object_id</code> is <code>-1</code>, because no attachment was created or identified. This applies to <code>update_attachments()</code> too.</li>
+<li><code>error</code> is the server's raw error dict, which uses a <code>message</code> key (<code>{"code": 403, "message": "..."}</code>). Per-attachment failures that ESRI reports inside a normal response use <code>description</code> instead, so <code>to_frame()</code> has <code>error_message</code> or <code>error_description</code> columns respectively.</li>
+</ul>
+<p>Because every ESRI error from these two methods is captured this way, always check <code>has_failures</code>. A <code>try/except arc.AuthorizationError</code> around <code>add_attachments()</code> or <code>update_attachments()</code> will no longer fire, and a systemic problem such as a bad token shows up as every item failed. <code>delete_attachments()</code> is unchanged and still raises on a rejected request.</p>
 <hr />
 <h2 id="error-handling">Error handling</h2>
 <h3 id="esri-errors">ESRI errors</h3>
 <p><code>ArcGISError</code> is raised when ESRI returns an error envelope in the response body (even on HTTP 200). Catch specific subtypes for recoverable conditions:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a><span class="k">try</span><span class="p">:</span>
-<a id="__codelineno-34-2" name="__codelineno-34-2" href="#__codelineno-34-2"></a>    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">layer</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">where</span><span class="o">=</span><span class="s2">&quot;invalid syntax </span><span class="si">%%</span><span class="s2">&quot;</span><span class="p">)</span>
-<a id="__codelineno-34-3" name="__codelineno-34-3" href="#__codelineno-34-3"></a><span class="k">except</span> <span class="n">arc</span><span class="o">.</span><span class="n">AuthorizationError</span><span class="p">:</span>
-<a id="__codelineno-34-4" name="__codelineno-34-4" href="#__codelineno-34-4"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Check service permissions&quot;</span><span class="p">)</span>
-<a id="__codelineno-34-5" name="__codelineno-34-5" href="#__codelineno-34-5"></a><span class="k">except</span> <span class="n">arc</span><span class="o">.</span><span class="n">NotFoundError</span><span class="p">:</span>
-<a id="__codelineno-34-6" name="__codelineno-34-6" href="#__codelineno-34-6"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Layer or service not found&quot;</span><span class="p">)</span>
-<a id="__codelineno-34-7" name="__codelineno-34-7" href="#__codelineno-34-7"></a><span class="k">except</span> <span class="n">arc</span><span class="o">.</span><span class="n">ArcGISError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-<a id="__codelineno-34-8" name="__codelineno-34-8" href="#__codelineno-34-8"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ESRI error </span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">code</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">message</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-<a id="__codelineno-34-9" name="__codelineno-34-9" href="#__codelineno-34-9"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Details:&quot;</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">details</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a><span class="k">try</span><span class="p">:</span>
+<a id="__codelineno-35-2" name="__codelineno-35-2" href="#__codelineno-35-2"></a>    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">layer</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">where</span><span class="o">=</span><span class="s2">&quot;invalid syntax </span><span class="si">%%</span><span class="s2">&quot;</span><span class="p">)</span>
+<a id="__codelineno-35-3" name="__codelineno-35-3" href="#__codelineno-35-3"></a><span class="k">except</span> <span class="n">arc</span><span class="o">.</span><span class="n">AuthorizationError</span><span class="p">:</span>
+<a id="__codelineno-35-4" name="__codelineno-35-4" href="#__codelineno-35-4"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Check service permissions&quot;</span><span class="p">)</span>
+<a id="__codelineno-35-5" name="__codelineno-35-5" href="#__codelineno-35-5"></a><span class="k">except</span> <span class="n">arc</span><span class="o">.</span><span class="n">NotFoundError</span><span class="p">:</span>
+<a id="__codelineno-35-6" name="__codelineno-35-6" href="#__codelineno-35-6"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Layer or service not found&quot;</span><span class="p">)</span>
+<a id="__codelineno-35-7" name="__codelineno-35-7" href="#__codelineno-35-7"></a><span class="k">except</span> <span class="n">arc</span><span class="o">.</span><span class="n">ArcGISError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+<a id="__codelineno-35-8" name="__codelineno-35-8" href="#__codelineno-35-8"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ESRI error </span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">code</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">message</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<a id="__codelineno-35-9" name="__codelineno-35-9" href="#__codelineno-35-9"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Details:&quot;</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">details</span><span class="p">)</span>
 </code></pre></div>
 <p>Token errors (<code>TokenExpiredError</code>, <code>TokenMissingError</code>) are handled internally by <code>ArchieClient</code> — it will attempt a refresh before propagating the exception, so you typically won't need to catch them.</p>
+<p><code>add_attachments()</code> and <code>update_attachments()</code> are the exception to this rule: retries will still happen, but <code>ArcGISError</code> will no longer be raised, instead it is captured per file and returned as a failed item in the <code>AttachmentsResult</code> (see <a href="#checking-for-failures_1">Attachments</a>).</p>
 <h3 id="client-errors">Client errors</h3>
 <p><code>ArchieClientError</code> and its subclasses cover configuration mistakes and invalid usage:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a><span class="k">try</span><span class="p">:</span>
-<a id="__codelineno-35-2" name="__codelineno-35-2" href="#__codelineno-35-2"></a>    <span class="n">layer</span> <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">FeatureLayer</span><span class="p">(</span>
-<a id="__codelineno-35-3" name="__codelineno-35-3" href="#__codelineno-35-3"></a>        <span class="n">client</span><span class="o">=</span><span class="n">client</span><span class="p">,</span>
-<a id="__codelineno-35-4" name="__codelineno-35-4" href="#__codelineno-35-4"></a>        <span class="n">service_path</span><span class="o">=</span><span class="s2">&quot;MyService/MapServer&quot;</span><span class="p">,</span>  <span class="c1"># wrong service type</span>
-<a id="__codelineno-35-5" name="__codelineno-35-5" href="#__codelineno-35-5"></a>        <span class="n">layer_id</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-<a id="__codelineno-35-6" name="__codelineno-35-6" href="#__codelineno-35-6"></a>    <span class="p">)</span>
-<a id="__codelineno-35-7" name="__codelineno-35-7" href="#__codelineno-35-7"></a><span class="k">except</span> <span class="n">arc</span><span class="o">.</span><span class="n">InvalidServiceURL</span><span class="p">:</span>
-<a id="__codelineno-35-8" name="__codelineno-35-8" href="#__codelineno-35-8"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;FeatureLayer requires a FeatureServer path&quot;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-36-1" name="__codelineno-36-1" href="#__codelineno-36-1"></a><span class="k">try</span><span class="p">:</span>
+<a id="__codelineno-36-2" name="__codelineno-36-2" href="#__codelineno-36-2"></a>    <span class="n">layer</span> <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">FeatureLayer</span><span class="p">(</span>
+<a id="__codelineno-36-3" name="__codelineno-36-3" href="#__codelineno-36-3"></a>        <span class="n">client</span><span class="o">=</span><span class="n">client</span><span class="p">,</span>
+<a id="__codelineno-36-4" name="__codelineno-36-4" href="#__codelineno-36-4"></a>        <span class="n">service_path</span><span class="o">=</span><span class="s2">&quot;MyService/MapServer&quot;</span><span class="p">,</span>  <span class="c1"># wrong service type</span>
+<a id="__codelineno-36-5" name="__codelineno-36-5" href="#__codelineno-36-5"></a>        <span class="n">layer_id</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+<a id="__codelineno-36-6" name="__codelineno-36-6" href="#__codelineno-36-6"></a>    <span class="p">)</span>
+<a id="__codelineno-36-7" name="__codelineno-36-7" href="#__codelineno-36-7"></a><span class="k">except</span> <span class="n">arc</span><span class="o">.</span><span class="n">InvalidServiceURL</span><span class="p">:</span>
+<a id="__codelineno-36-8" name="__codelineno-36-8" href="#__codelineno-36-8"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;FeatureLayer requires a FeatureServer path&quot;</span><span class="p">)</span>
 </code></pre></div>
 <p>See the <a href="../api/exceptions/">Exceptions reference</a> for the full hierarchy.</p>
 
