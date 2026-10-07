@@ -1,5 +1,7 @@
 """Integration tests for FeatureLayer — full stack with mocked HTTP transport."""
 
+from urllib.parse import parse_qsl
+
 import httpx
 import pytest
 
@@ -20,7 +22,7 @@ class TestQueryRoundTrip:
     async def test_returns_query_result_with_correct_features(
         self, layer, standard_routes
     ):
-        standard_routes.get(QUERY_URL).mock(
+        standard_routes.post(QUERY_URL).mock(
             return_value=httpx.Response(200, json={"features": FEATURES})
         )
 
@@ -31,7 +33,7 @@ class TestQueryRoundTrip:
 
     @pytest.mark.anyio
     async def test_auth_token_injected_into_request(self, layer, standard_routes):
-        query_route = standard_routes.get(QUERY_URL).mock(
+        query_route = standard_routes.post(QUERY_URL).mock(
             return_value=httpx.Response(200, json={"features": []})
         )
 
@@ -47,7 +49,7 @@ class TestQueryRoundTrip:
     ):
         # standard_routes provides SERVICE_URL → {"spatialReference": {"latestWkid": 4326}}
         # With no out_sr, execute() falls back to layer.crs() → 4326.
-        standard_routes.get(QUERY_URL).mock(
+        standard_routes.post(QUERY_URL).mock(
             return_value=httpx.Response(200, json={"features": []})
         )
 
@@ -60,7 +62,7 @@ class TestQueryPagination:
     @pytest.mark.anyio
     async def test_aggregates_features_across_pages(self, layer, standard_routes):
         def query_side_effect(request):
-            params = dict(request.url.params)
+            params = dict(parse_qsl(request.content.decode()))
             if params.get("returnCountOnly") == "true":
                 return httpx.Response(200, json={"count": 1500})
             if "resultOffset" in params:
@@ -69,7 +71,7 @@ class TestQueryPagination:
                 200, json={"features": [FEATURES[0]], "exceededTransferLimit": True}
             )
 
-        standard_routes.get(QUERY_URL).mock(side_effect=query_side_effect)
+        standard_routes.post(QUERY_URL).mock(side_effect=query_side_effect)
 
         result = await layer.query(return_geometry=False)
 
@@ -79,7 +81,7 @@ class TestQueryPagination:
 class TestQueryErrors:
     @pytest.mark.anyio
     async def test_esri_error_propagates_as_arcgis_error(self, layer, standard_routes):
-        standard_routes.get(QUERY_URL).mock(
+        standard_routes.post(QUERY_URL).mock(
             return_value=httpx.Response(
                 200,
                 json={
@@ -99,7 +101,7 @@ class TestQueryErrors:
                 json={**LAYER_METADATA, "capabilities": "Create,Update,Delete"},
             )
         )
-        query_route = http.get(QUERY_URL).mock(
+        query_route = http.post(QUERY_URL).mock(
             return_value=httpx.Response(200, json={"features": []})
         )
 
