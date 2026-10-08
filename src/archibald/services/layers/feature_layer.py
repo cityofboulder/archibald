@@ -130,7 +130,12 @@ class FeatureLayer(FeatureService, BaseLayer):
             https://developers.arcgis.com/documentation/glossary/attachment/).
             Files the server rejects, such as unsupported types, are returned
             as ``success=False`` results (see ``has_failures`` and ``failed``)
-            rather than raised, and do not abort the other uploads.
+            rather than raised, as is any other per-file failure (unreadable
+            file, transport error, HTTP error status, malformed response);
+            none of them abort the other uploads. Failures that did not come
+            from an ESRI error dict carry ``error["exception"]`` and
+            ``error["outcome_unknown"]``. When the latter is True the server
+            may have attached the file anyway, so retrying could duplicate it.
 
         Raises:
             LayerCapabilityError: If the layer does not support attachments.
@@ -186,7 +191,12 @@ class FeatureLayer(FeatureService, BaseLayer):
             https://developers.arcgis.com/documentation/glossary/attachment/).
             Files the server rejects, such as unsupported types, are returned
             as ``success=False`` results (see ``has_failures`` and ``failed``)
-            rather than raised, and do not abort the other updates.
+            rather than raised, as is any other per-file failure (unreadable
+            file, transport error, HTTP error status, malformed response);
+            none of them abort the other updates. Failures that did not come
+            from an ESRI error dict carry ``error["exception"]`` and
+            ``error["outcome_unknown"]``. When the latter is True the server
+            may have replaced the file anyway; retrying is safe.
 
         Raises:
             LayerCapabilityError: If the layer does not support attachments or
@@ -227,6 +237,13 @@ class FeatureLayer(FeatureService, BaseLayer):
 
         Returns:
             AttachmentsResult with one result per input pair, in input order.
+            If a feature's request fails, every pair in it is returned as a
+            ``success=False`` result (``object_id`` is the attachment ID)
+            rather than raised, and the other features' deletes are
+            unaffected. Failures that did not come from an ESRI error dict
+            carry ``error["exception"]`` and ``error["outcome_unknown"]``. When
+            the latter is True the attachments may have been deleted anyway;
+            a retry can then report them as not found.
 
         Raises:
             LayerCapabilityError: If the layer does not support attachments.

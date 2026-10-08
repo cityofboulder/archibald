@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `add_attachments()` and `update_attachments()` no longer abort the batch when one item fails for a non-ESRI reason (unreadable file, timeout or connection error, HTTP error status, malformed response, failed token refresh). Previously the exception cancelled every sibling upload and discarded completed results. These are now `success=False` items in `AttachmentsResult`, one per input, in order.
+- `delete_attachments()` now returns a failed request as `success=False` items, one per attachment in that feature's request, instead of raising and cancelling the other features' deletes. An attachment missing from the server's response is also a `success=False` item rather than a `KeyError`. Callers that wrapped it in `try/except ArcGISError` should check `has_failures` instead.
+
+### Added
+
+- Failed attachment items not built from an ESRI error dict carry `error["exception"]` (exception class name) and `error["outcome_unknown"]`, which is `True` when the server may have applied the change despite the failure (e.g. a read timeout or 5xx). Retrying an unknown `add_attachments()` could create a duplicate.
+
 ## [1.2.3] - 2026-10-07
 
 ### Fixed

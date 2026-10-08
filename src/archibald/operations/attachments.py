@@ -49,10 +49,20 @@ class BaseAttachmentUploadOperation:
     reference to its owning FeatureLayer to access the client and layer path.
     Instantiated once at FeatureLayer.__init__ time.
 
-    ESRI rejects some uploads outright (e.g. unsupported file types, see
-    https://developers.arcgis.com/documentation/glossary/attachment/). Such
-    rejections are captured per item as ``success=False`` results rather than
-    raised, so one bad file never aborts the other concurrent uploads.
+    Per-item problems never abort the batch. ESRI rejects some uploads outright
+    (e.g. unsupported file types, see
+    https://developers.arcgis.com/documentation/glossary/attachment/), and a
+    single file can also fail locally or in transit (unreadable file, transport
+    error, HTTP error status, malformed response). All of these are captured
+    per item as ``success=False`` results rather than raised, so one bad file
+    never aborts the other concurrent uploads. Failures that did not come from
+    an ESRI error dict carry ``error["exception"]`` (the exception class name)
+    and ``error["outcome_unknown"]``, which is True when the request may have
+    reached the server and the file could have been attached anyway.
+
+    Job-level problems (authentication, a missing layer, an unsupported layer
+    capability, invalid arguments) are not handled here; FeatureLayer and input
+    validation raise them before any upload starts.
     """
 
     _endpoint: str
@@ -93,7 +103,9 @@ class BaseAttachmentUploadOperation:
         Returns:
             AttachmentsResult with one result per input item, in input order.
             Items ESRI rejected (e.g. unsupported file types) appear as
-            ``success=False`` results carrying the server's error dict.
+            ``success=False`` results carrying the server's error dict. Any
+            other per-item failure also appears as a ``success=False`` result
+            (see the class docstring).
 
         Raises:
             InvalidParameterError: If any iterables differ in length, or if a
@@ -297,6 +309,12 @@ class DeleteAttachmentsOperation:
     Accepts flat parallel iterables of feature OBJECTIDs and attachment IDs, groups
     them by OBJECTID internally, and fires one batched DELETE request per unique
     feature concurrently. Instantiated once at FeatureLayer.__init__ time.
+
+    A failed request is captured as ``success=False`` results, one per attachment
+    in that feature's request, rather than raised, so one failing feature never
+    aborts the other deletes. Failures that did not come from an ESRI error dict
+    carry ``error["exception"]`` and ``error["outcome_unknown"]``, which is True
+    when the attachments may have been deleted anyway.
     """
 
     def __init__(self, layer: FeatureLayer) -> None:
@@ -320,6 +338,9 @@ class DeleteAttachmentsOperation:
 
         Returns:
             AttachmentsResult with one result per input pair, in input order.
+            Pairs whose request failed, or that the server omitted from its
+            response, appear as ``success=False`` results whose ``object_id`` is
+            the attachment ID.
 
         Raises:
             InvalidParameterError: If object_ids and attachment_ids differ in length.

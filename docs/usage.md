@@ -558,7 +558,7 @@ df = result.to_frame()
 # Columns: object_id, global_id, success, plus error_* columns for failed rows
 ```
 
-`add_attachments()` and `update_attachments()` also record requests that ESRI rejects outright, such as a file with an unsupported type, as `success=False` items instead of raising an exception. Results are always one per input file, in input order, so a failure lines up with the file that caused it:
+All three methods record per-item failures as `success=False` items instead of raising an exception. That covers requests ESRI rejects outright, such as a file with an unsupported type, and failures that never produced an ESRI response: an unreadable local file, a timeout or connection error, an HTTP error status, or a malformed response. Results are always one per input, in input order, so a failure lines up with the input that caused it:
 
 ```python
 files = [Path("a.jpg"), Path("macro.exe"), Path("c.pdf")]
@@ -569,12 +569,21 @@ for path, item in zip(files, result.results):
         print(f"{path} rejected: {item.error}")
 ```
 
-Two details differ for these rejected items:
+Failed items differ from normal results in a few ways:
 
-- `object_id` is `-1`, because no attachment was created or identified. This applies to `update_attachments()` too.
-- `error` is the server's raw error dict, which uses a `message` key (`{"code": 403, "message": "..."}`). Per-attachment failures that ESRI reports inside a normal response use `description` instead, so `to_frame()` has `error_message` or `error_description` columns respectively.
+- For `add_attachments()` and `update_attachments()`, `object_id` is `-1`, because no attachment was created or identified. For `delete_attachments()`, `object_id` is the attachment ID, as it is for every delete result.
+- When ESRI rejected the request, `error` is the server's raw error dict, which uses a `message` key (`{"code": 403, "message": "..."}`). Per-attachment failures that ESRI reports inside a normal response use `description` instead, so `to_frame()` has `error_message` or `error_description` columns respectively.
+- When the failure did not come from an ESRI error dict, `error` has `code` (`-1` unless the exception carried one), `description`, `exception` (the exception class name), and `outcome_unknown`. Read the flag with `item.error.get("outcome_unknown")`, because ESRI error dicts do not have the key.
 
-Because every ESRI error from these two methods is captured this way, always check `has_failures`. A `try/except arc.AuthorizationError` around `add_attachments()` or `update_attachments()` will no longer fire, and a systemic problem such as a bad token shows up as every item failed. `delete_attachments()` is unchanged and still raises on a rejected request.
+`outcome_unknown` is `True` when the request may have reached the server before it failed (a timeout or dropped connection after connecting, a 5xx status, or a response that could not be parsed). The change may then have been applied even though the item reports `success=False`:
+
+- `add_attachments()`: retrying could create a duplicate attachment, so check the feature's attachments first.
+- `update_attachments()`: retrying is safe.
+- `delete_attachments()`: retrying is safe, but the attachment may already be gone, so a retry can report it as not found.
+
+It is `False` for failures that happened before the request was sent (an unreadable file, a connection failure) and for 4xx statuses.
+
+Always check `has_failures`. A `try/except arc.AuthorizationError` around any of these methods will no longer fire for a single failed item. Problems with the layer itself still raise before any request is sent: bad authentication, a missing layer, a layer without attachment support, and invalid arguments. The first call on a `FeatureLayer` fetches its metadata, which is where most of these surface. A failure that begins after that, such as a token that cannot be refreshed, shows up as every remaining item failed.
 
 ---
 
