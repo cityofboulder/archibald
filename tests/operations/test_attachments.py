@@ -1,6 +1,7 @@
 import io
 from pathlib import Path
 
+import httpx
 import pytest
 
 from archibald.exceptions import (
@@ -8,14 +9,17 @@ from archibald.exceptions import (
     InvalidParameterError,
     NotFoundError,
     ServiceError,
+    TokenRefreshError,
 )
 from archibald.models.edit_result_item import EditResultItem
 from archibald.operations.attachments import AddAttachmentsOperation
 from tests.helpers import (
+    NonRecoverableSignal,
     make_arcgis_error,
     make_esri_add_attachment_response,
     make_esri_delete_attachments_response,
     make_esri_update_attachment_response,
+    make_http_status_error,
     make_rejecting_post,
     make_response,
 )
@@ -24,6 +28,26 @@ ESRI_ERROR_CASES = [
     pytest.param(AuthorizationError, 403, id="authorization"),
     pytest.param(NotFoundError, 404, id="not-found"),
     pytest.param(ServiceError, 500, id="service"),
+]
+
+POST_FAILURES = [
+    pytest.param(make_http_status_error(413), id="http-413"),
+    pytest.param(make_http_status_error(503), id="http-503"),
+    pytest.param(httpx.ReadTimeout("slow"), id="read-timeout"),
+    pytest.param(httpx.ConnectError("refused"), id="connect-error"),
+    pytest.param(TokenRefreshError("refresh failed"), id="token-refresh"),
+    pytest.param(OSError("boom"), id="os-error"),
+]
+
+MALFORMED_RESPONSES = [
+    pytest.param(
+        httpx.Response(200, content=b"<html>not json</html>"),
+        "JSONDecodeError",
+        id="non-json-body",
+    ),
+    pytest.param(
+        make_response({"unexpected": {}}), "KeyError", id="missing-result-key"
+    ),
 ]
 
 
@@ -229,10 +253,65 @@ class TestAddAttachmentsPostOne:
         assert result.error == {"code": code, "message": "Rejected."}
 
     @pytest.mark.anyio
-    async def test_post_one_raises_when_error_is_not_arcgis(self, add_attachments_op):
-        add_attachments_op._layer._client.post.side_effect = OSError("boom")
+    @pytest.mark.parametrize("exc", POST_FAILURES)
+    async def test_post_one_returns_failed_item_when_post_raises(
+        self, add_attachments_op, exc
+    ):
+        add_attachments_op._layer._client.post.side_effect = exc
 
-        with pytest.raises(OSError, match="boom"):
+        result = await add_attachments_op._post_one(5, b"data", "img.jpg", "image/jpeg")
+
+        assert result.success is False
+        assert result.object_id == -1
+        assert result.global_id is None
+        assert result.error["exception"] == type(exc).__name__
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize("response, exception_name", MALFORMED_RESPONSES)
+    async def test_post_one_returns_failed_item_when_response_is_malformed(
+        self, add_attachments_op, response, exception_name
+    ):
+        add_attachments_op._layer._client.post.return_value = response
+
+        result = await add_attachments_op._post_one(5, b"data", "img.jpg", "image/jpeg")
+
+        assert result.success is False
+        assert result.error["exception"] == exception_name
+
+    @pytest.mark.anyio
+    async def test_post_one_returns_failed_item_without_posting_when_file_unreadable(
+        self, add_attachments_op, tmp_path
+    ):
+        missing = tmp_path / "missing.jpg"
+
+        result = await add_attachments_op._post_one(5, missing, "img.jpg", "image/jpeg")
+
+        assert result.success is False
+        assert result.error["exception"] == "FileNotFoundError"
+        add_attachments_op._layer._client.post.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_post_one_returns_failed_item_when_arcgis_error_has_no_raw_response(
+        self, add_attachments_op
+    ):
+        add_attachments_op._layer._client.post.side_effect = ServiceError(
+            code=500, message="Server exploded."
+        )
+
+        result = await add_attachments_op._post_one(5, b"data", "img.jpg", "image/jpeg")
+
+        assert result.success is False
+        assert result.error["code"] == 500
+        assert result.error["description"] == "ArcGIS error 500: Server exploded."
+        assert result.error["exception"] == "ServiceError"
+
+    @pytest.mark.anyio
+    async def test_post_one_propagates_when_exception_is_not_an_exception_subclass(
+        self, add_attachments_op
+    ):
+        add_attachments_op._layer._client.post.side_effect = NonRecoverableSignal()
+
+        with pytest.raises(NonRecoverableSignal):
             await add_attachments_op._post_one(5, b"data", "img.jpg", "image/jpeg")
 
 
@@ -316,6 +395,23 @@ class TestAddAttachmentsExecute:
         )
 
         assert len(result.failed) == 2
+
+    @pytest.mark.anyio
+    async def test_execute_keeps_siblings_when_one_upload_raises_unexpectedly(
+        self, add_attachments_op
+    ):
+        add_attachments_op._layer._client.post.side_effect = make_rejecting_post(
+            {"bad.jpg"},
+            httpx.ReadTimeout("slow"),
+            make_esri_add_attachment_response(99),
+        )
+
+        result = await add_attachments_op.execute(
+            [1, 2, 3], [b"a", b"b", b"c"], ["a.jpg", "bad.jpg", "c.jpg"]
+        )
+
+        assert [r.success for r in result.results] == [True, False, True]
+        assert result.results[1].error["exception"] == "ReadTimeout"
 
 
 class TestUpdateAttachmentsPostOne:
@@ -418,6 +514,26 @@ class TestUpdateAttachmentsExecute:
 
         assert [r.success for r in result.results] == [True, False, True]
         assert result.failed == [result.results[1]]
+
+    @pytest.mark.anyio
+    async def test_execute_keeps_siblings_when_one_update_raises_unexpectedly(
+        self, update_attachments_op
+    ):
+        update_attachments_op._layer._client.post.side_effect = make_rejecting_post(
+            {"bad.jpg"},
+            httpx.ReadTimeout("slow"),
+            make_esri_update_attachment_response(99),
+        )
+
+        result = await update_attachments_op.execute(
+            [1, 2, 3],
+            [b"a", b"b", b"c"],
+            ["a.jpg", "bad.jpg", "c.jpg"],
+            attachment_ids=[10, 11, 12],
+        )
+
+        assert [r.success for r in result.results] == [True, False, True]
+        assert result.results[1].error["exception"] == "ReadTimeout"
 
 
 class TestDeleteForObject:

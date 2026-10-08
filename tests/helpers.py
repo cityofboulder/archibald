@@ -44,6 +44,10 @@ class StaticTokenAuth(ArcGISAuth):
         """No-op: static token never needs refreshing."""
 
 
+class NonRecoverableSignal(BaseException):
+    """BaseException stand-in for cancellation, which operations must not swallow."""
+
+
 def make_query_result(
     features: list[dict],
     fields: FieldsResult,
@@ -232,6 +236,22 @@ def make_arcgis_error(
         code=code,
         message=message,
         raw_response={"error": {"code": code, "message": message}},
+    )
+
+
+def make_http_status_error(status_code: int) -> httpx.HTTPStatusError:
+    """Build an httpx.HTTPStatusError the way ``raise_for_status`` does.
+
+    Args:
+        status_code: HTTP status code carried by the error's response.
+
+    Returns:
+        HTTPStatusError with a matching request and response attached.
+    """
+    request = httpx.Request("POST", "https://example.com")
+    response = httpx.Response(status_code, request=request)
+    return httpx.HTTPStatusError(
+        f"HTTP {status_code}", request=request, response=response
     )
 
 
