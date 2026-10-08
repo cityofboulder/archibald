@@ -209,13 +209,16 @@ class BaseAttachmentUploadOperation:
             EditResultItem parsed from the ``f"{self._endpoint}Result"`` response.
             If ESRI rejects the request with an error envelope (e.g. an
             unsupported file type), a ``success=False`` item carrying the raw
-            server error dict is returned instead of raising. Its ``object_id``
-            is ``-1``.
+            server error dict is returned instead of raising. Any other
+            exception (file read, transport, HTTP status, malformed response)
+            is likewise returned as a ``success=False`` item built by
+            ``EditResultItem._from_exception``. In both cases ``object_id`` is
+            ``-1``.
         """
         endpoint = f"{self._layer._layer_path}/{object_id}/{self._endpoint}"
         data = {} if attachment_id is None else {"attachmentId": attachment_id}
-        body = await self._read_file(file)
         try:
+            body = await self._read_file(file)
             response = await self._layer._client.post(
                 endpoint=endpoint,
                 data=data,
@@ -223,8 +226,12 @@ class BaseAttachmentUploadOperation:
             )
             item = response.json()[f"{self._endpoint}Result"]
         except ArcGISError as exc:
+            if exc.raw_response is None:
+                return EditResultItem._from_exception(exc)
             item = exc.raw_response
-        return EditResultItem._from_esri(item)  # type: ignore[arg-type]
+        except Exception as exc:
+            return EditResultItem._from_exception(exc)
+        return EditResultItem._from_esri(item)
 
     @staticmethod
     async def _read_file(file: Path | BinaryIO | bytes) -> bytes:
