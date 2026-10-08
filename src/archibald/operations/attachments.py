@@ -344,7 +344,13 @@ class DeleteAttachmentsOperation:
             group_results = await self._delete_for_object(oid, group_att_ids)
             result_by_att_id = {r.object_id: r for r in group_results}
             for orig_idx, att_id in pairs:
-                results[orig_idx] = result_by_att_id[att_id]
+                results[orig_idx] = result_by_att_id.get(att_id) or (
+                    EditResultItem._from_exception(
+                        LookupError(f"No result returned for attachment {att_id}."),
+                        object_id=att_id,
+                        outcome_unknown=True,
+                    )
+                )
 
         async with anyio.create_task_group() as tg:
             for oid, pairs in groups.items():
@@ -365,14 +371,36 @@ class DeleteAttachmentsOperation:
 
         Returns:
             List of EditResultItem parsed from the deleteAttachmentResults response,
-            in the order the server returns them.
+            in the order the server returns them. If the request fails (ESRI error
+            envelope, transport error, HTTP status, malformed response), one
+            ``success=False`` item per attachment ID is returned instead of
+            raising, each with ``object_id`` set to its attachment ID. Items
+            built from an exception carry ``error["outcome_unknown"]`` (see
+            ``_is_outcome_unknown``).
         """
         endpoint = f"{self._layer._layer_path}/{object_id}/deleteAttachments"
-        response = await self._layer._client.post(
-            endpoint=endpoint,
-            data={"attachmentIds": ",".join(str(i) for i in attachment_ids)},
-        )
-        return [
-            EditResultItem._from_esri(r)
-            for r in response.json()["deleteAttachmentResults"]
-        ]
+        try:
+            response = await self._layer._client.post(
+                endpoint=endpoint,
+                data={"attachmentIds": ",".join(str(i) for i in attachment_ids)},
+            )
+            items = response.json()["deleteAttachmentResults"]
+        except ArcGISError as exc:
+            if exc.raw_response is None:
+                return [
+                    EditResultItem._from_exception(exc, object_id=att_id)
+                    for att_id in attachment_ids
+                ]
+            return [
+                EditResultItem._from_esri({**exc.raw_response, "objectId": att_id})
+                for att_id in attachment_ids
+            ]
+        except Exception as exc:
+            outcome_unknown = _is_outcome_unknown(exc)
+            return [
+                EditResultItem._from_exception(
+                    exc, object_id=att_id, outcome_unknown=outcome_unknown
+                )
+                for att_id in attachment_ids
+            ]
+        return [EditResultItem._from_esri(r) for r in items]
