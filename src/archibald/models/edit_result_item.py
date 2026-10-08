@@ -23,3 +23,35 @@ class EditResultItem:
             success=bool(item.get("success", False)),
             error=item.get("error"),
         )
+
+    @classmethod
+    def _from_exception(
+        cls,
+        exc: BaseException,
+        *,
+        object_id: int = -1,
+        outcome_unknown: bool = False,
+    ) -> EditResultItem:
+        """Build a failed item from an exception that produced no ESRI result.
+
+        The error dict mirrors ESRI's per-item ``code``/``description`` shape and
+        adds ``exception`` (the exception class name) and ``outcome_unknown``
+        (True when the request may have reached the server, so it may have been
+        applied despite the failure).
+
+        Args:
+            exc: The exception that prevented a result from being obtained.
+            object_id: ID to report on the item; -1 when none is known.
+            outcome_unknown: Whether the server may have processed the request.
+        """
+        return cls(
+            object_id=object_id,
+            global_id=None,
+            success=False,
+            error={
+                "code": getattr(exc, "code", -1),
+                "description": str(exc) or type(exc).__name__,
+                "exception": type(exc).__name__,
+                "outcome_unknown": outcome_unknown,
+            },
+        )
