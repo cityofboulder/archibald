@@ -19,6 +19,7 @@ from archibald.operations.attachments import (
 from tests.helpers import (
     NonRecoverableSignal,
     make_arcgis_error,
+    make_delete_post_failing_for,
     make_esri_add_attachment_response,
     make_esri_delete_attachments_response,
     make_esri_update_attachment_response,
@@ -656,6 +657,73 @@ class TestDeleteForObject:
         assert all(isinstance(r, EditResultItem) for r in results)
         assert [r.object_id for r in results] == [10, 11]
 
+    @pytest.mark.anyio
+    @pytest.mark.parametrize("exc", POST_FAILURES)
+    async def test_returns_failed_item_per_attachment_when_post_raises(
+        self, delete_attachments_op, exc
+    ):
+        delete_attachments_op._layer._client.post.side_effect = exc
+
+        results = await delete_attachments_op._delete_for_object(5, [10, 11])
+
+        assert [r.object_id for r in results] == [10, 11]
+        assert [r.success for r in results] == [False, False]
+        assert [r.error["exception"] for r in results] == [type(exc).__name__] * 2
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize("response, exception_name", MALFORMED_RESPONSES)
+    async def test_returns_failed_item_per_attachment_when_response_is_malformed(
+        self, delete_attachments_op, response, exception_name
+    ):
+        delete_attachments_op._layer._client.post.return_value = response
+
+        results = await delete_attachments_op._delete_for_object(5, [10, 11])
+
+        assert [r.object_id for r in results] == [10, 11]
+        assert [r.error["exception"] for r in results] == [exception_name] * 2
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize("exc_class, code", ESRI_ERROR_CASES)
+    async def test_returns_raw_esri_error_per_attachment_when_server_rejects(
+        self, delete_attachments_op, exc_class, code
+    ):
+        delete_attachments_op._layer._client.post.side_effect = make_arcgis_error(
+            exc_class, code, "Rejected."
+        )
+
+        results = await delete_attachments_op._delete_for_object(5, [10, 11])
+
+        assert [r.object_id for r in results] == [10, 11]
+        assert [r.success for r in results] == [False, False]
+        assert [r.error for r in results] == [
+            {"code": code, "message": "Rejected."}
+        ] * 2
+
+    @pytest.mark.anyio
+    async def test_returns_synthesized_error_when_arcgis_error_has_no_raw_response(
+        self, delete_attachments_op
+    ):
+        delete_attachments_op._layer._client.post.side_effect = ServiceError(
+            code=500, message="Server exploded."
+        )
+
+        results = await delete_attachments_op._delete_for_object(5, [10, 11])
+
+        assert [r.object_id for r in results] == [10, 11]
+        assert [r.error["exception"] for r in results] == ["ServiceError"] * 2
+        assert [r.error["outcome_unknown"] for r in results] == [False, False]
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize("exc, expected", POST_OUTCOME_CASES)
+    async def test_flags_outcome_unknown_on_every_attachment_according_to_exception(
+        self, delete_attachments_op, exc, expected
+    ):
+        delete_attachments_op._layer._client.post.side_effect = exc
+
+        results = await delete_attachments_op._delete_for_object(5, [10, 11])
+
+        assert [r.error["outcome_unknown"] for r in results] == [expected, expected]
+
 
 class TestDeleteAttachmentsExecute:
     @pytest.mark.anyio
@@ -717,3 +785,33 @@ class TestDeleteAttachmentsExecute:
         result = await delete_attachments_op.execute([1, 2, 1], [10, 20, 11])
 
         assert [r.object_id for r in result.results] == [10, 20, 11]
+
+    @pytest.mark.anyio
+    async def test_keeps_other_groups_when_one_group_request_fails(
+        self, delete_attachments_op
+    ):
+        delete_attachments_op._layer._client.post.side_effect = (
+            make_delete_post_failing_for({1}, httpx.ReadTimeout("slow"))
+        )
+
+        result = await delete_attachments_op.execute([1, 2, 1], [10, 20, 11])
+
+        assert [r.object_id for r in result.results] == [10, 20, 11]
+        assert [r.success for r in result.results] == [False, True, False]
+        assert result.results[0].error["exception"] == "ReadTimeout"
+
+    @pytest.mark.anyio
+    async def test_reports_failure_for_attachment_missing_from_server_response(
+        self, delete_attachments_op
+    ):
+        delete_attachments_op._layer._client.post.return_value = make_response(
+            make_esri_delete_attachments_response([10])
+        )
+
+        result = await delete_attachments_op.execute([1, 1], [10, 11])
+
+        assert result.results[0].success is True
+        assert result.results[1].success is False
+        assert result.results[1].object_id == 11
+        assert result.results[1].error["exception"] == "LookupError"
+        assert result.results[1].error["outcome_unknown"] is True

@@ -280,6 +280,28 @@ def make_rejecting_post(
     return post
 
 
+def make_delete_post_failing_for(failing_oids: set[int], exc: Exception):
+    """Build an async ``client.post`` side effect for deleteAttachments calls.
+
+    Args:
+        failing_oids: Feature OBJECTIDs whose request should raise.
+        exc: Exception raised for a failing OBJECTID.
+
+    Returns:
+        Async callable usable as ``client.post.side_effect``. Requests for other
+        OBJECTIDs succeed for every attachment ID in the request.
+    """
+
+    async def post(*, endpoint: str, data: dict, **kwargs) -> httpx.Response:
+        """Raise exc for failing OBJECTIDs, otherwise report every ID deleted."""
+        if int(endpoint.split("/")[-2]) in failing_oids:
+            raise exc
+        att_ids = [int(i) for i in data["attachmentIds"].split(",")]
+        return make_response(make_esri_delete_attachments_response(att_ids))
+
+    return post
+
+
 def make_esri_delete_attachments_response(
     attachment_ids: list[int],
     *,
