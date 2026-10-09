@@ -73,9 +73,9 @@ class QueryOperation:
         )
 
         # First request
-        first_response = await self._layer._client.get(
+        first_response = await self._layer._client.post(
             endpoint=self._endpoint,
-            params=params,
+            data=params,
         )
         first_data = first_response.json()
         features = first_data.get("features", [])
@@ -324,9 +324,9 @@ class QueryOperation:
             List of all remaining feature objects from subsequent pages.
         """
         max_record_count = await self._layer.max_record_count()
-        total_count_response = await self._layer._client.get(
+        total_count_response = await self._layer._client.post(
             endpoint=self._endpoint,
-            params={
+            data={
                 "where": initial_params.get("where", "1=1"),
                 "returnCountOnly": "true",
                 "f": "json",
@@ -344,9 +344,9 @@ class QueryOperation:
         page_results: list[list[dict]] = [[] for _ in offsets]
 
         async def fetch_page(idx: int, offset: int) -> None:
-            response = await self._layer._client.get(
+            response = await self._layer._client.post(
                 endpoint=self._endpoint,
-                params={
+                data={
                     **initial_params,
                     "resultOffset": offset,
                     "resultRecordCount": max_record_count,
