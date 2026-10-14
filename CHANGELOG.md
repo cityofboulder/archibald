@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- String values are now truncated to a field's `length` measured in UTF-8 bytes instead of characters. Values containing emoji or curly quotes previously passed the character check but were rejected by `applyEdits` with `Invalid column value`; non-ASCII text is now truncated earlier as a result.
+
 ## [1.2.3] - 2026-10-07
 
 ### Fixed
