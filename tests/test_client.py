@@ -365,7 +365,7 @@ class TestInit:
             auth=StaticTokenAuth("token"),
         )
 
-        assert client._limiter.total_tokens == 20
+        assert client._request_limiter.total_tokens == 20
 
     def test_custom_max_concurrent_requests_forwarded(self):
         client = ArchieClient(
@@ -374,7 +374,7 @@ class TestInit:
             max_concurrent_requests=2,
         )
 
-        assert client._limiter.total_tokens == 2
+        assert client._request_limiter.total_tokens == 2
 
 
 class TestRequestConcurrencyLimit:
