@@ -1,3 +1,4 @@
+import anyio
 import pytest
 
 from archibald.auth import ARCGIS_ONLINE_BASE_URL, UserTokenAuth
@@ -255,6 +256,8 @@ def mock_layer(mocker, fields_result, attachment_fields, attachment_properties):
     layer = mocker.create_autospec(FeatureLayer)
     layer._layer_path = f"{SERVICE_PATH}/0"
     layer._client = mocker.create_autospec(ArchieClient)
+    layer._client._job_limiter = anyio.CapacityLimiter(4)
+    layer._client._job_timeout = 300.0
     layer.fields.return_value = fields_result
     layer.objectid_field.return_value = "OBJECTID"
     layer.globalid_field.return_value = None

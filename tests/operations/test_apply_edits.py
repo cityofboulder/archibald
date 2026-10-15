@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+import anyio
 import pandas as pd
 import pytest
 
@@ -442,6 +443,79 @@ class TestPostBatches:
         for call in mock_post.call_args_list:
             assert call.kwargs["poll_timeout"] == 60.0
 
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "max_jobs, num_batches",
+        [(1, 4), (2, 5)],
+        ids=["cap-of-1", "cap-of-2"],
+    )
+    async def test_async_jobs_never_exceed_job_limiter_cap(
+        self, apply_edits_op, mock_layer, mocker, max_jobs, num_batches
+    ):
+        mock_layer._client._job_limiter = anyio.CapacityLimiter(max_jobs)
+        in_flight = 0
+        max_observed = 0
+
+        async def tracking_post(batch, **kwargs):
+            nonlocal in_flight, max_observed
+            in_flight += 1
+            max_observed = max(max_observed, in_flight)
+            await anyio.sleep(0.01)
+            in_flight -= 1
+            return make_apply_edits_result()
+
+        mocker.patch.object(apply_edits_op, "_post_batch", side_effect=tracking_post)
+
+        await apply_edits_op._post_batches(
+            [{} for _ in range(num_batches)],
+            rollback_on_failure=False,
+            use_async=True,
+            poll_timeout=300.0,
+        )
+
+        assert max_observed == max_jobs
+
+    @pytest.mark.anyio
+    async def test_sync_batches_do_not_take_job_permits(
+        self, apply_edits_op, mock_layer, mocker
+    ):
+        mock_layer._client._job_limiter = anyio.CapacityLimiter(1)
+        borrowed_during_post = []
+
+        async def recording_post(batch, **kwargs):
+            borrowed_during_post.append(mock_layer._client._job_limiter.borrowed_tokens)
+            return make_apply_edits_result()
+
+        mocker.patch.object(apply_edits_op, "_post_batch", side_effect=recording_post)
+
+        await apply_edits_op._post_batches(
+            [{}, {}, {}],
+            rollback_on_failure=False,
+            use_async=False,
+            poll_timeout=300.0,
+        )
+
+        assert borrowed_during_post == [0, 0, 0]
+
+    @pytest.mark.anyio
+    async def test_job_permit_released_when_batch_raises(
+        self, apply_edits_op, mock_layer, mocker
+    ):
+        mock_layer._client._job_limiter = anyio.CapacityLimiter(1)
+        mocker.patch.object(
+            apply_edits_op, "_post_batch", side_effect=ServiceError(500, "boom")
+        )
+
+        with pytest.raises(Exception):
+            await apply_edits_op._post_batches(
+                [{}],
+                rollback_on_failure=False,
+                use_async=True,
+                poll_timeout=300.0,
+            )
+
+        assert mock_layer._client._job_limiter.borrowed_tokens == 0
+
 
 class TestExecute:
     @pytest.mark.anyio
@@ -598,3 +672,18 @@ class TestExecute:
         await apply_edits_op.execute(deletes=[1], poll_timeout=60.0)
 
         assert mock_post_batches.call_args.kwargs["poll_timeout"] == 60.0
+
+    @pytest.mark.anyio
+    async def test_poll_timeout_defaults_to_client_job_timeout(
+        self, apply_edits_op, mock_layer, mocker
+    ):
+        mock_layer._client._job_timeout = 42.0
+        mock_post_batches = mocker.patch.object(
+            apply_edits_op,
+            "_post_batches",
+            return_value=make_apply_edits_result(),
+        )
+
+        await apply_edits_op.execute(deletes=[1])
+
+        assert mock_post_batches.call_args.kwargs["poll_timeout"] == 42.0

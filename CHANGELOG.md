@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Async `applyEdits` batches are now bounded to `max_concurrent_jobs` (default 4) server-side jobs at a time, shared across everything using the same `ArchieClient`. Previously every batch was submitted at once, so a large edit queued dozens or hundreds of jobs on the server and the later batches could exhaust `poll_timeout` while still waiting their turn; the resulting `TimeoutError` cancelled the remaining batches while the server went on to commit them. `poll_timeout` now measures a job's own run time, starting once it holds a job permit. Total wall time is unchanged when the server was the bottleneck. Raise `max_concurrent_jobs` if the target service runs more jobs in parallel than the default.
+- `ApplyEditsOperation.execute()`'s `poll_timeout` now defaults to the client's `job_timeout` (300 s unless changed) instead of a fixed 300 s. Passing it explicitly behaves as before.
+- The private `ArchieClient._limiter` and `_timeout` attributes are now `_request_limiter` and `_request_timeout`, to distinguish them from the new job limiter and timeout. The public `timeout` and `max_concurrent_requests` constructor parameters are unchanged.
+
 ### Fixed
 
 - `add_attachments()` and `update_attachments()` no longer abort the batch when one item fails for a non-ESRI reason (unreadable file, timeout or connection error, HTTP error status, malformed response, failed token refresh). Previously the exception cancelled every sibling upload and discarded completed results. These are now `success=False` items in `AttachmentsResult`, one per input, in order.
@@ -15,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `ArchieClient` accepts `max_concurrent_jobs` (default 4) and `job_timeout` (default 300 s) to bound concurrent async server-side jobs and set their default per-job timeout.
 - Failed attachment items not built from an ESRI error dict carry `error["exception"]` (exception class name) and `error["outcome_unknown"]`, which is `True` when the server may have applied the change despite the failure (e.g. a read timeout or 5xx). Retrying an unknown `add_attachments()` could create a duplicate.
 
 ## [1.2.4] - 2026-10-14

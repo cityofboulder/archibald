@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import warnings
 from typing import TYPE_CHECKING
@@ -37,7 +38,7 @@ class ApplyEditsOperation:
         *,
         rollback_on_failure: bool = False,
         apply_coded_values: bool = False,
-        poll_timeout: float = 300.0,
+        poll_timeout: float | None = None,
     ) -> ApplyEditsResult:
         """Serialize inputs, pack into batches, POST, and return aggregated results.
 
@@ -58,7 +59,9 @@ class ApplyEditsOperation:
                 in the DataFrame back to their raw codes before serialization.
             poll_timeout: Maximum seconds to wait for an async job to complete
                 before raising TimeoutError. Applies per batch when the layer
-                uses server-side async editing. Defaults to 300 seconds.
+                uses server-side async editing, and is measured from when the
+                batch holds a job permit, so time spent waiting behind other
+                jobs is not counted. Defaults to the client's job_timeout.
 
         Returns:
             ApplyEditsResult with all add, update, and delete results merged.
@@ -121,6 +124,9 @@ class ApplyEditsOperation:
             )
 
         use_async = len(batches) > 1 and await self._layer.supports_async_apply_edits()
+
+        if poll_timeout is None:
+            poll_timeout = self._layer._client._job_timeout
 
         return await self._post_batches(
             batches,
@@ -254,6 +260,11 @@ class ApplyEditsOperation:
     ) -> ApplyEditsResult:
         """Fan out batch POSTs in parallel via anyio.create_task_group and merge results.
 
+        When use_async is True, each batch holds one of the client's job
+        permits from POST until its result is fetched, so no more than
+        max_concurrent_jobs async jobs exist on the server at once. Sync POSTs
+        are bounded by the client's request limiter alone.
+
         Args:
             batches: List of batch body dicts from pack_batches.
             rollback_on_failure: Passed through to each _post_batch call.
@@ -266,12 +277,18 @@ class ApplyEditsOperation:
         batch_results: list[ApplyEditsResult | None] = [None] * len(batches)
 
         async def post_one(idx: int, batch: dict) -> None:
-            batch_results[idx] = await self._post_batch(
-                batch,
-                rollback_on_failure=rollback_on_failure,
-                use_async=use_async,
-                poll_timeout=poll_timeout,
+            permit = (
+                self._layer._client._job_limiter
+                if use_async
+                else contextlib.nullcontext()
             )
+            async with permit:
+                batch_results[idx] = await self._post_batch(
+                    batch,
+                    rollback_on_failure=rollback_on_failure,
+                    use_async=use_async,
+                    poll_timeout=poll_timeout,
+                )
 
         async with anyio.create_task_group() as tg:
             for idx, batch in enumerate(batches):
