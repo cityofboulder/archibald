@@ -376,6 +376,40 @@ class TestInit:
 
         assert client._request_limiter.total_tokens == 2
 
+    def test_default_max_concurrent_jobs_is_4(self):
+        client = ArchieClient(
+            base_url="https://example.com/arcgis/rest/services",
+            auth=StaticTokenAuth("token"),
+        )
+
+        assert client._job_limiter.total_tokens == 4
+
+    def test_custom_max_concurrent_jobs_forwarded(self):
+        client = ArchieClient(
+            base_url="https://example.com/arcgis/rest/services",
+            auth=StaticTokenAuth("token"),
+            max_concurrent_jobs=8,
+        )
+
+        assert client._job_limiter.total_tokens == 8
+
+    @pytest.mark.parametrize(
+        "kwargs, expected",
+        [({}, 300.0), ({"job_timeout": 900.0}, 900.0)],
+        ids=["default", "custom"],
+    )
+    def test_job_timeout(self, kwargs, expected):
+        client = ArchieClient(
+            base_url="https://example.com/arcgis/rest/services",
+            auth=StaticTokenAuth("token"),
+            **kwargs,
+        )
+
+        assert client._job_timeout == expected
+
+    def test_job_limiter_is_separate_from_request_limiter(self, client):
+        assert client._job_limiter is not client._request_limiter
+
 
 class TestRequestConcurrencyLimit:
     @pytest.mark.anyio
