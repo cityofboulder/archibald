@@ -176,11 +176,18 @@ def _coerce_string(series: pd.Series, max_length: int | None = None) -> pd.Serie
 
     Null values (None, pd.NA, NaN) are preserved as None rather than converted
     to the strings "None", "<NA>", or "nan". If max_length is given, values
-    that exceed it are truncated and a UserWarning is emitted with the count.
+    whose UTF-8 encoding exceeds it are truncated and a UserWarning is emitted
+    with the count.
+
+    Length is measured in UTF-8 bytes, the strictest of the measures backing
+    databases use (characters, UTF-16 units, bytes), so truncated values fit
+    on any backend. A multi-byte character that straddles the limit is dropped
+    whole.
 
     Args:
         series: Source Series.
-        max_length: Maximum allowed string length; None means no truncation.
+        max_length: Maximum allowed length in UTF-8 bytes; None means no
+            truncation.
 
     Returns:
         Object-dtype Series with Python str values and None for nulls.
@@ -190,16 +197,19 @@ def _coerce_string(series: pd.Series, max_length: int | None = None) -> pd.Serie
     result[null_mask] = None
 
     if max_length is not None:
-        non_null_strs = result[~null_mask]
-        too_long_count = int((non_null_strs.str.len() > max_length).sum())
+        non_null_strs = result.loc[~null_mask].astype(str)
+        truncated = non_null_strs.map(
+            lambda v: v.encode("utf-8")[:max_length].decode("utf-8", errors="ignore")
+        )
+        too_long_count = int((truncated != non_null_strs).sum())
         if too_long_count:
             warnings.warn(
                 f"Column '{series.name}': {too_long_count} value(s) exceed the "
-                f"maximum length of {max_length} and will be truncated.",
+                f"maximum length of {max_length} UTF-8 bytes and will be truncated.",
                 UserWarning,
                 stacklevel=5,
             )
-        result[~null_mask] = non_null_strs.str[:max_length]
+        result[~null_mask] = truncated
 
     return result
 
