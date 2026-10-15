@@ -368,6 +368,58 @@ class TestCoerceString:
         with pytest.warns(UserWarning, match="2 value"):
             _coerce_string(series, max_length=3)
 
+    @pytest.mark.parametrize(
+        "value, max_length, expected",
+        [
+            ("ééééé", 5, "éé"),
+            ("ab🙃", 5, "ab"),
+            ("“hi”", 4, "“h"),
+            ("é", 1, ""),
+            ("’" * 2000, 4000, "’" * 1333),
+        ],
+        ids=[
+            "two-byte-chars-cut-by-bytes",
+            "emoji-straddling-limit-dropped-whole",
+            "curly-quote-counts-three-bytes",
+            "limit-smaller-than-first-char",
+            "long-note-with-curly-quotes",
+        ],
+    )
+    def test_values_are_truncated_when_over_byte_limit_but_under_character_limit(
+        self, value, max_length, expected
+    ):
+        series = pd.Series([value], name="col")
+
+        with pytest.warns(UserWarning, match="1 value"):
+            result = _coerce_string(series, max_length=max_length)
+
+        assert result.iloc[0] == expected
+        assert len(result.iloc[0].encode("utf-8")) <= max_length
+
+    @pytest.mark.parametrize(
+        "value, max_length",
+        [
+            ("ab🙃", 6),
+            ("ééé", 6),
+            ("“hi”", 8),
+        ],
+        ids=[
+            "emoji-at-byte-limit",
+            "two-byte-chars-at-byte-limit",
+            "curly-quotes-at-byte-limit",
+        ],
+    )
+    def test_multibyte_values_are_not_truncated_when_at_byte_limit(
+        self, value, max_length
+    ):
+        series = pd.Series([value], name="col")
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            result = _coerce_string(series, max_length=max_length)
+
+        assert result.iloc[0] == value
+
     def test_null_values_not_counted_in_truncation(self):
         series = pd.Series([None, "hello"], name="col", dtype=object)
 

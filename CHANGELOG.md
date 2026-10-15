@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Failed attachment items not built from an ESRI error dict carry `error["exception"]` (exception class name) and `error["outcome_unknown"]`, which is `True` when the server may have applied the change despite the failure (e.g. a read timeout or 5xx). Retrying an unknown `add_attachments()` could create a duplicate.
 
+## [1.2.4] - 2026-10-14
+
+### Fixed
+
+- String values are now truncated to a field's `length` measured in UTF-8 bytes instead of characters. Values containing emoji or curly quotes previously passed the character check but were rejected by `applyEdits` with `Invalid column value`; non-ASCII text is now truncated earlier as a result.
+
 ## [1.2.3] - 2026-10-07
 
 ### Fixed
@@ -156,7 +162,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - When an async `applyEdits` job completes, the operation now follows the `resultUrl` returned in the status body to fetch the actual edit results (`addResults`, `updateResults`, `deleteResults`). Previously the status body itself was parsed as the result, which always produced empty result sets.
 - Async polling loop is now bounded by `anyio.fail_after`; previously it could spin indefinitely if the server never returned a terminal status.
 
-[Unreleased]: https://github.com/cityofboulder/archibald/compare/v1.2.3...HEAD
+[Unreleased]: https://github.com/cityofboulder/archibald/compare/v1.2.4...HEAD
+[1.2.4]: https://github.com/cityofboulder/archibald/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/cityofboulder/archibald/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/cityofboulder/archibald/compare/v1.2.2...v1.2.1
 [1.2.1]: https://github.com/cityofboulder/archibald/compare/v1.2.0...v1.2.1
