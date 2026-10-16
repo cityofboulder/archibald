@@ -11,8 +11,10 @@ import geopandas as gpd
 import httpx
 import pandas as pd
 
+from archibald.errors import failed_items
 from archibald.exceptions import ServiceError
 from archibald.models.apply_edits_result import ApplyEditsResult
+from archibald.models.edit_result_item import EditResultItem
 from archibald.serializers._features import pack_batches, serialize_features
 
 if TYPE_CHECKING:
@@ -183,6 +185,53 @@ class ApplyEditsOperation:
             response_body = await self._poll_status(status_url, timeout=poll_timeout)
 
         return ApplyEditsResult.from_esri_response(response_body)
+
+    @staticmethod
+    def _failed_batch_result(
+        batch: dict,
+        exc: Exception,
+        objectid_field: str,
+        *,
+        outcome_unknown: bool,
+        status_url: str | None = None,
+    ) -> ApplyEditsResult:
+        """Build a result marking every edit in a batch as failed.
+
+        Adds report ``object_id`` -1 since no OBJECTID exists yet; updates
+        report the OBJECTID from their attributes (-1 if absent); deletes
+        report the OBJECTID being deleted. See ``failed_items`` for the error
+        dict each item carries.
+
+        Args:
+            batch: The batch dict from pack_batches that failed.
+            exc: Exception raised while posting or polling the batch.
+            objectid_field: Name of the layer's OBJECTID field.
+            outcome_unknown: Whether the server may have applied the batch.
+            status_url: Async job status URL, if the batch was submitted async.
+
+        Returns:
+            ApplyEditsResult with one ``success=False`` item per edit, in batch
+            order.
+        """
+        add_ids = [-1] * len(batch.get("adds", []))
+        update_ids = [
+            feat.get("attributes", {}).get(objectid_field, -1)
+            for feat in batch.get("updates", [])
+        ]
+        deletes = batch.get("deletes", "")
+        delete_ids = [int(oid) for oid in deletes.split(",")] if deletes else []
+
+        def items(ids: list[int]) -> list[EditResultItem]:
+            """Failed items for ``ids`` sharing this batch's failure details."""
+            return failed_items(
+                exc, ids, outcome_unknown=outcome_unknown, status_url=status_url
+            )
+
+        return ApplyEditsResult(
+            add_results=items(add_ids),
+            update_results=items(update_ids),
+            delete_results=items(delete_ids),
+        )
 
     async def _poll_status(self, status_url: str, *, timeout: float) -> dict:
         """Poll an async job status URL until the job reaches a terminal state.
