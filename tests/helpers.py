@@ -8,7 +8,12 @@ from unittest.mock import AsyncMock
 from archibald.auth import ArcGISAuth, UserTokenAuth
 from archibald.client import ArchieClient
 from archibald.errors import handle_esri_errors
-from archibald.exceptions import ArcGISError, AuthorizationError, TokenRefreshError
+from archibald.exceptions import (
+    ArcGISError,
+    AuthorizationError,
+    ServiceError,
+    TokenRefreshError,
+)
 from archibald.models import (
     AttachmentsResult,
     ApplyEditsResult,
@@ -422,4 +427,19 @@ OUTCOME_UNKNOWN_CASES = [
     pytest.param(TokenRefreshError("refresh failed"), False, id="token-refresh"),
     pytest.param(OSError("boom"), False, id="os-error"),
     pytest.param(TimeoutError(), True, id="timeout-error"),
+]
+
+NON_ENVELOPE_FAILURE_CASES = [
+    pytest.param(
+        ServiceError(code=-1, message="No response."), id="arcgis-error-no-response"
+    ),
+    pytest.param(
+        ServiceError(
+            code=-1,
+            message="Async applyEdits job failed.",
+            raw_response={"status": "Failed"},
+        ),
+        id="service-error-status-body",
+    ),
+    pytest.param(httpx.ReadTimeout("slow"), id="read-timeout"),
 ]
