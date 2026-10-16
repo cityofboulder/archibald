@@ -70,6 +70,7 @@ def failed_items(
     object_ids: list[int],
     *,
     outcome_unknown: bool,
+    status_url: str | None = None,
 ) -> list[EditResultItem]:
     """Build one failed EditResultItem per ID from a single request failure.
 
@@ -78,26 +79,31 @@ def failed_items(
     carries that error dict. Anything else, including an ArcGISError whose
     ``raw_response`` is missing or is not an envelope (e.g. an async job's
     status body), becomes an item built from the exception, flagged with
-    ``outcome_unknown``.
+    ``outcome_unknown``. ``status_url``, when given, is added to every
+    item's error dict.
 
     Args:
         exc: Exception raised by the request.
         object_ids: ID to report on each item, one item per ID.
         outcome_unknown: Whether the server may have applied the request
             anyway; ignored for ESRI error envelopes.
+        status_url: Async job status URL to report on each item, if any.
 
     Returns:
         List of ``success=False`` items in ``object_ids`` order.
     """
     envelope = exc.raw_response if isinstance(exc, ArcGISError) else None
     if envelope is not None and "error" in envelope:
+        error = envelope["error"]
+        if status_url is not None:
+            error = {**error, "status_url": status_url}
         return [
-            EditResultItem._from_esri({**envelope, "objectId": oid})
+            EditResultItem._from_esri({"error": error, "objectId": oid})
             for oid in object_ids
         ]
     return [
         EditResultItem._from_exception(
-            exc, object_id=oid, outcome_unknown=outcome_unknown
+            exc, object_id=oid, outcome_unknown=outcome_unknown, status_url=status_url
         )
         for oid in object_ids
     ]
