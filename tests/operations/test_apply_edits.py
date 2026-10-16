@@ -96,32 +96,28 @@ class TestPostBatch:
         assert data["deletes"] == "1,2,3"
 
     @pytest.mark.anyio
-    async def test_rollback_key_included_when_true(self, apply_edits_op, mock_layer):
+    @pytest.mark.parametrize(
+        "rollback_on_failure,expected",
+        [(True, "true"), (False, "false")],
+        ids=["rollback", "no_rollback"],
+    )
+    async def test_rollback_key_always_sent_when_flag_set(
+        self, apply_edits_op, mock_layer, rollback_on_failure, expected
+    ):
         batch = {"adds": [make_small_feature(1)]}
         mock_layer._client.post.return_value = make_response(
             make_esri_apply_edits_response(add_ids=[1])
         )
 
         await apply_edits_op._post_batch(
-            batch, rollback_on_failure=True, use_async=False, poll_timeout=300.0
+            batch,
+            rollback_on_failure=rollback_on_failure,
+            use_async=False,
+            poll_timeout=300.0,
         )
 
         data = mock_layer._client.post.call_args.kwargs["data"]
-        assert data["rollbackOnFailure"] == "true"
-
-    @pytest.mark.anyio
-    async def test_rollback_key_absent_when_false(self, apply_edits_op, mock_layer):
-        batch = {"adds": [make_small_feature(1)]}
-        mock_layer._client.post.return_value = make_response(
-            make_esri_apply_edits_response(add_ids=[1])
-        )
-
-        await apply_edits_op._post_batch(
-            batch, rollback_on_failure=False, use_async=False, poll_timeout=300.0
-        )
-
-        data = mock_layer._client.post.call_args.kwargs["data"]
-        assert "rollbackOnFailure" not in data
+        assert data["rollbackOnFailure"] == expected
 
     @pytest.mark.anyio
     async def test_async_key_included_when_use_async_true(
@@ -470,39 +466,49 @@ class TestExecute:
         assert result.add_results[0].object_id == 5
 
     @pytest.mark.anyio
-    async def test_warns_and_disables_rollback_when_layer_does_not_support_it(
-        self, apply_edits_op, mock_layer, mocker
+    @pytest.mark.parametrize(
+        "kwargs,expected",
+        [
+            ({}, True),
+            ({"rollback_on_failure": True}, True),
+            ({"rollback_on_failure": False}, False),
+        ],
+        ids=["default", "true", "false"],
+    )
+    async def test_rollback_forwarded_to_post_batches_when_given(
+        self, apply_edits_op, mocker, kwargs, expected
     ):
-        mock_layer.supports_rollback_on_failure.return_value = False
         mock_post_batches = mocker.patch.object(
             apply_edits_op,
             "_post_batches",
             return_value=make_apply_edits_result(),
         )
 
-        with pytest.warns(UserWarning, match="does not support rollbackOnFailure"):
-            await apply_edits_op.execute(deletes=[1], rollback_on_failure=True)
+        await apply_edits_op.execute(deletes=[1], **kwargs)
 
-        assert mock_post_batches.call_args.kwargs["rollback_on_failure"] is False
-
-    @pytest.mark.anyio
-    async def test_no_warning_when_rollback_false(
-        self, apply_edits_op, mocker, recwarn
-    ):
-        mocker.patch.object(
-            apply_edits_op,
-            "_post_batches",
-            return_value=make_apply_edits_result(),
-        )
-
-        await apply_edits_op.execute(deletes=[1], rollback_on_failure=False)
-
-        assert len(recwarn) == 0
+        assert mock_post_batches.call_args.kwargs["rollback_on_failure"] is expected
 
     @pytest.mark.anyio
-    async def test_warns_when_rollback_true_and_multiple_batches(
-        self, apply_edits_op, mocker
+    @pytest.mark.parametrize(
+        "rollback_on_failure,rollback_supported",
+        [(True, True), (True, False), (False, True), (False, False)],
+        ids=[
+            "rollback_supported",
+            "rollback_unsupported",
+            "no_rollback_supported",
+            "no_rollback_unsupported",
+        ],
+    )
+    async def test_no_rollback_warnings_when_multiple_batches(
+        self,
+        apply_edits_op,
+        mock_layer,
+        mocker,
+        recwarn,
+        rollback_on_failure,
+        rollback_supported,
     ):
+        mock_layer.supports_rollback_on_failure.return_value = rollback_supported
         mocker.patch(
             "archibald.operations.apply_edits.pack_batches",
             return_value=[{"deletes": "1"}, {"deletes": "2"}],
@@ -513,24 +519,9 @@ class TestExecute:
             return_value=make_apply_edits_result(),
         )
 
-        with pytest.warns(UserWarning, match="multiple batches"):
-            await apply_edits_op.execute(deletes=[1, 2], rollback_on_failure=True)
-
-    @pytest.mark.anyio
-    async def test_no_multi_batch_warning_when_rollback_false(
-        self, apply_edits_op, mocker, recwarn
-    ):
-        mocker.patch(
-            "archibald.operations.apply_edits.pack_batches",
-            return_value=[{"deletes": "1"}, {"deletes": "2"}],
+        await apply_edits_op.execute(
+            deletes=[1, 2], rollback_on_failure=rollback_on_failure
         )
-        mocker.patch.object(
-            apply_edits_op,
-            "_post_batches",
-            return_value=make_apply_edits_result(),
-        )
-
-        await apply_edits_op.execute(deletes=[1, 2], rollback_on_failure=False)
 
         assert len(recwarn) == 0
 
