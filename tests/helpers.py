@@ -421,4 +421,5 @@ OUTCOME_UNKNOWN_CASES = [
     pytest.param(make_arcgis_error(), False, id="arcgis-error"),
     pytest.param(TokenRefreshError("refresh failed"), False, id="token-refresh"),
     pytest.param(OSError("boom"), False, id="os-error"),
+    pytest.param(TimeoutError(), True, id="timeout-error"),
 ]
