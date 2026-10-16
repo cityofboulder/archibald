@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import anyio
 import geopandas as gpd
+import httpx
 import pandas as pd
 
 from archibald.exceptions import ServiceError
@@ -195,8 +196,10 @@ class ApplyEditsOperation:
         - "Failed": raises ServiceError immediately.
 
         All other statuses ("Pending", "InProgress", etc.) are non-terminal and
-        continue polling. HTTP-level and ESRI envelope errors are handled upstream
-        by the client's @handle_esri_errors decorator.
+        continue polling. A status or resultUrl GET that fails with a transport
+        error or a 5xx response is retried with the same backoff until timeout,
+        since the job keeps running server-side. ESRI envelope errors and 4xx
+        responses are raised immediately.
 
         Args:
             status_url: Full URL of the async job status endpoint.
@@ -213,20 +216,27 @@ class ApplyEditsOperation:
         max_delay = 5.0
         with anyio.fail_after(timeout):
             while True:
-                response = await self._layer._client.get(url=status_url)
-                body = response.json()
-                status = body.get("status")
-                if status in ("Completed", "CompletedWithErrors"):
-                    result_response = await self._layer._client.get(
-                        url=body["resultUrl"]
-                    )
-                    return result_response.json()
-                if status == "Failed":
-                    raise ServiceError(
-                        code=-1,
-                        message="Async applyEdits job failed.",
-                        raw_response=body,
-                    )
+                try:
+                    response = await self._layer._client.get(url=status_url)
+                    body = response.json()
+                    status = body.get("status")
+                    if status in ("Completed", "CompletedWithErrors"):
+                        result_response = await self._layer._client.get(
+                            url=body["resultUrl"]
+                        )
+                        return result_response.json()
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code < 500:
+                        raise
+                except httpx.TransportError:
+                    pass
+                else:
+                    if status == "Failed":
+                        raise ServiceError(
+                            code=-1,
+                            message="Async applyEdits job failed.",
+                            raw_response=body,
+                        )
                 await anyio.sleep(delay)
                 delay = min(delay * 2, max_delay)
 
