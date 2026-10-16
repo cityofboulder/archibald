@@ -27,6 +27,7 @@ from tests.helpers import (
     StaticTokenAuth,
     make_apply_edits_result,
     make_attachment_info,
+    make_small_feature,
 )
 
 
@@ -294,6 +295,16 @@ def delete_attachments_op(mock_layer) -> DeleteAttachmentsOperation:
 def apply_edits_op(mock_layer) -> ApplyEditsOperation:
     """An ApplyEditsOperation instance backed by mock_layer."""
     return ApplyEditsOperation(mock_layer)
+
+
+@pytest.fixture
+def mixed_edit_batch() -> dict:
+    """A pack_batches-style batch with one add, one update (OID 7), one delete (OID 4)."""
+    return {
+        "adds": [make_small_feature(1)],
+        "updates": [{"attributes": {"OBJECTID": 7}}],
+        "deletes": "4",
+    }
 
 
 @pytest.fixture
