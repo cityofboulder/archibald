@@ -444,3 +444,18 @@ NON_ENVELOPE_FAILURE_CASES = [
     ),
     pytest.param(httpx.ReadTimeout("slow"), id="read-timeout"),
 ]
+
+TRANSIENT_POLL_ERROR_CASES = [
+    pytest.param(httpx.ReadTimeout("slow"), id="read-timeout"),
+    pytest.param(httpx.ConnectError("refused"), id="connect-error"),
+    pytest.param(make_http_status_error(503), id="http-503"),
+]
+
+REJECTED_POLL_ERROR_CASES = [
+    pytest.param(make_http_status_error(404), "HTTP 404", id="http-404"),
+    pytest.param(
+        make_arcgis_error(ServiceError, 400, "Invalid job id."),
+        "Invalid job id.",
+        id="esri-envelope",
+    ),
+]

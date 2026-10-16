@@ -5,12 +5,15 @@ from __future__ import annotations
 import json
 
 import anyio
+import httpx
 import pandas as pd
 import pytest
 
 from archibald.exceptions import ServiceError
 from archibald.models import ApplyEditsResult
 from tests.helpers import (
+    REJECTED_POLL_ERROR_CASES,
+    TRANSIENT_POLL_ERROR_CASES,
     make_apply_edits_result,
     make_edit_result_item,
     make_esri_apply_edits_response,
@@ -360,6 +363,79 @@ class TestPollStatus:
         # 0.5 → 1.0 → 2.0 → 4.0 → capped at 5.0 → 5.0
         assert delays[-2] == 5.0
         assert delays[-1] == 5.0
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize("exc", TRANSIENT_POLL_ERROR_CASES)
+    async def test_retries_status_get_when_transient_error_raised(
+        self, apply_edits_op, mock_layer, mocker, exc
+    ):
+        mocker.patch("archibald.operations.apply_edits.anyio.sleep")
+        results_body = make_esri_apply_edits_response(add_ids=[1])
+        mock_layer._client.get.side_effect = [
+            exc,
+            make_response(
+                {"status": "Completed", "resultUrl": "https://results.example.com/1"}
+            ),
+            make_response(results_body),
+        ]
+
+        result = await apply_edits_op._poll_status(
+            "https://status.example.com/1", timeout=300.0
+        )
+
+        assert result == results_body
+        assert mock_layer._client.get.call_count == 3
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize("exc", TRANSIENT_POLL_ERROR_CASES)
+    async def test_retries_result_url_get_when_transient_error_raised(
+        self, apply_edits_op, mock_layer, mocker, exc
+    ):
+        mocker.patch("archibald.operations.apply_edits.anyio.sleep")
+        results_body = make_esri_apply_edits_response(add_ids=[1])
+        completed = make_response(
+            {"status": "Completed", "resultUrl": "https://results.example.com/1"}
+        )
+        mock_layer._client.get.side_effect = [
+            completed,
+            exc,
+            completed,
+            make_response(results_body),
+        ]
+
+        result = await apply_edits_op._poll_status(
+            "https://status.example.com/1", timeout=300.0
+        )
+
+        assert result == results_body
+        assert mock_layer._client.get.call_count == 4
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize("exc, match", REJECTED_POLL_ERROR_CASES)
+    async def test_raises_without_retry_when_status_get_rejected(
+        self, apply_edits_op, mock_layer, mocker, exc, match
+    ):
+        mocker.patch("archibald.operations.apply_edits.anyio.sleep")
+        mock_layer._client.get.side_effect = exc
+
+        with pytest.raises(type(exc), match=match):
+            await apply_edits_op._poll_status(
+                "https://status.example.com/1", timeout=300.0
+            )
+
+        assert mock_layer._client.get.call_count == 1
+
+    @pytest.mark.anyio
+    async def test_raises_timeout_error_when_transient_errors_persist(
+        self, apply_edits_op, mock_layer
+    ):
+        # anyio.sleep is NOT mocked so fail_after can deliver cancellation.
+        mock_layer._client.get.side_effect = httpx.ReadTimeout("slow")
+
+        with pytest.raises(TimeoutError):
+            await apply_edits_op._poll_status(
+                "https://status.example.com/1", timeout=0.001
+            )
 
 
 class TestPostBatches:
