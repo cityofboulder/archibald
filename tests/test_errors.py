@@ -1,6 +1,6 @@
 import pytest
 
-from archibald.errors import handle_esri_errors, parse_esri_error
+from archibald.errors import handle_esri_errors, is_outcome_unknown, parse_esri_error
 from archibald.exceptions import (
     AuthorizationError,
     NotFoundError,
@@ -8,7 +8,13 @@ from archibald.exceptions import (
     TokenExpiredError,
     TokenMissingError,
 )
-from tests.helpers import make_decorated_call, make_response
+from tests.helpers import OUTCOME_UNKNOWN_CASES, make_decorated_call, make_response
+
+
+class TestIsOutcomeUnknown:
+    @pytest.mark.parametrize("exc, expected", OUTCOME_UNKNOWN_CASES)
+    def test_returns_expected_when_exception_given(self, exc, expected):
+        assert is_outcome_unknown(exc) is expected
 
 
 class TestParseEsriError:
