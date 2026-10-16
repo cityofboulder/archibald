@@ -46,9 +46,10 @@ def is_outcome_unknown(exc: Exception) -> bool:
 
     True when the request may have reached the server before failing: a
     transport error other than a failure to connect or acquire a connection, a
-    5xx HTTP status, or a response that could not be parsed. False for local
-    errors and for failures that happen before the request is sent or that the
-    server definitively rejected (4xx).
+    5xx HTTP status, a response that could not be parsed, or a TimeoutError
+    from waiting on a server-side job (e.g. ``anyio.fail_after`` while
+    polling). False for local errors and for failures that happen before the
+    request is sent or that the server definitively rejected (4xx).
 
     Args:
         exc: Exception raised while sending the request or reading its response.
@@ -60,7 +61,7 @@ def is_outcome_unknown(exc: Exception) -> bool:
         return exc.response.status_code >= 500
     if isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)):
         return False
-    return isinstance(exc, (httpx.TransportError, ValueError, KeyError))
+    return isinstance(exc, (httpx.TransportError, ValueError, KeyError, TimeoutError))
 
 
 def handle_esri_errors(func: Callable[..., Any]) -> Callable[..., Any]:
