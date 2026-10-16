@@ -17,6 +17,7 @@ from archibald.exceptions import (
 from tests.helpers import (
     NON_ENVELOPE_FAILURE_CASES,
     OUTCOME_UNKNOWN_CASES,
+    STATUS_URL,
     make_arcgis_error,
     make_decorated_call,
     make_response,
@@ -60,6 +61,29 @@ class TestFailedItems:
         assert items[0].error is not None
         assert items[0].error["exception"] == type(exc).__name__
         assert items[0].error["outcome_unknown"] is outcome_unknown
+
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            pytest.param(
+                make_arcgis_error(ServiceError, 400, "Rolled back."), id="envelope"
+            ),
+            *NON_ENVELOPE_FAILURE_CASES,
+        ],
+    )
+    def test_items_carry_status_url_when_provided(self, exc):
+        items = failed_items(exc, [1, 2], outcome_unknown=True, status_url=STATUS_URL)
+
+        assert [(item.error or {}).get("status_url") for item in items] == [
+            STATUS_URL
+        ] * 2
+
+    def test_leaves_envelope_unchanged_when_status_url_provided(self):
+        exc = make_arcgis_error(ServiceError, 400, "Rolled back.")
+
+        failed_items(exc, [1], outcome_unknown=True, status_url=STATUS_URL)
+
+        assert exc.raw_response == {"error": {"code": 400, "message": "Rolled back."}}
 
 
 class TestParseEsriError:

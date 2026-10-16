@@ -2,6 +2,7 @@ import pytest
 
 from archibald.exceptions import ArcGISError
 from archibald.models.edit_result_item import EditResultItem
+from tests.helpers import STATUS_URL
 
 
 class TestEditResultItem:
@@ -119,3 +120,18 @@ class TestEditResultItemFromException:
 
         assert result.error is not None
         assert result.error["outcome_unknown"] is outcome_unknown
+
+    @pytest.mark.parametrize(
+        "status_url, expected",
+        [(STATUS_URL, {"status_url": STATUS_URL}), (None, {})],
+        ids=["provided", "omitted"],
+    )
+    def test_error_dict_carries_status_url_only_when_provided(
+        self, status_url, expected
+    ):
+        result = EditResultItem._from_exception(
+            ValueError("boom"), status_url=status_url
+        )
+
+        assert result.error is not None
+        assert {k: v for k, v in result.error.items() if k == "status_url"} == expected
