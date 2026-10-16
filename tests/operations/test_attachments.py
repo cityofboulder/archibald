@@ -4,6 +4,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from archibald.errors import is_outcome_unknown
 from archibald.exceptions import (
     AuthorizationError,
     InvalidParameterError,
@@ -12,10 +13,7 @@ from archibald.exceptions import (
     TokenRefreshError,
 )
 from archibald.models.edit_result_item import EditResultItem
-from archibald.operations.attachments import (
-    AddAttachmentsOperation,
-    _is_outcome_unknown,
-)
+from archibald.operations.attachments import AddAttachmentsOperation
 from tests.helpers import (
     NonRecoverableSignal,
     make_arcgis_error,
@@ -395,7 +393,7 @@ class TestAddAttachmentsPostOne:
 class TestIsOutcomeUnknown:
     @pytest.mark.parametrize("exc, expected", OUTCOME_UNKNOWN_CASES)
     def test_classifies_exception(self, exc, expected):
-        assert _is_outcome_unknown(exc) is expected
+        assert is_outcome_unknown(exc) is expected
 
 
 class TestAddAttachmentsExecute:

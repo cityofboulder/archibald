@@ -7,36 +7,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Iterable
 
 import anyio
-import httpx
 
+from archibald.errors import is_outcome_unknown
 from archibald.exceptions import ArcGISError, InvalidParameterError
 from archibald.models.attachments_result import AttachmentsResult
 from archibald.models.edit_result_item import EditResultItem
 
 if TYPE_CHECKING:
     from archibald.services import FeatureLayer
-
-
-def _is_outcome_unknown(exc: Exception) -> bool:
-    """Whether a failed request may still have been applied by the server.
-
-    True when the request may have reached the server before failing: a
-    transport error other than a failure to connect or acquire a connection, a
-    5xx HTTP status, or a response that could not be parsed. False for local
-    errors and for failures that happen before the request is sent or that the
-    server definitively rejected (4xx).
-
-    Args:
-        exc: Exception raised while sending the request or reading its response.
-
-    Returns:
-        True if the outcome of the request is unknown.
-    """
-    if isinstance(exc, httpx.HTTPStatusError):
-        return exc.response.status_code >= 500
-    if isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)):
-        return False
-    return isinstance(exc, (httpx.TransportError, ValueError, KeyError))
 
 
 class BaseAttachmentUploadOperation:
@@ -249,7 +227,7 @@ class BaseAttachmentUploadOperation:
             is likewise returned as a ``success=False`` item built by
             ``EditResultItem._from_exception``, with ``error["outcome_unknown"]``
             set when the server may have applied the request anyway (see
-            ``_is_outcome_unknown``). In both cases ``object_id`` is ``-1``.
+            ``is_outcome_unknown``). In both cases ``object_id`` is ``-1``.
         """
         endpoint = f"{self._layer._layer_path}/{object_id}/{self._endpoint}"
         data = {} if attachment_id is None else {"attachmentId": attachment_id}
@@ -270,7 +248,7 @@ class BaseAttachmentUploadOperation:
             item = exc.raw_response
         except Exception as exc:
             return EditResultItem._from_exception(
-                exc, outcome_unknown=_is_outcome_unknown(exc)
+                exc, outcome_unknown=is_outcome_unknown(exc)
             )
         return EditResultItem._from_esri(item)
 
@@ -397,7 +375,7 @@ class DeleteAttachmentsOperation:
             ``success=False`` item per attachment ID is returned instead of
             raising, each with ``object_id`` set to its attachment ID. Items
             built from an exception carry ``error["outcome_unknown"]`` (see
-            ``_is_outcome_unknown``).
+            ``is_outcome_unknown``).
         """
         endpoint = f"{self._layer._layer_path}/{object_id}/deleteAttachments"
         try:
@@ -417,7 +395,7 @@ class DeleteAttachmentsOperation:
                 for att_id in attachment_ids
             ]
         except Exception as exc:
-            outcome_unknown = _is_outcome_unknown(exc)
+            outcome_unknown = is_outcome_unknown(exc)
             return [
                 EditResultItem._from_exception(
                     exc, object_id=att_id, outcome_unknown=outcome_unknown
