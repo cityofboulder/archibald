@@ -363,6 +363,20 @@ if edits.has_failures:
 
 Each item in those lists is an `EditResultItem` with `object_id`, `success`, and `error` attributes.
 
+A batch that fails as a whole doesn't raise and doesn't stop the other batches. That covers a rolled-back batch, a timeout or connection error, an HTTP error status, and an async job that fails or never finishes. Instead, every edit in that batch comes back as a `success=False` item, in input order:
+
+- If the server rejected the batch (for example "Unable to complete operation." when a batch is rolled back), `error` is the server's error dict.
+- Otherwise `error` describes the exception. It has `code`, `description`, `exception` (the exception class name) and `outcome_unknown`. `outcome_unknown` is `True` when the server may have applied the edits anyway, such as after a read timeout, a 5xx, or an async job that failed or timed out.
+- Items from an async batch also carry `status_url`, the job's status endpoint, so you can check on it later.
+
+```python
+for item in edits.failed_adds:
+    if item.error.get("outcome_unknown"):
+        print("May have been applied; check before retrying:", item.error)
+```
+
+Failed adds have `object_id` -1, since no feature was created. Results for adds line up with your input rows only by position. Retrying an add whose outcome is unknown can create a duplicate feature. Retrying an update or delete can't create a duplicate, since it targets an existing OBJECTID.
+
 ---
 
 ## Attachments

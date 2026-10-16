@@ -293,6 +293,8 @@ class FeatureLayer(FeatureService, BaseLayer):
 
         Returns:
             ApplyEditsResult with all add, update, and delete results merged.
+            A batch that fails as a whole is returned as ``success=False``
+            items rather than raised; see ApplyEditsOperation.execute.
 
         Raises:
             LayerCapabilityError: If the layer does not support edit operations.

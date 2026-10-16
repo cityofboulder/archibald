@@ -17,12 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `add_attachments()` and `update_attachments()` no longer abort the batch when one item fails for a non-ESRI reason (unreadable file, timeout or connection error, HTTP error status, malformed response, failed token refresh). Previously the exception cancelled every sibling upload and discarded completed results. These are now `success=False` items in `AttachmentsResult`, one per input, in order.
 - `delete_attachments()` now returns a failed request as `success=False` items, one per attachment in that feature's request, instead of raising and cancelling the other features' deletes. An attachment missing from the server's response is also a `success=False` item rather than a `KeyError`. Callers that wrapped it in `try/except ArcGISError` should check `has_failures` instead.
+- `apply_edits()` no longer raises or cancels the other batches when one batch fails. That covers a rolled-back batch, a transport or HTTP error, and an async job that fails or times out. Previously the first failure cancelled sibling batches while the server might still commit them, discarded results from batches that had already succeeded, and surfaced as an `ExceptionGroup` that `except ServiceError` could not catch. Each edit in a failed batch is now a `success=False` item in `ApplyEditsResult`, in input order. Callers that wrapped `apply_edits()` in `try/except` should check `has_failures` instead.
 - Async `applyEdits` polling now retries a status or `resultUrl` request that fails with a network error or a 5xx response, using the usual backoff, until `poll_timeout` runs out. Previously one failed status check raised and abandoned a job that was still running on the server. ESRI errors and 4xx responses still raise immediately.
 - `QueryOperation` now sends `/query` requests (initial, count, and paging) as POST with a form-encoded body instead of GET. Long `where` clauses, such as large `OBJECTID IN (...)` lists, previously exceeded server and proxy URL length limits and failed.
 
 ### Added
 
 - `ArchieClient` accepts `max_concurrent_jobs` (default 4) and `job_timeout` (default 300 s) to bound concurrent async server-side jobs and set their default per-job timeout.
+- Failed `applyEdits` items not built from an ESRI error dict carry `error["exception"]` and `error["outcome_unknown"]`, matching attachments. Items from a failed async batch also carry `error["status_url"]`. Retrying an add whose outcome is unknown could create a duplicate.
 - Failed attachment items not built from an ESRI error dict carry `error["exception"]` (exception class name) and `error["outcome_unknown"]`, which is `True` when the server may have applied the change despite the failure (e.g. a read timeout or 5xx). Retrying an unknown `add_attachments()` could create a duplicate.
 
 ## [1.2.5] - 2026-10-16
