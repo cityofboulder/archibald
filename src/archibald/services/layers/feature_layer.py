@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import BinaryIO, Iterable
 
@@ -249,7 +250,7 @@ class FeatureLayer(FeatureService, BaseLayer):
         updates: pd.DataFrame | gpd.GeoDataFrame | None = None,
         deletes: pd.DataFrame | pd.Series | list[int] | None = None,
         *,
-        rollback_on_failure: bool = False,
+        rollback_on_failure: bool = True,
         apply_coded_values: bool = False,
     ) -> ApplyEditsResult:
         """Add, update, and/or delete features in a single batched operation.
@@ -257,13 +258,20 @@ class FeatureLayer(FeatureService, BaseLayer):
         Validates that the layer supports applyEdits, then delegates all
         serialization, batching, and posting to ApplyEditsOperation.
 
+        Rollback applies per POST batch, not across batches: when a large edit
+        spans several batches, a failure in one batch does not roll back
+        batches that already succeeded.
+
         Args:
             adds: Rows to add as new features. OBJECTIDs are excluded.
             updates: Rows to update (must include the OBJECTID column).
             deletes: OBJECTIDs to delete — list[int], DataFrame with an OBJECTID
                 column, or a Series of integer OBJECTIDs.
-            rollback_on_failure: Request server-side rollback on failure. Silently
-                degraded to False with a warning if the layer does not support it.
+            rollback_on_failure: When True (ESRI's default), a batch is applied
+                only if every edit in it succeeds. When False, the edits that
+                succeed are applied and failures are reported per item. Layers
+                that do not advertise supportsRollbackOnFailureParameter always
+                roll back; requesting False on one emits a warning.
             apply_coded_values: When True, translate human-readable domain names
                 in the DataFrame back to their raw codes before serialization.
 
@@ -272,11 +280,22 @@ class FeatureLayer(FeatureService, BaseLayer):
 
         Raises:
             LayerCapabilityError: If the layer does not support edit operations.
+
+        Warns:
+            UserWarning: If rollback_on_failure=False but the layer does not
+                support disabling rollback.
         """
         if not await self.supports_apply_edits():
             raise LayerCapabilityError(
                 f"Layer {self._layer_path} does not support edit operations."
             )
+        if not rollback_on_failure and not await self.supports_rollback_on_failure():
+            warnings.warn(
+                f"Layer {self._layer_path} does not support rollbackOnFailure=False; "
+                "the server will roll back each batch if any edit in it fails.",
+                stacklevel=2,
+            )
+            rollback_on_failure = True
         return await self._apply_edits_op.execute(
             adds=adds,
             updates=updates,
