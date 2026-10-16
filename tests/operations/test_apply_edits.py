@@ -11,8 +11,10 @@ import pytest
 
 from archibald.exceptions import ServiceError
 from archibald.models import ApplyEditsResult
+from archibald.operations.apply_edits import ApplyEditsOperation
 from tests.helpers import (
     REJECTED_POLL_ERROR_CASES,
+    STATUS_URL,
     TRANSIENT_POLL_ERROR_CASES,
     make_apply_edits_result,
     make_edit_result_item,
@@ -198,6 +200,86 @@ class TestPostBatch:
         mock_poll.assert_awaited_once_with(
             "https://example.com/status/42", timeout=300.0
         )
+
+
+class TestFailedBatchResult:
+    @pytest.mark.parametrize(
+        "batch, expected_ids",
+        [
+            pytest.param(
+                {"adds": [make_small_feature(1), make_small_feature(2)]},
+                ([-1, -1], [], []),
+                id="adds",
+            ),
+            pytest.param(
+                {
+                    "updates": [
+                        {"attributes": {"OBJECTID": 7}},
+                        {"attributes": {"OBJECTID": 9}},
+                    ]
+                },
+                ([], [7, 9], []),
+                id="updates",
+            ),
+            pytest.param({"deletes": "4,5,6"}, ([], [], [4, 5, 6]), id="deletes"),
+            pytest.param(
+                {
+                    "adds": [make_small_feature(1)],
+                    "updates": [{"attributes": {"OBJECTID": 7}}],
+                    "deletes": "4",
+                },
+                ([-1], [7], [4]),
+                id="mixed",
+            ),
+            pytest.param(
+                {"updates": [{"attributes": {"name": "no oid"}}]},
+                ([], [-1], []),
+                id="update-missing-objectid",
+            ),
+            pytest.param({}, ([], [], []), id="empty"),
+        ],
+    )
+    def test_reports_object_ids_per_edit_type_when_batch_fails(
+        self, batch, expected_ids
+    ):
+        result = ApplyEditsOperation._failed_batch_result(
+            batch, httpx.ReadTimeout("slow"), "OBJECTID", outcome_unknown=True
+        )
+
+        assert (
+            [item.object_id for item in result.add_results],
+            [item.object_id for item in result.update_results],
+            [item.object_id for item in result.delete_results],
+        ) == expected_ids
+
+    @pytest.mark.parametrize("outcome_unknown", [True, False], ids=["unknown", "known"])
+    def test_marks_every_item_failed_with_batch_details_when_batch_fails(
+        self, outcome_unknown
+    ):
+        batch = {
+            "adds": [make_small_feature(1)],
+            "updates": [{"attributes": {"OBJECTID": 7}}],
+            "deletes": "4",
+        }
+
+        result = ApplyEditsOperation._failed_batch_result(
+            batch,
+            httpx.ReadTimeout("slow"),
+            "OBJECTID",
+            outcome_unknown=outcome_unknown,
+            status_url=STATUS_URL,
+        )
+
+        items = result.add_results + result.update_results + result.delete_results
+        assert [item.success for item in items] == [False] * 3
+        assert [
+            (
+                (item.error or {}).get("exception"),
+                (item.error or {}).get("outcome_unknown"),
+                (item.error or {}).get("status_url"),
+            )
+            for item in items
+        ] == [("ReadTimeout", outcome_unknown, STATUS_URL)] * 3
 
 
 class TestPollStatus:
