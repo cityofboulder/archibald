@@ -80,7 +80,11 @@ class TestPostBatch:
         )
 
         await apply_edits_op._post_batch(
-            batch, rollback_on_failure=False, use_async=False, poll_timeout=300.0
+            batch,
+            objectid_field="OBJECTID",
+            rollback_on_failure=False,
+            use_async=False,
+            poll_timeout=300.0,
         )
 
         data = mock_layer._client.post.call_args.kwargs["data"]
@@ -95,7 +99,11 @@ class TestPostBatch:
         )
 
         await apply_edits_op._post_batch(
-            batch, rollback_on_failure=False, use_async=False, poll_timeout=300.0
+            batch,
+            objectid_field="OBJECTID",
+            rollback_on_failure=False,
+            use_async=False,
+            poll_timeout=300.0,
         )
 
         data = mock_layer._client.post.call_args.kwargs["data"]
@@ -117,6 +125,7 @@ class TestPostBatch:
 
         await apply_edits_op._post_batch(
             batch,
+            objectid_field="OBJECTID",
             rollback_on_failure=rollback_on_failure,
             use_async=False,
             poll_timeout=300.0,
@@ -140,7 +149,11 @@ class TestPostBatch:
         )
 
         await apply_edits_op._post_batch(
-            batch, rollback_on_failure=False, use_async=True, poll_timeout=300.0
+            batch,
+            objectid_field="OBJECTID",
+            rollback_on_failure=False,
+            use_async=True,
+            poll_timeout=300.0,
         )
 
         data = mock_layer._client.post.call_args.kwargs["data"]
@@ -156,7 +169,11 @@ class TestPostBatch:
         )
 
         await apply_edits_op._post_batch(
-            batch, rollback_on_failure=False, use_async=False, poll_timeout=300.0
+            batch,
+            objectid_field="OBJECTID",
+            rollback_on_failure=False,
+            use_async=False,
+            poll_timeout=300.0,
         )
 
         data = mock_layer._client.post.call_args.kwargs["data"]
@@ -172,7 +189,11 @@ class TestPostBatch:
         )
 
         result = await apply_edits_op._post_batch(
-            batch, rollback_on_failure=False, use_async=False, poll_timeout=300.0
+            batch,
+            objectid_field="OBJECTID",
+            rollback_on_failure=False,
+            use_async=False,
+            poll_timeout=300.0,
         )
 
         assert isinstance(result, ApplyEditsResult)
@@ -194,7 +215,11 @@ class TestPostBatch:
         )
 
         await apply_edits_op._post_batch(
-            batch, rollback_on_failure=False, use_async=True, poll_timeout=300.0
+            batch,
+            objectid_field="OBJECTID",
+            rollback_on_failure=False,
+            use_async=True,
+            poll_timeout=300.0,
         )
 
         mock_poll.assert_awaited_once_with(
@@ -528,6 +553,7 @@ class TestPostBatches:
 
         result = await apply_edits_op._post_batches(
             [{"adds": [make_small_feature(1)]}],
+            objectid_field="OBJECTID",
             rollback_on_failure=False,
             use_async=False,
             poll_timeout=300.0,
@@ -543,7 +569,7 @@ class TestPostBatches:
         r2 = make_apply_edits_result(adds=[make_edit_result_item(2)])
 
         async def post_side_effect(
-            batch, *, rollback_on_failure, use_async, poll_timeout
+            batch, *, objectid_field, rollback_on_failure, use_async, poll_timeout
         ):
             return r1 if batch is batch1 else r2
 
@@ -551,6 +577,7 @@ class TestPostBatches:
 
         result = await apply_edits_op._post_batches(
             [batch1, batch2],
+            objectid_field="OBJECTID",
             rollback_on_failure=False,
             use_async=False,
             poll_timeout=300.0,
@@ -570,6 +597,7 @@ class TestPostBatches:
 
         await apply_edits_op._post_batches(
             [{}, {}],
+            objectid_field="OBJECTID",
             rollback_on_failure=True,
             use_async=True,
             poll_timeout=300.0,
@@ -589,6 +617,7 @@ class TestPostBatches:
 
         await apply_edits_op._post_batches(
             [{}, {}],
+            objectid_field="OBJECTID",
             rollback_on_failure=False,
             use_async=True,
             poll_timeout=60.0,
@@ -622,6 +651,7 @@ class TestPostBatches:
 
         await apply_edits_op._post_batches(
             [{} for _ in range(num_batches)],
+            objectid_field="OBJECTID",
             rollback_on_failure=False,
             use_async=True,
             poll_timeout=300.0,
@@ -644,6 +674,7 @@ class TestPostBatches:
 
         await apply_edits_op._post_batches(
             [{}, {}, {}],
+            objectid_field="OBJECTID",
             rollback_on_failure=False,
             use_async=False,
             poll_timeout=300.0,
@@ -663,6 +694,7 @@ class TestPostBatches:
         with pytest.raises(Exception):
             await apply_edits_op._post_batches(
                 [{}],
+                objectid_field="OBJECTID",
                 rollback_on_failure=False,
                 use_async=True,
                 poll_timeout=300.0,
