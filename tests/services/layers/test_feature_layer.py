@@ -81,6 +81,56 @@ class TestSupportsUpdate:
         assert await feature_layer.supports_update() is expected
 
 
+class TestSupportsRollbackOnFailure:
+    @pytest.mark.parametrize(
+        "metadata,expected",
+        [
+            ({"supportsRollbackOnFailureParameter": True}, True),
+            ({"supportsRollbackOnFailureParameter": False}, False),
+            (
+                {
+                    "advancedEditingCapabilities": {
+                        "supportsRollbackOnFailureParameter": True
+                    }
+                },
+                False,
+            ),
+            ({}, False),
+        ],
+        ids=["root_true", "root_false", "nested_only", "key_missing"],
+    )
+    @pytest.mark.anyio
+    async def test_reads_layer_root_when_metadata_given(
+        self, feature_layer, mock_client, metadata, expected
+    ):
+        mock_client.get.return_value = make_response(metadata)
+
+        assert await feature_layer.supports_rollback_on_failure() is expected
+
+
+class TestSupportsAsyncApplyEdits:
+    @pytest.mark.parametrize(
+        "metadata,expected",
+        [
+            ({"advancedEditingCapabilities": {"supportsAsyncApplyEdits": True}}, True),
+            (
+                {"advancedEditingCapabilities": {"supportsAsyncApplyEdits": False}},
+                False,
+            ),
+            ({"supportsAsyncApplyEdits": True}, False),
+            ({}, False),
+        ],
+        ids=["nested_true", "nested_false", "root_only", "key_missing"],
+    )
+    @pytest.mark.anyio
+    async def test_reads_advanced_editing_capabilities_when_metadata_given(
+        self, feature_layer, mock_client, metadata, expected
+    ):
+        mock_client.get.return_value = make_response(metadata)
+
+        assert await feature_layer.supports_async_apply_edits() is expected
+
+
 class TestApplyEdits:
     @pytest.mark.anyio
     async def test_raises_when_not_supported(self, feature_layer, mocker):
@@ -128,9 +178,93 @@ class TestApplyEdits:
             adds=df,
             updates=None,
             deletes=None,
-            rollback_on_failure=False,
+            rollback_on_failure=True,
             apply_coded_values=True,
         )
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "kwargs,rollback_supported,expected",
+        [
+            ({}, True, True),
+            ({"rollback_on_failure": True}, False, True),
+            ({"rollback_on_failure": False}, True, False),
+            pytest.param(
+                {"rollback_on_failure": False},
+                False,
+                True,
+                marks=pytest.mark.filterwarnings("ignore:.*rollbackOnFailure=False"),
+            ),
+        ],
+        ids=[
+            "default",
+            "rollback_unsupported",
+            "no_rollback_supported",
+            "no_rollback_unsupported",
+        ],
+    )
+    async def test_forwards_effective_rollback_to_execute_when_requested(
+        self,
+        feature_layer,
+        mock_apply_edits_execute,
+        mocker,
+        kwargs,
+        rollback_supported,
+        expected,
+    ):
+        mocker.patch.object(
+            feature_layer,
+            "supports_rollback_on_failure",
+            return_value=rollback_supported,
+        )
+
+        await feature_layer.apply_edits(deletes=[1], **kwargs)
+
+        assert mock_apply_edits_execute.call_args.kwargs["rollback_on_failure"] is (
+            expected
+        )
+
+    @pytest.mark.anyio
+    async def test_warns_when_rollback_disabled_on_unsupported_layer(
+        self, feature_layer, mock_apply_edits_execute, mocker
+    ):
+        mocker.patch.object(
+            feature_layer, "supports_rollback_on_failure", return_value=False
+        )
+
+        with pytest.warns(
+            UserWarning, match=r"does not support rollbackOnFailure=False"
+        ):
+            await feature_layer.apply_edits(deletes=[1], rollback_on_failure=False)
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "kwargs,rollback_supported",
+        [
+            ({}, False),
+            ({"rollback_on_failure": True}, False),
+            ({"rollback_on_failure": False}, True),
+        ],
+        ids=["default_unsupported", "rollback_unsupported", "no_rollback_supported"],
+    )
+    async def test_no_warning_when_rollback_request_is_honored(
+        self,
+        feature_layer,
+        mock_apply_edits_execute,
+        mocker,
+        recwarn,
+        kwargs,
+        rollback_supported,
+    ):
+        mocker.patch.object(
+            feature_layer,
+            "supports_rollback_on_failure",
+            return_value=rollback_supported,
+        )
+
+        await feature_layer.apply_edits(deletes=[1], **kwargs)
+
+        assert len(recwarn) == 0
 
 
 class TestAppend:

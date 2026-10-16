@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.5] - 2026-10-16
+
+### Fixed
+
+- `apply_edits(rollback_on_failure=False)` now sends `rollbackOnFailure=false` to the server. Previously the parameter was omitted unless `True`, so ESRI's documented default of `true` always applied and any failing edit rolled back its whole batch.
+- On layers without `supportsRollbackOnFailureParameter`, the warning said edits would proceed without rollback; per ESRI, those layers always roll back. Requesting `rollback_on_failure=False` on such a layer now warns once from `FeatureLayer.apply_edits()` that the server will roll back each failing batch.
+- `supports_rollback_on_failure()` now reads `supportsRollbackOnFailureParameter` from the layer root instead of `advancedEditingCapabilities`, where ESRI never puts it. It previously returned `False` for every layer.
+
+### Changed
+
+- `rollback_on_failure` now defaults to `True` in `FeatureLayer.apply_edits()` and `ApplyEditsOperation.execute()`, matching ESRI's default. Effective behavior for callers using the default is unchanged, since the server was already rolling back.
+- Rollback being per batch is now documented on `apply_edits()` instead of warned on every large edit.
+
 ## [1.2.4] - 2026-10-14
 
 ### Fixed
@@ -152,7 +165,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - When an async `applyEdits` job completes, the operation now follows the `resultUrl` returned in the status body to fetch the actual edit results (`addResults`, `updateResults`, `deleteResults`). Previously the status body itself was parsed as the result, which always produced empty result sets.
 - Async polling loop is now bounded by `anyio.fail_after`; previously it could spin indefinitely if the server never returned a terminal status.
 
-[Unreleased]: https://github.com/cityofboulder/archibald/compare/v1.2.4...HEAD
+[Unreleased]: https://github.com/cityofboulder/archibald/compare/v1.2.5...HEAD
+[1.2.5]: https://github.com/cityofboulder/archibald/compare/v1.2.4...v1.2.5
 [1.2.4]: https://github.com/cityofboulder/archibald/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/cityofboulder/archibald/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/cityofboulder/archibald/compare/v1.2.2...v1.2.1
