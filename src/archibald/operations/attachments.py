@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, BinaryIO, Iterable
 
 import anyio
 
-from archibald.errors import is_outcome_unknown
-from archibald.exceptions import ArcGISError, InvalidParameterError
+from archibald.errors import failed_items, is_outcome_unknown
+from archibald.exceptions import InvalidParameterError
 from archibald.models.attachments_result import AttachmentsResult
 from archibald.models.edit_result_item import EditResultItem
 
@@ -242,14 +242,8 @@ class BaseAttachmentUploadOperation:
                 files={"attachment": (filename, body, content_type)},
             )
             item = response.json()[f"{self._endpoint}Result"]
-        except ArcGISError as exc:
-            if exc.raw_response is None:
-                return EditResultItem._from_exception(exc)
-            item = exc.raw_response
         except Exception as exc:
-            return EditResultItem._from_exception(
-                exc, outcome_unknown=is_outcome_unknown(exc)
-            )
+            return failed_items(exc, [-1], outcome_unknown=is_outcome_unknown(exc))[0]
         return EditResultItem._from_esri(item)
 
     @staticmethod
@@ -384,22 +378,8 @@ class DeleteAttachmentsOperation:
                 data={"attachmentIds": ",".join(str(i) for i in attachment_ids)},
             )
             items = response.json()["deleteAttachmentResults"]
-        except ArcGISError as exc:
-            if exc.raw_response is None:
-                return [
-                    EditResultItem._from_exception(exc, object_id=att_id)
-                    for att_id in attachment_ids
-                ]
-            return [
-                EditResultItem._from_esri({**exc.raw_response, "objectId": att_id})
-                for att_id in attachment_ids
-            ]
         except Exception as exc:
-            outcome_unknown = is_outcome_unknown(exc)
-            return [
-                EditResultItem._from_exception(
-                    exc, object_id=att_id, outcome_unknown=outcome_unknown
-                )
-                for att_id in attachment_ids
-            ]
+            return failed_items(
+                exc, attachment_ids, outcome_unknown=is_outcome_unknown(exc)
+            )
         return [EditResultItem._from_esri(r) for r in items]
