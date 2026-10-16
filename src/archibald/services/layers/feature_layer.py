@@ -72,12 +72,11 @@ class FeatureLayer(FeatureService, BaseLayer):
         """Whether this layer supports the rollbackOnFailure parameter.
 
         Returns:
-            True if the layer advertises supportsRollbackOnFailureParameter in
-            its advancedEditingCapabilities.
+            True if the layer resource advertises
+            supportsRollbackOnFailureParameter at its root.
         """
         metadata = await self._get_layer_metadata()
-        adv = metadata.get("advancedEditingCapabilities", {})
-        return bool(adv.get("supportsRollbackOnFailureParameter", False))
+        return bool(metadata.get("supportsRollbackOnFailureParameter", False))
 
     async def supports_async_apply_edits(self) -> bool:
         """Whether this layer supports server-side async applyEdits processing.
