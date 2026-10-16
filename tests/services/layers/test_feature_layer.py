@@ -81,6 +81,56 @@ class TestSupportsUpdate:
         assert await feature_layer.supports_update() is expected
 
 
+class TestSupportsRollbackOnFailure:
+    @pytest.mark.parametrize(
+        "metadata,expected",
+        [
+            ({"supportsRollbackOnFailureParameter": True}, True),
+            ({"supportsRollbackOnFailureParameter": False}, False),
+            (
+                {
+                    "advancedEditingCapabilities": {
+                        "supportsRollbackOnFailureParameter": True
+                    }
+                },
+                False,
+            ),
+            ({}, False),
+        ],
+        ids=["root_true", "root_false", "nested_only", "key_missing"],
+    )
+    @pytest.mark.anyio
+    async def test_reads_layer_root_when_metadata_given(
+        self, feature_layer, mock_client, metadata, expected
+    ):
+        mock_client.get.return_value = make_response(metadata)
+
+        assert await feature_layer.supports_rollback_on_failure() is expected
+
+
+class TestSupportsAsyncApplyEdits:
+    @pytest.mark.parametrize(
+        "metadata,expected",
+        [
+            ({"advancedEditingCapabilities": {"supportsAsyncApplyEdits": True}}, True),
+            (
+                {"advancedEditingCapabilities": {"supportsAsyncApplyEdits": False}},
+                False,
+            ),
+            ({"supportsAsyncApplyEdits": True}, False),
+            ({}, False),
+        ],
+        ids=["nested_true", "nested_false", "root_only", "key_missing"],
+    )
+    @pytest.mark.anyio
+    async def test_reads_advanced_editing_capabilities_when_metadata_given(
+        self, feature_layer, mock_client, metadata, expected
+    ):
+        mock_client.get.return_value = make_response(metadata)
+
+        assert await feature_layer.supports_async_apply_edits() is expected
+
+
 class TestApplyEdits:
     @pytest.mark.anyio
     async def test_raises_when_not_supported(self, feature_layer, mocker):
