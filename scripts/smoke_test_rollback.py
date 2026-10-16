@@ -14,7 +14,8 @@ Two cases are run against the same payload:
    the server rolls the batch back.
 2. Default (``rollback_on_failure=True``): the server rejects the whole batch
    with an error envelope ("Unable to complete operation." / "Operation rolled
-   back."), surfaced as a ServiceError.
+   back."). apply_edits returns it as two ``success=False`` items carrying
+   the server's error, in input order, rather than raising.
 
 Usage:
     uv run python scripts/smoke_test_rollback.py \\
@@ -41,7 +42,6 @@ import pandas as pd
 
 from archibald.auth import NoAuth, UserTokenAuth
 from archibald.client import ArchieClient
-from archibald.exceptions import ArcGISError
 from archibald.models import ApplyEditsResult
 from archibald.services import FeatureLayer
 
@@ -135,40 +135,38 @@ def _print_updates(result: ApplyEditsResult) -> None:
 
 async def _run_case(
     layer: FeatureLayer, updates: pd.DataFrame, **kwargs
-) -> tuple[ApplyEditsResult | None, ArcGISError | None, list[str]]:
-    """Run apply_edits, capturing the result or ESRI error and any warnings.
-
-    Batch errors surface wrapped in an ExceptionGroup from the operation's
-    task group, so ESRI errors are unwrapped with except*. Anything else
-    propagates.
-    """
-    result, error = None, None
+) -> tuple[ApplyEditsResult, list[str]]:
+    """Run apply_edits, capturing the result and any warnings."""
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        try:
-            result = await layer.apply_edits(updates=updates, **kwargs)
-        except* ArcGISError as group:
-            leaf = group.exceptions[0]
-            while isinstance(leaf, ExceptionGroup):
-                leaf = leaf.exceptions[0]
-            error = leaf
+        result = await layer.apply_edits(updates=updates, **kwargs)
     messages = [str(w.message) for w in caught]
     for msg in messages:
         print(f"  warning: {msg}")
-    if error is not None:
-        print(f"  raised {type(error).__name__}: {error}")
-        print(f"    details: {error.details}")
-    if result is not None:
-        _print_updates(result)
-    return result, error, messages
+    _print_updates(result)
+    return result, messages
 
 
-def _check_partial(result: ApplyEditsResult | None, real_oid: int) -> bool:
+def _check_partial(result: ApplyEditsResult, real_oid: int) -> bool:
     """True when the real update succeeded and the other one failed."""
-    if result is None or len(result.update_results) != 2:
+    if len(result.update_results) != 2:
         return False
     succeeded = [item for item in result.update_results if item.success]
     return len(succeeded) == 1 and succeeded[0].object_id == real_oid
+
+
+def _check_rolled_back(
+    result: ApplyEditsResult, real_oid: int, missing_oid: int
+) -> bool:
+    """True when both updates failed, in input order, with the server's error."""
+    items = result.update_results
+    return (
+        [item.object_id for item in items] == [real_oid, missing_oid]
+        and not any(item.success for item in items)
+        and all(
+            item.error is not None and "exception" not in item.error for item in items
+        )
+    )
 
 
 async def main(args: argparse.Namespace) -> None:
@@ -239,25 +237,25 @@ async def main(args: argparse.Namespace) -> None:
 
         # --- Case 1: rollback disabled ---
         _section("CASE 1: rollback_on_failure=False")
-        result, error, messages = await _run_case(
-            layer, updates, rollback_on_failure=False
-        )
+        result, messages = await _run_case(layer, updates, rollback_on_failure=False)
         if supports_rollback:
-            print("  expected: 1 OK (real), 1 FAIL (missing), no exception, no warning")
-            case1 = error is None and not messages and _check_partial(result, real_oid)
+            print("  expected: 1 OK (real), 1 FAIL (missing), no warning")
+            case1 = not messages and _check_partial(result, real_oid)
         else:
-            print("  expected: rollback warning, then ServiceError (batch rolled back)")
-            case1 = error is not None and any(
+            print("  expected: rollback warning, then 2 FAIL with the server's error")
+            case1 = any(
                 "rollbackOnFailure=False" in m for m in messages
-            )
+            ) and _check_rolled_back(result, real_oid, args.missing_oid)
         print(f"  => {'PASS' if case1 else 'FAIL'}")
         overall_passed &= case1
 
         # --- Case 2: default (rollback) ---
         _section("CASE 2: default rollback_on_failure (True)")
-        result, error, messages = await _run_case(layer, updates)
-        print("  expected: ServiceError (batch rolled back), no warning")
-        case2 = error is not None and result is None and not messages
+        result, messages = await _run_case(layer, updates)
+        print(
+            "  expected: 2 FAIL with the server's error (batch rolled back), no warning"
+        )
+        case2 = not messages and _check_rolled_back(result, real_oid, args.missing_oid)
         print(f"  => {'PASS' if case2 else 'FAIL'}")
         overall_passed &= case2
 
