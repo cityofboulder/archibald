@@ -13,6 +13,7 @@ from archibald.exceptions import (
     TokenExpiredError,
     TokenMissingError,
 )
+from archibald.models.edit_result_item import EditResultItem
 
 _ESRI_CODE_MAP: dict[int, type[ArcGISError]] = {
     498: TokenExpiredError,
@@ -62,6 +63,44 @@ def is_outcome_unknown(exc: Exception) -> bool:
     if isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)):
         return False
     return isinstance(exc, (httpx.TransportError, ValueError, KeyError, TimeoutError))
+
+
+def failed_items(
+    exc: Exception,
+    object_ids: list[int],
+    *,
+    outcome_unknown: bool,
+) -> list[EditResultItem]:
+    """Build one failed EditResultItem per ID from a single request failure.
+
+    An ArcGISError carrying an ESRI error envelope (``raw_response`` with an
+    ``"error"`` key) means the server rejected the request, so each item
+    carries that error dict. Anything else, including an ArcGISError whose
+    ``raw_response`` is missing or is not an envelope (e.g. an async job's
+    status body), becomes an item built from the exception, flagged with
+    ``outcome_unknown``.
+
+    Args:
+        exc: Exception raised by the request.
+        object_ids: ID to report on each item, one item per ID.
+        outcome_unknown: Whether the server may have applied the request
+            anyway; ignored for ESRI error envelopes.
+
+    Returns:
+        List of ``success=False`` items in ``object_ids`` order.
+    """
+    envelope = exc.raw_response if isinstance(exc, ArcGISError) else None
+    if envelope is not None and "error" in envelope:
+        return [
+            EditResultItem._from_esri({**envelope, "objectId": oid})
+            for oid in object_ids
+        ]
+    return [
+        EditResultItem._from_exception(
+            exc, object_id=oid, outcome_unknown=outcome_unknown
+        )
+        for oid in object_ids
+    ]
 
 
 def handle_esri_errors(func: Callable[..., Any]) -> Callable[..., Any]:
