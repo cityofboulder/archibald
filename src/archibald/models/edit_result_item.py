@@ -31,27 +31,27 @@ class EditResultItem:
         *,
         object_id: int = -1,
         outcome_unknown: bool = False,
+        status_url: str | None = None,
     ) -> EditResultItem:
         """Build a failed item from an exception that produced no ESRI result.
 
         The error dict mirrors ESRI's per-item ``code``/``description`` shape and
         adds ``exception`` (the exception class name) and ``outcome_unknown``
         (True when the request may have reached the server, so it may have been
-        applied despite the failure).
+        applied despite the failure). ``status_url`` is added only when given.
 
         Args:
             exc: The exception that prevented a result from being obtained.
             object_id: ID to report on the item; -1 when none is known.
             outcome_unknown: Whether the server may have processed the request.
+            status_url: Async job status URL to report, if the request had one.
         """
-        return cls(
-            object_id=object_id,
-            global_id=None,
-            success=False,
-            error={
-                "code": getattr(exc, "code", -1),
-                "description": str(exc) or type(exc).__name__,
-                "exception": type(exc).__name__,
-                "outcome_unknown": outcome_unknown,
-            },
-        )
+        error = {
+            "code": getattr(exc, "code", -1),
+            "description": str(exc) or type(exc).__name__,
+            "exception": type(exc).__name__,
+            "outcome_unknown": outcome_unknown,
+        }
+        if status_url is not None:
+            error["status_url"] = status_url
+        return cls(object_id=object_id, global_id=None, success=False, error=error)

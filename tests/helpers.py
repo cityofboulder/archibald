@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import httpx
+import pytest
 from pytest_mock import MockerFixture
 from unittest.mock import AsyncMock
 
 from archibald.auth import ArcGISAuth, UserTokenAuth
 from archibald.client import ArchieClient
 from archibald.errors import handle_esri_errors
-from archibald.exceptions import ArcGISError, AuthorizationError
+from archibald.exceptions import (
+    ArcGISError,
+    AuthorizationError,
+    ServiceError,
+    TokenRefreshError,
+)
 from archibald.models import (
     AttachmentsResult,
     ApplyEditsResult,
@@ -20,6 +26,7 @@ from archibald.services import BaseService
 BASE_URL = "https://example.com/arcgis/rest/services/MyService/FeatureServer"
 SERVICE_PATH = "services/MyService/FeatureServer"
 MAP_LAYER_PATH = "services/MyService/MapServer"
+STATUS_URL = f"{BASE_URL}/0/applyEdits/jobs/abc123"
 
 AnyClient = UserTokenAuth | ArchieClient
 
@@ -401,3 +408,39 @@ def inject_mock_client(
     mock_client.post.return_value = response
     target._client = mock_client
     return mock_client
+
+
+OUTCOME_UNKNOWN_CASES = [
+    pytest.param(make_http_status_error(500), True, id="http-500"),
+    pytest.param(make_http_status_error(502), True, id="http-502"),
+    pytest.param(make_http_status_error(400), False, id="http-400"),
+    pytest.param(make_http_status_error(413), False, id="http-413"),
+    pytest.param(httpx.ConnectError("refused"), False, id="connect-error"),
+    pytest.param(httpx.ConnectTimeout("slow"), False, id="connect-timeout"),
+    pytest.param(httpx.PoolTimeout("busy"), False, id="pool-timeout"),
+    pytest.param(httpx.ReadTimeout("slow"), True, id="read-timeout"),
+    pytest.param(httpx.WriteTimeout("slow"), True, id="write-timeout"),
+    pytest.param(httpx.ReadError("reset"), True, id="read-error"),
+    pytest.param(httpx.RemoteProtocolError("bad"), True, id="remote-protocol-error"),
+    pytest.param(ValueError("not json"), True, id="value-error"),
+    pytest.param(KeyError("addAttachmentResult"), True, id="key-error"),
+    pytest.param(make_arcgis_error(), False, id="arcgis-error"),
+    pytest.param(TokenRefreshError("refresh failed"), False, id="token-refresh"),
+    pytest.param(OSError("boom"), False, id="os-error"),
+    pytest.param(TimeoutError(), True, id="timeout-error"),
+]
+
+NON_ENVELOPE_FAILURE_CASES = [
+    pytest.param(
+        ServiceError(code=-1, message="No response."), id="arcgis-error-no-response"
+    ),
+    pytest.param(
+        ServiceError(
+            code=-1,
+            message="Async applyEdits job failed.",
+            raw_response={"status": "Failed"},
+        ),
+        id="service-error-status-body",
+    ),
+    pytest.param(httpx.ReadTimeout("slow"), id="read-timeout"),
+]

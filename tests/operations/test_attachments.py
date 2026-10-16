@@ -12,10 +12,7 @@ from archibald.exceptions import (
     TokenRefreshError,
 )
 from archibald.models.edit_result_item import EditResultItem
-from archibald.operations.attachments import (
-    AddAttachmentsOperation,
-    _is_outcome_unknown,
-)
+from archibald.operations.attachments import AddAttachmentsOperation
 from tests.helpers import (
     NonRecoverableSignal,
     make_arcgis_error,
@@ -48,25 +45,6 @@ POST_OUTCOME_CASES = [
     pytest.param(make_http_status_error(413), False, id="http-413-known"),
     pytest.param(httpx.ReadTimeout("slow"), True, id="read-timeout-unknown"),
     pytest.param(httpx.ConnectError("refused"), False, id="connect-error-known"),
-]
-
-OUTCOME_UNKNOWN_CASES = [
-    pytest.param(make_http_status_error(500), True, id="http-500"),
-    pytest.param(make_http_status_error(502), True, id="http-502"),
-    pytest.param(make_http_status_error(400), False, id="http-400"),
-    pytest.param(make_http_status_error(413), False, id="http-413"),
-    pytest.param(httpx.ConnectError("refused"), False, id="connect-error"),
-    pytest.param(httpx.ConnectTimeout("slow"), False, id="connect-timeout"),
-    pytest.param(httpx.PoolTimeout("busy"), False, id="pool-timeout"),
-    pytest.param(httpx.ReadTimeout("slow"), True, id="read-timeout"),
-    pytest.param(httpx.WriteTimeout("slow"), True, id="write-timeout"),
-    pytest.param(httpx.ReadError("reset"), True, id="read-error"),
-    pytest.param(httpx.RemoteProtocolError("bad"), True, id="remote-protocol-error"),
-    pytest.param(ValueError("not json"), True, id="value-error"),
-    pytest.param(KeyError("addAttachmentResult"), True, id="key-error"),
-    pytest.param(make_arcgis_error(), False, id="arcgis-error"),
-    pytest.param(TokenRefreshError("refresh failed"), False, id="token-refresh"),
-    pytest.param(OSError("boom"), False, id="os-error"),
 ]
 
 MALFORMED_RESPONSES = [
@@ -390,12 +368,6 @@ class TestAddAttachmentsPostOne:
         result = await add_attachments_op._post_one(5, b"data", "img.jpg", "image/jpeg")
 
         assert result.error["outcome_unknown"] is False
-
-
-class TestIsOutcomeUnknown:
-    @pytest.mark.parametrize("exc, expected", OUTCOME_UNKNOWN_CASES)
-    def test_classifies_exception(self, exc, expected):
-        assert _is_outcome_unknown(exc) is expected
 
 
 class TestAddAttachmentsExecute:
