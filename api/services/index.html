@@ -1858,7 +1858,7 @@ back to their raw codes before serialization.</p>
 
 
 <h3 id="archibald.services.FeatureLayer.apply_edits" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">apply_edits</span><span class="p">(</span><span class="n">adds</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">updates</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">deletes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">rollback_on_failure</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">apply_coded_values</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">apply_edits</span><span class="p">(</span><span class="n">adds</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">updates</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">deletes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">rollback_on_failure</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">apply_coded_values</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-async"><code>async</code></small>
@@ -1872,6 +1872,9 @@ back to their raw codes before serialization.</p>
         <p>Add, update, and/or delete features in a single batched operation.</p>
 <p>Validates that the layer supports applyEdits, then delegates all
 serialization, batching, and posting to ApplyEditsOperation.</p>
+<p>Rollback applies per POST batch, not across batches: when a large edit
+spans several batches, a failure in one batch does not roll back
+batches that already succeeded.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -1943,12 +1946,15 @@ column, or a Series of integer OBJECTIDs.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Request server-side rollback on failure. Silently
-degraded to False with a warning if the layer does not support it.</p>
+                <p>When True (ESRI's default), a batch is applied
+only if every edit in it succeeds. When False, the edits that
+succeed are applied and failures are reported per item. Layers
+that do not advertise supportsRollbackOnFailureParameter always
+roll back; requesting False on one emits a warning.</p>
               </div>
             </td>
             <td>
-                  <code>False</code>
+                  <code>True</code>
             </td>
           </tr>
           <tr class="doc-section-item">
@@ -2016,6 +2022,30 @@ in the DataFrame back to their raw codes before serialization.</p>
             <td>
               <div class="doc-md-description">
                 <p>If the layer does not support edit operations.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Warns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code>UserWarning</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If rollback_on_failure=False but the layer does not
+support disabling rollback.</p>
               </div>
             </td>
           </tr>
@@ -2298,7 +2328,7 @@ feature are removed in a single request.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>True if the layer advertises supportsRollbackOnFailureParameter in</p>
+                <p>True if the layer resource advertises</p>
               </div>
             </td>
           </tr>
@@ -2308,7 +2338,7 @@ feature are removed in a single request.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>its advancedEditingCapabilities.</p>
+                <p>supportsRollbackOnFailureParameter at its root.</p>
               </div>
             </td>
           </tr>
