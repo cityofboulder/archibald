@@ -326,9 +326,11 @@ edits = await layer.apply_edits(
     adds=rows_to_add,
     updates=rows_to_update,
     deletes=ids_to_delete,
-    rollback_on_failure=True,
+    rollback_on_failure=False,
 )
 ```
+
+By default (`rollback_on_failure=True`, matching ESRI), a batch is applied only if every edit in it succeeds; otherwise the whole batch is rolled back. Pass `rollback_on_failure=False` to apply the edits that succeed and report the rest as per-item failures (see [Checking for failures](#checking-for-failures)). Rollback is per batch: when a large edit is split into several requests, a failed batch does not undo batches that already succeeded. Layers that don't advertise `supportsRollbackOnFailureParameter` always roll back, and requesting `False` on one emits a warning.
 
 ### Round-trip domain translation
 

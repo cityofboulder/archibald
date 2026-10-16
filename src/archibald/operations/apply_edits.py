@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import contextlib
 import json
-import warnings
 from typing import TYPE_CHECKING
 
 import anyio
@@ -36,7 +35,7 @@ class ApplyEditsOperation:
         updates: pd.DataFrame | gpd.GeoDataFrame | None = None,
         deletes: pd.DataFrame | pd.Series | list[int] | None = None,
         *,
-        rollback_on_failure: bool = False,
+        rollback_on_failure: bool = True,
         apply_coded_values: bool = False,
         poll_timeout: float | None = None,
     ) -> ApplyEditsResult:
@@ -51,10 +50,12 @@ class ApplyEditsOperation:
             updates: Rows to update (must include the OBJECTID column).
             deletes: OBJECTIDs to delete — list[int], DataFrame with an OBJECTID
                 column, or a Series of integer OBJECTIDs.
-            rollback_on_failure: Request server-side rollback on failure. The
-                layer must support this capability; a ValueError is raised if it
-                does not. When batching produces > 1 POST, rollback is per-batch
-                only (a warning is emitted).
+            rollback_on_failure: Sent as rollbackOnFailure on every batch. When
+                True (ESRI's default), a batch is applied only if all of its
+                edits succeed; when False, successful edits are applied.
+                Rollback is per batch, never across batches. Layers without
+                supportsRollbackOnFailureParameter always roll back regardless;
+                FeatureLayer.apply_edits warns about that case.
             apply_coded_values: When True, translate human-readable domain names
                 in the DataFrame back to their raw codes before serialization.
             poll_timeout: Maximum seconds to wait for an async job to complete
@@ -67,12 +68,9 @@ class ApplyEditsOperation:
             ApplyEditsResult with all add, update, and delete results merged.
 
         Raises:
-            ValueError: If rollback_on_failure=True but the layer does not support it.
             TimeoutError: If an async job does not complete within poll_timeout seconds.
 
         Warns:
-            UserWarning: If rollback_on_failure=True and > 1 batch is produced
-                (rollback is per-batch, not cross-batch).
             UserWarning: For each DataFrame column that falls outside the editable
                 field set and will not be sent.
         """
@@ -104,24 +102,6 @@ class ApplyEditsOperation:
             )
 
         batches = pack_batches(serialized_adds, serialized_updates, delete_oids)
-
-        if rollback_on_failure and not await self._layer.supports_rollback_on_failure():
-            warnings.warn(
-                (
-                    f"Layer {self._layer._layer_path} does not support rollbackOnFailure. "
-                    "The applyEdits operation will proceed without rollback on failure."
-                ),
-                stacklevel=2,
-            )
-            rollback_on_failure = False
-
-        if rollback_on_failure and len(batches) > 1:
-            warnings.warn(
-                "rollback_on_failure=True but the payload spans multiple batches. "
-                "Rollback is per-batch only — a failure in one batch will not roll "
-                "back successfully applied batches.",
-                stacklevel=2,
-            )
 
         use_async = len(batches) > 1 and await self._layer.supports_async_apply_edits()
 
@@ -175,7 +155,8 @@ class ApplyEditsOperation:
         Args:
             batch: A single batch dict from pack_batches (may contain adds,
                 updates, and/or deletes keys).
-            rollback_on_failure: Include rollbackOnFailure=true in the POST body.
+            rollback_on_failure: Value of rollbackOnFailure, always sent in the
+                POST body because ESRI defaults it to true when omitted.
             use_async: Include async=true in the POST body and poll for results.
             poll_timeout: Forwarded to _poll_status as the per-job timeout.
 
@@ -189,8 +170,7 @@ class ApplyEditsOperation:
             body["updates"] = json.dumps(batch["updates"])
         if "deletes" in batch:
             body["deletes"] = batch["deletes"]  # already a comma-separated string
-        if rollback_on_failure:
-            body["rollbackOnFailure"] = "true"
+        body["rollbackOnFailure"] = "true" if rollback_on_failure else "false"
         if use_async:
             body["async"] = "true"
 

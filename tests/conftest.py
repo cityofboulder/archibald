@@ -25,6 +25,7 @@ from tests.helpers import (
     SERVICE_PATH,
     MinimalService,
     StaticTokenAuth,
+    make_apply_edits_result,
     make_attachment_info,
 )
 
@@ -311,6 +312,19 @@ def query_attachments_op(mock_layer) -> QueryAttachmentsOperation:
 def feature_layer(mock_client) -> FeatureLayer:
     """A real FeatureLayer backed by mock_client, at layer 0."""
     return FeatureLayer(client=mock_client, service_path=SERVICE_PATH, layer_id=0)
+
+
+@pytest.fixture
+def mock_apply_edits_execute(feature_layer, mocker):
+    """Patched ApplyEditsOperation.execute on an edit-capable feature_layer.
+
+    supports_apply_edits returns True; execute returns an empty
+    ApplyEditsResult. Returns the execute mock for call assertions.
+    """
+    mocker.patch.object(feature_layer, "supports_apply_edits", return_value=True)
+    return mocker.patch.object(
+        feature_layer._apply_edits_op, "execute", return_value=make_apply_edits_result()
+    )
 
 
 @pytest.fixture
