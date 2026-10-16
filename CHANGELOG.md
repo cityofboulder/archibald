@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `apply_edits(rollback_on_failure=False)` now sends `rollbackOnFailure=false` to the server. Previously the parameter was omitted unless `True`, so ESRI's documented default of `true` always applied and any failing edit rolled back its whole batch.
+- On layers without `supportsRollbackOnFailureParameter`, the warning said edits would proceed without rollback; per ESRI, those layers always roll back. Requesting `rollback_on_failure=False` on such a layer now warns once from `FeatureLayer.apply_edits()` that the server will roll back each failing batch.
+
+### Changed
+
+- `rollback_on_failure` now defaults to `True` in `FeatureLayer.apply_edits()` and `ApplyEditsOperation.execute()`, matching ESRI's default. Effective behavior for callers using the default is unchanged, since the server was already rolling back.
+- Rollback being per batch is now documented on `apply_edits()` instead of warned on every large edit.
+
 ## [1.2.4] - 2026-10-14
 
 ### Fixed
