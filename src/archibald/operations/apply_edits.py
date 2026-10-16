@@ -11,8 +11,10 @@ import geopandas as gpd
 import httpx
 import pandas as pd
 
+from archibald.errors import failed_items, is_outcome_unknown
 from archibald.exceptions import ServiceError
 from archibald.models.apply_edits_result import ApplyEditsResult
+from archibald.models.edit_result_item import EditResultItem
 from archibald.serializers._features import pack_batches, serialize_features
 
 if TYPE_CHECKING:
@@ -60,16 +62,20 @@ class ApplyEditsOperation:
             apply_coded_values: When True, translate human-readable domain names
                 in the DataFrame back to their raw codes before serialization.
             poll_timeout: Maximum seconds to wait for an async job to complete
-                before raising TimeoutError. Applies per batch when the layer
-                uses server-side async editing, and is measured from when the
-                batch holds a job permit, so time spent waiting behind other
-                jobs is not counted. Defaults to the client's job_timeout.
+                before its batch is reported as failed. Applies per batch when
+                the layer uses server-side async editing, and is measured from
+                when the batch holds a job permit, so time spent waiting behind
+                other jobs is not counted. Defaults to the client's job_timeout.
 
         Returns:
             ApplyEditsResult with all add, update, and delete results merged.
-
-        Raises:
-            TimeoutError: If an async job does not complete within poll_timeout seconds.
+            A batch that fails (ESRI error envelope, transport or HTTP error,
+            failed or timed-out async job) does not raise or cancel the other
+            batches; each of its edits is instead a ``success=False`` item
+            built by ``failed_items``, carrying ``error["outcome_unknown"]``
+            and, for async jobs, ``error["status_url"]``. Failed adds report
+            ``object_id`` -1 and line up with input rows only by position.
+            Retrying an add whose outcome is unknown can create a duplicate.
 
         Warns:
             UserWarning: For each DataFrame column that falls outside the editable
@@ -111,6 +117,7 @@ class ApplyEditsOperation:
 
         return await self._post_batches(
             batches,
+            objectid_field=objectid_field,
             rollback_on_failure=rollback_on_failure,
             use_async=use_async,
             poll_timeout=poll_timeout,
@@ -143,6 +150,7 @@ class ApplyEditsOperation:
         self,
         batch: dict,
         *,
+        objectid_field: str,
         rollback_on_failure: bool,
         use_async: bool,
         poll_timeout: float,
@@ -156,13 +164,21 @@ class ApplyEditsOperation:
         Args:
             batch: A single batch dict from pack_batches (may contain adds,
                 updates, and/or deletes keys).
+            objectid_field: Name of the layer's OBJECTID field, used to report
+                update IDs when the batch fails.
             rollback_on_failure: Value of rollbackOnFailure, always sent in the
                 POST body because ESRI defaults it to true when omitted.
             use_async: Include async=true in the POST body and poll for results.
             poll_timeout: Forwarded to _poll_status as the per-job timeout.
 
         Returns:
-            ApplyEditsResult parsed from the applyEdits response.
+            ApplyEditsResult parsed from the applyEdits response. Failures are
+            returned via ``_failed_batch_result`` instead of raised: a failed
+            POST is flagged ``outcome_unknown`` per ``is_outcome_unknown``; an
+            async POST with no statusUrl, or a job that fails, times out, or
+            cannot be polled, is flagged ``outcome_unknown`` and carries the
+            job's ``status_url`` when known. ESRI error envelopes become items
+            carrying the server's error dict.
         """
         body: dict = {}
         if "adds" in batch:
@@ -175,14 +191,88 @@ class ApplyEditsOperation:
         if use_async:
             body["async"] = "true"
 
-        response = await self._layer._client.post(endpoint=self._endpoint, data=body)
-        response_body = response.json()
+        try:
+            response = await self._layer._client.post(
+                endpoint=self._endpoint, data=body
+            )
+            response_body = response.json()
+        except Exception as exc:
+            return self._failed_batch_result(
+                batch, exc, objectid_field, outcome_unknown=is_outcome_unknown(exc)
+            )
 
         if use_async:
-            status_url = response_body["statusUrl"]
-            response_body = await self._poll_status(status_url, timeout=poll_timeout)
+            status_url = response_body.get("statusUrl")
+            if status_url is None:
+                exc = ServiceError(
+                    code=-1,
+                    message="Async applyEdits response had no statusUrl.",
+                    raw_response=response_body,
+                )
+                return self._failed_batch_result(
+                    batch, exc, objectid_field, outcome_unknown=True
+                )
+            try:
+                response_body = await self._poll_status(
+                    status_url, timeout=poll_timeout
+                )
+            except Exception as exc:
+                return self._failed_batch_result(
+                    batch,
+                    exc,
+                    objectid_field,
+                    outcome_unknown=True,
+                    status_url=status_url,
+                )
 
         return ApplyEditsResult.from_esri_response(response_body)
+
+    @staticmethod
+    def _failed_batch_result(
+        batch: dict,
+        exc: Exception,
+        objectid_field: str,
+        *,
+        outcome_unknown: bool,
+        status_url: str | None = None,
+    ) -> ApplyEditsResult:
+        """Build a result marking every edit in a batch as failed.
+
+        Adds report ``object_id`` -1 since no OBJECTID exists yet; updates
+        report the OBJECTID from their attributes (-1 if absent); deletes
+        report the OBJECTID being deleted. See ``failed_items`` for the error
+        dict each item carries.
+
+        Args:
+            batch: The batch dict from pack_batches that failed.
+            exc: Exception raised while posting or polling the batch.
+            objectid_field: Name of the layer's OBJECTID field.
+            outcome_unknown: Whether the server may have applied the batch.
+            status_url: Async job status URL, if the batch was submitted async.
+
+        Returns:
+            ApplyEditsResult with one ``success=False`` item per edit, in batch
+            order.
+        """
+        add_ids = [-1] * len(batch.get("adds", []))
+        update_ids = [
+            feat.get("attributes", {}).get(objectid_field, -1)
+            for feat in batch.get("updates", [])
+        ]
+        deletes = batch.get("deletes", "")
+        delete_ids = [int(oid) for oid in deletes.split(",")] if deletes else []
+
+        def items(ids: list[int]) -> list[EditResultItem]:
+            """Failed items for ``ids`` sharing this batch's failure details."""
+            return failed_items(
+                exc, ids, outcome_unknown=outcome_unknown, status_url=status_url
+            )
+
+        return ApplyEditsResult(
+            add_results=items(add_ids),
+            update_results=items(update_ids),
+            delete_results=items(delete_ids),
+        )
 
     async def _poll_status(self, status_url: str, *, timeout: float) -> dict:
         """Poll an async job status URL until the job reaches a terminal state.
@@ -244,6 +334,7 @@ class ApplyEditsOperation:
         self,
         batches: list[dict],
         *,
+        objectid_field: str,
         rollback_on_failure: bool,
         use_async: bool,
         poll_timeout: float,
@@ -253,10 +344,13 @@ class ApplyEditsOperation:
         When use_async is True, each batch holds one of the client's job
         permits from POST until its result is fetched, so no more than
         max_concurrent_jobs async jobs exist on the server at once. Sync POSTs
-        are bounded by the client's request limiter alone.
+        are bounded by the client's request limiter alone. _post_batch returns
+        a failed batch as failed items rather than raising, so one batch's
+        failure never cancels its siblings.
 
         Args:
             batches: List of batch body dicts from pack_batches.
+            objectid_field: Passed through to each _post_batch call.
             rollback_on_failure: Passed through to each _post_batch call.
             use_async: Passed through to each _post_batch call.
             poll_timeout: Passed through to each _post_batch call.
@@ -275,6 +369,7 @@ class ApplyEditsOperation:
             async with permit:
                 batch_results[idx] = await self._post_batch(
                     batch,
+                    objectid_field=objectid_field,
                     rollback_on_failure=rollback_on_failure,
                     use_async=use_async,
                     poll_timeout=poll_timeout,

@@ -11,8 +11,13 @@ import pytest
 
 from archibald.exceptions import ServiceError
 from archibald.models import ApplyEditsResult
+from archibald.operations.apply_edits import ApplyEditsOperation
 from tests.helpers import (
+    BASE_URL,
     REJECTED_POLL_ERROR_CASES,
+    make_arcgis_error,
+    make_http_status_error,
+    STATUS_URL,
     TRANSIENT_POLL_ERROR_CASES,
     make_apply_edits_result,
     make_edit_result_item,
@@ -78,7 +83,11 @@ class TestPostBatch:
         )
 
         await apply_edits_op._post_batch(
-            batch, rollback_on_failure=False, use_async=False, poll_timeout=300.0
+            batch,
+            objectid_field="OBJECTID",
+            rollback_on_failure=False,
+            use_async=False,
+            poll_timeout=300.0,
         )
 
         data = mock_layer._client.post.call_args.kwargs["data"]
@@ -93,7 +102,11 @@ class TestPostBatch:
         )
 
         await apply_edits_op._post_batch(
-            batch, rollback_on_failure=False, use_async=False, poll_timeout=300.0
+            batch,
+            objectid_field="OBJECTID",
+            rollback_on_failure=False,
+            use_async=False,
+            poll_timeout=300.0,
         )
 
         data = mock_layer._client.post.call_args.kwargs["data"]
@@ -115,6 +128,7 @@ class TestPostBatch:
 
         await apply_edits_op._post_batch(
             batch,
+            objectid_field="OBJECTID",
             rollback_on_failure=rollback_on_failure,
             use_async=False,
             poll_timeout=300.0,
@@ -138,7 +152,11 @@ class TestPostBatch:
         )
 
         await apply_edits_op._post_batch(
-            batch, rollback_on_failure=False, use_async=True, poll_timeout=300.0
+            batch,
+            objectid_field="OBJECTID",
+            rollback_on_failure=False,
+            use_async=True,
+            poll_timeout=300.0,
         )
 
         data = mock_layer._client.post.call_args.kwargs["data"]
@@ -154,7 +172,11 @@ class TestPostBatch:
         )
 
         await apply_edits_op._post_batch(
-            batch, rollback_on_failure=False, use_async=False, poll_timeout=300.0
+            batch,
+            objectid_field="OBJECTID",
+            rollback_on_failure=False,
+            use_async=False,
+            poll_timeout=300.0,
         )
 
         data = mock_layer._client.post.call_args.kwargs["data"]
@@ -170,7 +192,11 @@ class TestPostBatch:
         )
 
         result = await apply_edits_op._post_batch(
-            batch, rollback_on_failure=False, use_async=False, poll_timeout=300.0
+            batch,
+            objectid_field="OBJECTID",
+            rollback_on_failure=False,
+            use_async=False,
+            poll_timeout=300.0,
         )
 
         assert isinstance(result, ApplyEditsResult)
@@ -192,12 +218,251 @@ class TestPostBatch:
         )
 
         await apply_edits_op._post_batch(
-            batch, rollback_on_failure=False, use_async=True, poll_timeout=300.0
+            batch,
+            objectid_field="OBJECTID",
+            rollback_on_failure=False,
+            use_async=True,
+            poll_timeout=300.0,
         )
 
         mock_poll.assert_awaited_once_with(
             "https://example.com/status/42", timeout=300.0
         )
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "post_effect, expected",
+        [
+            pytest.param(
+                make_arcgis_error(ServiceError, 400, "Unable to complete operation."),
+                {
+                    "message": "Unable to complete operation.",
+                    "exception": None,
+                    "outcome_unknown": None,
+                },
+                id="esri-envelope",
+            ),
+            pytest.param(
+                httpx.ReadTimeout("slow"),
+                {"message": None, "exception": "ReadTimeout", "outcome_unknown": True},
+                id="read-timeout",
+            ),
+            pytest.param(
+                httpx.ConnectError("refused"),
+                {
+                    "message": None,
+                    "exception": "ConnectError",
+                    "outcome_unknown": False,
+                },
+                id="connect-error",
+            ),
+            pytest.param(
+                httpx.Response(
+                    200, content=b"<html>", request=httpx.Request("POST", BASE_URL)
+                ),
+                {
+                    "message": None,
+                    "exception": "JSONDecodeError",
+                    "outcome_unknown": True,
+                },
+                id="malformed-body",
+            ),
+        ],
+    )
+    async def test_returns_failed_items_when_post_fails(
+        self, apply_edits_op, mock_layer, mixed_edit_batch, post_effect, expected
+    ):
+        if isinstance(post_effect, Exception):
+            mock_layer._client.post.side_effect = post_effect
+        else:
+            mock_layer._client.post.return_value = post_effect
+
+        result = await apply_edits_op._post_batch(
+            mixed_edit_batch,
+            objectid_field="OBJECTID",
+            rollback_on_failure=True,
+            use_async=False,
+            poll_timeout=300.0,
+        )
+
+        items = result.add_results + result.update_results + result.delete_results
+        assert [(item.object_id, item.success) for item in items] == [
+            (-1, False),
+            (7, False),
+            (4, False),
+        ]
+        assert [
+            {key: (item.error or {}).get(key) for key in expected} for item in items
+        ] == [expected] * 3
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "poll_effect, expected",
+        [
+            pytest.param(
+                ServiceError(
+                    code=-1,
+                    message="Async applyEdits job failed.",
+                    raw_response={"status": "Failed"},
+                ),
+                {"message": None, "exception": "ServiceError", "outcome_unknown": True},
+                id="job-failed",
+            ),
+            pytest.param(
+                TimeoutError(),
+                {"message": None, "exception": "TimeoutError", "outcome_unknown": True},
+                id="timeout",
+            ),
+            pytest.param(
+                make_http_status_error(404),
+                {
+                    "message": None,
+                    "exception": "HTTPStatusError",
+                    "outcome_unknown": True,
+                },
+                id="http-404",
+            ),
+            pytest.param(
+                make_arcgis_error(
+                    ServiceError, 400, "Requested operation is not supported."
+                ),
+                {
+                    "message": "Requested operation is not supported.",
+                    "exception": None,
+                    "outcome_unknown": None,
+                },
+                id="result-url-envelope",
+            ),
+        ],
+    )
+    async def test_returns_failed_items_with_status_url_when_async_job_fails(
+        self,
+        apply_edits_op,
+        mock_layer,
+        mocker,
+        mixed_edit_batch,
+        poll_effect,
+        expected,
+    ):
+        mock_layer._client.post.return_value = make_response({"statusUrl": STATUS_URL})
+        mocker.patch.object(apply_edits_op, "_poll_status", side_effect=poll_effect)
+
+        result = await apply_edits_op._post_batch(
+            mixed_edit_batch,
+            objectid_field="OBJECTID",
+            rollback_on_failure=True,
+            use_async=True,
+            poll_timeout=300.0,
+        )
+
+        items = result.add_results + result.update_results + result.delete_results
+        assert [(item.object_id, item.success) for item in items] == [
+            (-1, False),
+            (7, False),
+            (4, False),
+        ]
+        assert [
+            {key: (item.error or {}).get(key) for key in expected} for item in items
+        ] == [expected] * 3
+        assert [(item.error or {}).get("status_url") for item in items] == [
+            STATUS_URL
+        ] * 3
+
+    @pytest.mark.anyio
+    async def test_returns_unknown_outcome_items_when_async_response_lacks_status_url(
+        self, apply_edits_op, mock_layer, mocker, mixed_edit_batch
+    ):
+        mock_layer._client.post.return_value = make_response({})
+        mock_poll = mocker.patch.object(apply_edits_op, "_poll_status")
+
+        result = await apply_edits_op._post_batch(
+            mixed_edit_batch,
+            objectid_field="OBJECTID",
+            rollback_on_failure=True,
+            use_async=True,
+            poll_timeout=300.0,
+        )
+
+        items = result.add_results + result.update_results + result.delete_results
+        assert [
+            (item.success, (item.error or {}).get("outcome_unknown")) for item in items
+        ] == [(False, True)] * 3
+        assert all("status_url" not in (item.error or {}) for item in items)
+        mock_poll.assert_not_awaited()
+
+
+class TestFailedBatchResult:
+    @pytest.mark.parametrize(
+        "batch, expected_ids",
+        [
+            pytest.param(
+                {"adds": [make_small_feature(1), make_small_feature(2)]},
+                ([-1, -1], [], []),
+                id="adds",
+            ),
+            pytest.param(
+                {
+                    "updates": [
+                        {"attributes": {"OBJECTID": 7}},
+                        {"attributes": {"OBJECTID": 9}},
+                    ]
+                },
+                ([], [7, 9], []),
+                id="updates",
+            ),
+            pytest.param({"deletes": "4,5,6"}, ([], [], [4, 5, 6]), id="deletes"),
+            pytest.param(
+                {
+                    "adds": [make_small_feature(1)],
+                    "updates": [{"attributes": {"OBJECTID": 7}}],
+                    "deletes": "4",
+                },
+                ([-1], [7], [4]),
+                id="mixed",
+            ),
+            pytest.param(
+                {"updates": [{"attributes": {"name": "no oid"}}]},
+                ([], [-1], []),
+                id="update-missing-objectid",
+            ),
+            pytest.param({}, ([], [], []), id="empty"),
+        ],
+    )
+    def test_reports_object_ids_per_edit_type_when_batch_fails(
+        self, batch, expected_ids
+    ):
+        result = ApplyEditsOperation._failed_batch_result(
+            batch, httpx.ReadTimeout("slow"), "OBJECTID", outcome_unknown=True
+        )
+
+        assert (
+            [item.object_id for item in result.add_results],
+            [item.object_id for item in result.update_results],
+            [item.object_id for item in result.delete_results],
+        ) == expected_ids
+
+    @pytest.mark.parametrize("outcome_unknown", [True, False], ids=["unknown", "known"])
+    def test_marks_every_item_failed_with_batch_details_when_batch_fails(
+        self, outcome_unknown, mixed_edit_batch
+    ):
+        result = ApplyEditsOperation._failed_batch_result(
+            mixed_edit_batch,
+            httpx.ReadTimeout("slow"),
+            "OBJECTID",
+            outcome_unknown=outcome_unknown,
+            status_url=STATUS_URL,
+        )
+
+        items = result.add_results + result.update_results + result.delete_results
+        assert [item.success for item in items] == [False] * 3
+        assert [
+            (
+                (item.error or {}).get("exception"),
+                (item.error or {}).get("outcome_unknown"),
+                (item.error or {}).get("status_url"),
+            )
+            for item in items
+        ] == [("ReadTimeout", outcome_unknown, STATUS_URL)] * 3
 
 
 class TestPollStatus:
@@ -446,6 +711,7 @@ class TestPostBatches:
 
         result = await apply_edits_op._post_batches(
             [{"adds": [make_small_feature(1)]}],
+            objectid_field="OBJECTID",
             rollback_on_failure=False,
             use_async=False,
             poll_timeout=300.0,
@@ -461,7 +727,7 @@ class TestPostBatches:
         r2 = make_apply_edits_result(adds=[make_edit_result_item(2)])
 
         async def post_side_effect(
-            batch, *, rollback_on_failure, use_async, poll_timeout
+            batch, *, objectid_field, rollback_on_failure, use_async, poll_timeout
         ):
             return r1 if batch is batch1 else r2
 
@@ -469,6 +735,7 @@ class TestPostBatches:
 
         result = await apply_edits_op._post_batches(
             [batch1, batch2],
+            objectid_field="OBJECTID",
             rollback_on_failure=False,
             use_async=False,
             poll_timeout=300.0,
@@ -488,6 +755,7 @@ class TestPostBatches:
 
         await apply_edits_op._post_batches(
             [{}, {}],
+            objectid_field="OBJECTID",
             rollback_on_failure=True,
             use_async=True,
             poll_timeout=300.0,
@@ -507,6 +775,7 @@ class TestPostBatches:
 
         await apply_edits_op._post_batches(
             [{}, {}],
+            objectid_field="OBJECTID",
             rollback_on_failure=False,
             use_async=True,
             poll_timeout=60.0,
@@ -540,6 +809,7 @@ class TestPostBatches:
 
         await apply_edits_op._post_batches(
             [{} for _ in range(num_batches)],
+            objectid_field="OBJECTID",
             rollback_on_failure=False,
             use_async=True,
             poll_timeout=300.0,
@@ -562,12 +832,40 @@ class TestPostBatches:
 
         await apply_edits_op._post_batches(
             [{}, {}, {}],
+            objectid_field="OBJECTID",
             rollback_on_failure=False,
             use_async=False,
             poll_timeout=300.0,
         )
 
         assert borrowed_during_post == [0, 0, 0]
+
+    @pytest.mark.anyio
+    async def test_returns_failed_and_successful_batches_in_order_when_one_batch_fails(
+        self, apply_edits_op, mock_layer
+    ):
+        async def post(*, endpoint, data):
+            """Fail the batch deleting OID 1; succeed for the others."""
+            if data["deletes"] == "1":
+                raise httpx.ReadTimeout("slow")
+            oid = int(data["deletes"])
+            return make_response(make_esri_apply_edits_response(delete_ids=[oid]))
+
+        mock_layer._client.post.side_effect = post
+
+        result = await apply_edits_op._post_batches(
+            [{"deletes": "0"}, {"deletes": "1"}, {"deletes": "2"}],
+            objectid_field="OBJECTID",
+            rollback_on_failure=True,
+            use_async=False,
+            poll_timeout=300.0,
+        )
+
+        assert [(r.object_id, r.success) for r in result.delete_results] == [
+            (0, True),
+            (1, False),
+            (2, True),
+        ]
 
     @pytest.mark.anyio
     async def test_job_permit_released_when_batch_raises(
@@ -581,6 +879,7 @@ class TestPostBatches:
         with pytest.raises(Exception):
             await apply_edits_op._post_batches(
                 [{}],
+                objectid_field="OBJECTID",
                 rollback_on_failure=False,
                 use_async=True,
                 poll_timeout=300.0,
