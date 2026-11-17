@@ -289,7 +289,7 @@ Before any data reaches the API, archibald runs a serialization pipeline on your
     - `float` → `NaN` becomes `null`
     - Strings → truncated to the field's defined `length` if one is set on the service, with a warning
 3. **Geometry serialization** — if you pass a `GeoDataFrame`, each row's geometry is converted to ESRI JSON automatically. Null geometries are omitted from the feature dict rather than sent as null.
-4. **Automatic batching** — large payloads are split into batches bounded by ~1.8 MB and POSTed to the service in parallel on the server side, so you can write large DataFrames without worrying about request size limits. 
+4. **Automatic batching** — large payloads are split into batches of about 1.8 MB each, which are POSTed concurrently, so you can write large DataFrames without worrying about request size limits. See [Batching and server-side async](#batching-and-server-side-async) to change the batch size or how batches are processed.
 
 ### Append
 
@@ -331,6 +331,34 @@ edits = await layer.apply_edits(
 ```
 
 By default (`rollback_on_failure=True`, matching ESRI), a batch is applied only if every edit in it succeeds; otherwise the whole batch is rolled back. Pass `rollback_on_failure=False` to apply the edits that succeed and report the rest as per-item failures (see [Checking for failures](#checking-for-failures)). Rollback is per batch: when a large edit is split into several requests, a failed batch does not undo batches that already succeeded. Layers that don't advertise `supportsRollbackOnFailureParameter` always roll back, and requesting `False` on one emits a warning.
+
+### Batching and server-side async
+
+`apply_edits()`, `append()`, `upsert()`, and `sync()` all accept three batching options:
+
+- `max_batch_bytes`: the approximate size limit for each request, from 1 byte up to 6 MB. Defaults to 1.8 MB. Smaller batches finish faster, and less is at stake when one fails.
+- `use_server_async`: whether each batch is submitted as a server-side async job that archibald polls until it finishes.
+    - `None` (the default) uses async only when the edit spans more than one batch and the layer advertises `supportsAsyncApplyEdits`.
+    - `True` uses async for every batch. On a layer without async support, it emits a warning and sends the batches synchronously instead.
+    - `False` always sends batches synchronously.
+- `poll_timeout`: how many seconds to wait for each async job. It has no effect on synchronous batches.
+
+```python
+edits = await layer.append(df, use_server_async=False, max_batch_bytes=500_000)
+```
+
+The two modes fail differently:
+
+- **Synchronous** batches give a definite answer whenever the server responds. With rollback on, an error response means nothing in that batch was applied, so it's safe to retry. If a slow batch hits the request timeout, though, the outcome is unknown and there's nothing to check later.
+- **Async** jobs ride out slow commits, and a failed batch carries a `status_url` you can check later. A job the server marks as failed is always reported as `outcome_unknown`.
+
+To set defaults for everything that uses a client, pass the same options to `ArchieClient`. Any value passed to an individual call takes precedence:
+
+```python
+client = ArchieClient(base_url, auth, use_server_async=False, max_batch_bytes=1_000_000)
+```
+
+An out-of-range `max_batch_bytes` raises `ConfigurationError` from `ArchieClient` and `InvalidParameterError` from an individual call.
 
 ### Round-trip domain translation
 
