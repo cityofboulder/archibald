@@ -359,6 +359,9 @@ class FeatureLayer(FeatureService, BaseLayer):
         df: pd.DataFrame | gpd.GeoDataFrame,
         *,
         apply_coded_values: bool = False,
+        use_server_async: bool | None = None,
+        max_batch_bytes: int | None = None,
+        poll_timeout: float | None = None,
     ) -> ApplyEditsResult:
         """Add all rows in df as new features.
 
@@ -369,11 +372,20 @@ class FeatureLayer(FeatureService, BaseLayer):
             df: Rows to add. OBJECTIDs are excluded from the payload.
             apply_coded_values: When True, translate human-readable domain names
                 back to their raw codes before serialization.
+            use_server_async: Passed to apply_edits; see there.
+            max_batch_bytes: Passed to apply_edits; see there.
+            poll_timeout: Passed to apply_edits; see there.
 
         Returns:
             ApplyEditsResult with add results for each row.
         """
-        return await self.apply_edits(adds=df, apply_coded_values=apply_coded_values)
+        return await self.apply_edits(
+            adds=df,
+            apply_coded_values=apply_coded_values,
+            use_server_async=use_server_async,
+            max_batch_bytes=max_batch_bytes,
+            poll_timeout=poll_timeout,
+        )
 
     async def upsert(
         self,
@@ -381,6 +393,9 @@ class FeatureLayer(FeatureService, BaseLayer):
         key_fields: list[str],
         *,
         apply_coded_values: bool = False,
+        use_server_async: bool | None = None,
+        max_batch_bytes: int | None = None,
+        poll_timeout: float | None = None,
     ) -> ApplyEditsResult:
         """Add new features and update existing features matched by key_fields.
 
@@ -394,6 +409,9 @@ class FeatureLayer(FeatureService, BaseLayer):
                 feature. Used to match rows in df against existing layer features.
             apply_coded_values: When True, translate human-readable domain names
                 back to their raw codes before serialization.
+            use_server_async: Passed to apply_edits; see there.
+            max_batch_bytes: Passed to apply_edits; see there.
+            poll_timeout: Passed to apply_edits; see there.
 
         Returns:
             ApplyEditsResult with add and update results.
@@ -407,6 +425,9 @@ class FeatureLayer(FeatureService, BaseLayer):
             adds=adds_df if not adds_df.empty else None,
             updates=updates_df if not updates_df.empty else None,
             apply_coded_values=apply_coded_values,
+            use_server_async=use_server_async,
+            max_batch_bytes=max_batch_bytes,
+            poll_timeout=poll_timeout,
         )
 
     async def sync(
@@ -415,6 +436,9 @@ class FeatureLayer(FeatureService, BaseLayer):
         key_fields: list[str],
         *,
         apply_coded_values: bool = False,
+        use_server_async: bool | None = None,
+        max_batch_bytes: int | None = None,
+        poll_timeout: float | None = None,
     ) -> ApplyEditsResult:
         """Full sync: add new features, update existing features, delete removed features.
 
@@ -428,6 +452,9 @@ class FeatureLayer(FeatureService, BaseLayer):
                 feature. Used to match rows in df against existing layer features.
             apply_coded_values: When True, translate human-readable domain names
                 back to their raw codes before serialization.
+            use_server_async: Passed to apply_edits; see there.
+            max_batch_bytes: Passed to apply_edits; see there.
+            poll_timeout: Passed to apply_edits; see there.
 
         Returns:
             ApplyEditsResult with add, update, and delete results.
@@ -442,6 +469,9 @@ class FeatureLayer(FeatureService, BaseLayer):
             updates=updates_df if not updates_df.empty else None,
             deletes=delete_oids if delete_oids else None,
             apply_coded_values=apply_coded_values,
+            use_server_async=use_server_async,
+            max_batch_bytes=max_batch_bytes,
+            poll_timeout=poll_timeout,
         )
 
     # ------------------------------------------------------------------
