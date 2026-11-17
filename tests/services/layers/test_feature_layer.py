@@ -6,6 +6,7 @@ import pytest
 from archibald.exceptions import InvalidParameterError, LayerCapabilityError
 from archibald.services import FeatureLayer
 from tests.helpers import (
+    DEFAULT_BATCHING_KWARGS,
     make_attachments_result,
     make_apply_edits_result,
     make_attachment_result_item,
@@ -400,7 +401,9 @@ class TestAppend:
 
         result = await feature_layer.append(df)
 
-        mock_apply.assert_called_once_with(adds=df, apply_coded_values=False)
+        mock_apply.assert_called_once_with(
+            adds=df, apply_coded_values=False, **DEFAULT_BATCHING_KWARGS
+        )
         assert result is expected
 
 
@@ -419,7 +422,10 @@ class TestUpsert:
         await feature_layer.upsert(adds_df, ["Name"])
 
         mock_apply.assert_called_once_with(
-            adds=adds_df, updates=updates_df, apply_coded_values=False
+            adds=adds_df,
+            updates=updates_df,
+            apply_coded_values=False,
+            **DEFAULT_BATCHING_KWARGS,
         )
 
     @pytest.mark.parametrize(
@@ -455,6 +461,7 @@ class TestUpsert:
             adds=None if adds_df.empty else adds_df,
             updates=None if updates_df.empty else updates_df,
             apply_coded_values=False,
+            **DEFAULT_BATCHING_KWARGS,
         )
 
 
@@ -474,7 +481,11 @@ class TestSync:
         await feature_layer.sync(adds_df, ["Name"])
 
         mock_apply.assert_called_once_with(
-            adds=adds_df, updates=updates_df, deletes=[2, 3], apply_coded_values=False
+            adds=adds_df,
+            updates=updates_df,
+            deletes=[2, 3],
+            apply_coded_values=False,
+            **DEFAULT_BATCHING_KWARGS,
         )
 
     @pytest.mark.anyio
@@ -491,8 +502,44 @@ class TestSync:
         await feature_layer.sync(adds_df, ["Name"])
 
         mock_apply.assert_called_once_with(
-            adds=adds_df, updates=updates_df, deletes=None, apply_coded_values=False
+            adds=adds_df,
+            updates=updates_df,
+            deletes=None,
+            apply_coded_values=False,
+            **DEFAULT_BATCHING_KWARGS,
         )
+
+
+class TestEditWrappers:
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "method,extra_args",
+        [("append", ()), ("upsert", (["Name"],)), ("sync", (["Name"],))],
+        ids=["append", "upsert", "sync"],
+    )
+    async def test_forwards_batching_kwargs_to_apply_edits(
+        self, feature_layer, mocker, method, extra_args
+    ):
+        df = pd.DataFrame({"Name": ["Alice"]})
+        batching_kwargs = {
+            "use_server_async": False,
+            "max_batch_bytes": 500_000,
+            "poll_timeout": 60.0,
+        }
+        mocker.patch.object(
+            feature_layer,
+            "_diff",
+            return_value=(df, pd.DataFrame(columns=["Name"]), []),
+        )
+        mock_apply = mocker.patch.object(
+            feature_layer, "apply_edits", return_value=make_apply_edits_result()
+        )
+
+        await getattr(feature_layer, method)(df, *extra_args, **batching_kwargs)
+
+        assert {
+            key: mock_apply.call_args.kwargs[key] for key in batching_kwargs
+        } == batching_kwargs
 
 
 class TestDiff:

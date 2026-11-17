@@ -27,6 +27,11 @@ BASE_URL = "https://example.com/arcgis/rest/services/MyService/FeatureServer"
 SERVICE_PATH = "services/MyService/FeatureServer"
 MAP_LAYER_PATH = "services/MyService/MapServer"
 STATUS_URL = f"{BASE_URL}/0/applyEdits/jobs/abc123"
+DEFAULT_BATCHING_KWARGS = {
+    "use_server_async": None,
+    "max_batch_bytes": None,
+    "poll_timeout": None,
+}
 
 AnyClient = UserTokenAuth | ArchieClient
 
