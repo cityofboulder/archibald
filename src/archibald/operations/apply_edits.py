@@ -12,10 +12,14 @@ import httpx
 import pandas as pd
 
 from archibald.errors import failed_items, is_outcome_unknown
-from archibald.exceptions import ServiceError
+from archibald.exceptions import InvalidParameterError, ServiceError
 from archibald.models.apply_edits_result import ApplyEditsResult
 from archibald.models.edit_result_item import EditResultItem
-from archibald.serializers._features import pack_batches, serialize_features
+from archibald.serializers._features import (
+    MAX_BATCH_BYTES,
+    pack_batches,
+    serialize_features,
+)
 
 if TYPE_CHECKING:
     from archibald.services import FeatureLayer
@@ -41,6 +45,8 @@ class ApplyEditsOperation:
         rollback_on_failure: bool = True,
         apply_coded_values: bool = False,
         poll_timeout: float | None = None,
+        use_server_async: bool | None = None,
+        max_batch_bytes: int | None = None,
     ) -> ApplyEditsResult:
         """Serialize inputs, pack into batches, POST, and return aggregated results.
 
@@ -66,6 +72,17 @@ class ApplyEditsOperation:
                 the layer uses server-side async editing, and is measured from
                 when the batch holds a job permit, so time spent waiting behind
                 other jobs is not counted. Defaults to the client's job_timeout.
+                Ignored when batches are sent synchronously.
+            use_server_async: Whether batches use server-side async processing.
+                True sends every batch async, even a single one; False always
+                sends synchronously. None falls back to the client's
+                use_server_async, and if that is also None, auto-detects:
+                async only when there is more than one batch and the layer
+                advertises supportsAsyncApplyEdits. True is sent as-is;
+                FeatureLayer.apply_edits falls back to sync for layers that
+                do not support async.
+            max_batch_bytes: Soft upper bound, in bytes, for each POST body.
+                Defaults to the client's max_batch_bytes.
 
         Returns:
             ApplyEditsResult with all add, update, and delete results merged.
@@ -77,10 +94,24 @@ class ApplyEditsOperation:
             ``object_id`` -1 and line up with input rows only by position.
             Retrying an add whose outcome is unknown can create a duplicate.
 
+        Raises:
+            InvalidParameterError: If max_batch_bytes is not positive or
+                exceeds MAX_BATCH_BYTES.
+
         Warns:
             UserWarning: For each DataFrame column that falls outside the editable
                 field set and will not be sent.
         """
+        if max_batch_bytes is None:
+            max_batch_bytes = self._layer._client._max_batch_bytes
+        elif not 0 < max_batch_bytes <= MAX_BATCH_BYTES:
+            raise InvalidParameterError(
+                f"max_batch_bytes must be between 1 and {MAX_BATCH_BYTES}; "
+                f"got {max_batch_bytes}."
+            )
+        if use_server_async is None:
+            use_server_async = self._layer._client._use_server_async
+
         fields = await self._layer.fields()
         objectid_field = await self._layer.objectid_field()
 
@@ -108,9 +139,19 @@ class ApplyEditsOperation:
                 add_results=[], update_results=[], delete_results=[]
             )
 
-        batches = pack_batches(serialized_adds, serialized_updates, delete_oids)
+        batches = pack_batches(
+            serialized_adds,
+            serialized_updates,
+            delete_oids,
+            max_bytes=max_batch_bytes,
+        )
 
-        use_async = len(batches) > 1 and await self._layer.supports_async_apply_edits()
+        if use_server_async is None:
+            use_async = (
+                len(batches) > 1 and await self._layer.supports_async_apply_edits()
+            )
+        else:
+            use_async = use_server_async
 
         if poll_timeout is None:
             poll_timeout = self._layer._client._job_timeout
