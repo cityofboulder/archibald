@@ -268,6 +268,9 @@ class FeatureLayer(FeatureService, BaseLayer):
         *,
         rollback_on_failure: bool = True,
         apply_coded_values: bool = False,
+        use_server_async: bool | None = None,
+        max_batch_bytes: int | None = None,
+        poll_timeout: float | None = None,
     ) -> ApplyEditsResult:
         """Add, update, and/or delete features in a single batched operation.
 
@@ -290,6 +293,20 @@ class FeatureLayer(FeatureService, BaseLayer):
                 roll back; requesting False on one emits a warning.
             apply_coded_values: When True, translate human-readable domain names
                 in the DataFrame back to their raw codes before serialization.
+            use_server_async: Whether batches use server-side async processing.
+                True sends every batch async; False always sends synchronously,
+                so each failed batch has a definite outcome unless the request
+                itself times out. None falls back to the client's
+                use_server_async, and if that is also None, uses async only
+                when the edit spans more than one batch and the layer supports
+                it. True on a layer without async support emits a warning and
+                sends synchronously.
+            max_batch_bytes: Soft upper bound, in bytes, for each POST body.
+                Smaller batches commit faster and put fewer edits at stake when
+                one fails. Defaults to the client's max_batch_bytes.
+            poll_timeout: Maximum seconds to wait for each async batch to
+                complete. Defaults to the client's job_timeout. Ignored when
+                batches are sent synchronously.
 
         Returns:
             ApplyEditsResult with all add, update, and delete results merged.
@@ -298,10 +315,13 @@ class FeatureLayer(FeatureService, BaseLayer):
 
         Raises:
             LayerCapabilityError: If the layer does not support edit operations.
+            InvalidParameterError: If max_batch_bytes is not positive or
+                exceeds MAX_BATCH_BYTES.
 
         Warns:
             UserWarning: If rollback_on_failure=False but the layer does not
-                support disabling rollback.
+                support disabling rollback, or if use_server_async resolves to
+                True but the layer does not support async applyEdits.
         """
         if not await self.supports_apply_edits():
             raise LayerCapabilityError(
@@ -314,12 +334,24 @@ class FeatureLayer(FeatureService, BaseLayer):
                 stacklevel=2,
             )
             rollback_on_failure = True
+        if use_server_async is None:
+            use_server_async = self._client._use_server_async
+        if use_server_async and not await self.supports_async_apply_edits():
+            warnings.warn(
+                f"Layer {self._layer_path} does not support async applyEdits; "
+                "sending batches synchronously.",
+                stacklevel=2,
+            )
+            use_server_async = False
         return await self._apply_edits_op.execute(
             adds=adds,
             updates=updates,
             deletes=deletes,
             rollback_on_failure=rollback_on_failure,
             apply_coded_values=apply_coded_values,
+            use_server_async=use_server_async,
+            max_batch_bytes=max_batch_bytes,
+            poll_timeout=poll_timeout,
         )
 
     async def append(
@@ -327,6 +359,9 @@ class FeatureLayer(FeatureService, BaseLayer):
         df: pd.DataFrame | gpd.GeoDataFrame,
         *,
         apply_coded_values: bool = False,
+        use_server_async: bool | None = None,
+        max_batch_bytes: int | None = None,
+        poll_timeout: float | None = None,
     ) -> ApplyEditsResult:
         """Add all rows in df as new features.
 
@@ -337,11 +372,20 @@ class FeatureLayer(FeatureService, BaseLayer):
             df: Rows to add. OBJECTIDs are excluded from the payload.
             apply_coded_values: When True, translate human-readable domain names
                 back to their raw codes before serialization.
+            use_server_async: Passed to apply_edits; see there.
+            max_batch_bytes: Passed to apply_edits; see there.
+            poll_timeout: Passed to apply_edits; see there.
 
         Returns:
             ApplyEditsResult with add results for each row.
         """
-        return await self.apply_edits(adds=df, apply_coded_values=apply_coded_values)
+        return await self.apply_edits(
+            adds=df,
+            apply_coded_values=apply_coded_values,
+            use_server_async=use_server_async,
+            max_batch_bytes=max_batch_bytes,
+            poll_timeout=poll_timeout,
+        )
 
     async def upsert(
         self,
@@ -349,6 +393,9 @@ class FeatureLayer(FeatureService, BaseLayer):
         key_fields: list[str],
         *,
         apply_coded_values: bool = False,
+        use_server_async: bool | None = None,
+        max_batch_bytes: int | None = None,
+        poll_timeout: float | None = None,
     ) -> ApplyEditsResult:
         """Add new features and update existing features matched by key_fields.
 
@@ -362,6 +409,9 @@ class FeatureLayer(FeatureService, BaseLayer):
                 feature. Used to match rows in df against existing layer features.
             apply_coded_values: When True, translate human-readable domain names
                 back to their raw codes before serialization.
+            use_server_async: Passed to apply_edits; see there.
+            max_batch_bytes: Passed to apply_edits; see there.
+            poll_timeout: Passed to apply_edits; see there.
 
         Returns:
             ApplyEditsResult with add and update results.
@@ -375,6 +425,9 @@ class FeatureLayer(FeatureService, BaseLayer):
             adds=adds_df if not adds_df.empty else None,
             updates=updates_df if not updates_df.empty else None,
             apply_coded_values=apply_coded_values,
+            use_server_async=use_server_async,
+            max_batch_bytes=max_batch_bytes,
+            poll_timeout=poll_timeout,
         )
 
     async def sync(
@@ -383,6 +436,9 @@ class FeatureLayer(FeatureService, BaseLayer):
         key_fields: list[str],
         *,
         apply_coded_values: bool = False,
+        use_server_async: bool | None = None,
+        max_batch_bytes: int | None = None,
+        poll_timeout: float | None = None,
     ) -> ApplyEditsResult:
         """Full sync: add new features, update existing features, delete removed features.
 
@@ -396,6 +452,9 @@ class FeatureLayer(FeatureService, BaseLayer):
                 feature. Used to match rows in df against existing layer features.
             apply_coded_values: When True, translate human-readable domain names
                 back to their raw codes before serialization.
+            use_server_async: Passed to apply_edits; see there.
+            max_batch_bytes: Passed to apply_edits; see there.
+            poll_timeout: Passed to apply_edits; see there.
 
         Returns:
             ApplyEditsResult with add, update, and delete results.
@@ -410,6 +469,9 @@ class FeatureLayer(FeatureService, BaseLayer):
             updates=updates_df if not updates_df.empty else None,
             deletes=delete_oids if delete_oids else None,
             apply_coded_values=apply_coded_values,
+            use_server_async=use_server_async,
+            max_batch_bytes=max_batch_bytes,
+            poll_timeout=poll_timeout,
         )
 
     # ------------------------------------------------------------------

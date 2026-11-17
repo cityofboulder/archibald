@@ -23,6 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `use_server_async` on `apply_edits()`, `append()`, `upsert()`, `sync()`, `ApplyEditsOperation.execute()`, and `ArchieClient`.
+    - `None` (the default) keeps today's behavior: async only for multi-batch edits on layers that advertise `supportsAsyncApplyEdits`.
+    - `True` submits every batch as a server-side async job. On a layer without async support, `FeatureLayer` methods warn and send synchronously instead.
+    - `False` always sends synchronously. A failed synchronous batch reports a definite outcome unless the request itself times out, which makes failures easier to sort and retry.
+    - A value passed to an individual call takes precedence over the client's.
+- `max_batch_bytes` in the same places sets the approximate size limit for each `applyEdits` request. It defaults to 1.8 MB, as before, and accepts values from 1 byte to 6 MB. An out-of-range value raises `ConfigurationError` from `ArchieClient` and `InvalidParameterError` per call.
+- `apply_edits()`, `append()`, `upsert()`, and `sync()` also accept `poll_timeout`, which was previously available only on `ApplyEditsOperation.execute()`.
 - `ArchieClient` accepts `max_concurrent_jobs` (default 4) and `job_timeout` (default 300 s) to bound concurrent async server-side jobs and set their default per-job timeout.
 - Failed `applyEdits` items not built from an ESRI error dict carry `error["exception"]` and `error["outcome_unknown"]`, matching attachments. Items from a failed async batch also carry `error["status_url"]`. Retrying an add whose outcome is unknown could create a duplicate.
 - Failed attachment items not built from an ESRI error dict carry `error["exception"]` (exception class name) and `error["outcome_unknown"]`, which is `True` when the server may have applied the change despite the failure (e.g. a read timeout or 5xx). Retrying an unknown `add_attachments()` could create a duplicate.

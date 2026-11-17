@@ -6,6 +6,7 @@ import pytest
 from archibald.exceptions import InvalidParameterError, LayerCapabilityError
 from archibald.services import FeatureLayer
 from tests.helpers import (
+    DEFAULT_BATCHING_KWARGS,
     make_attachments_result,
     make_apply_edits_result,
     make_attachment_result_item,
@@ -158,6 +159,9 @@ class TestApplyEdits:
             deletes=None,
             rollback_on_failure=True,
             apply_coded_values=False,
+            use_server_async=None,
+            max_batch_bytes=None,
+            poll_timeout=None,
         )
         assert result is expected
 
@@ -180,6 +184,9 @@ class TestApplyEdits:
             deletes=None,
             rollback_on_failure=True,
             apply_coded_values=True,
+            use_server_async=None,
+            max_batch_bytes=None,
+            poll_timeout=None,
         )
 
     @pytest.mark.anyio
@@ -266,6 +273,122 @@ class TestApplyEdits:
 
         assert len(recwarn) == 0
 
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "per_call,client_default,async_supported,expected",
+        [
+            (None, None, False, None),
+            (True, None, True, True),
+            (None, True, True, True),
+            (False, True, True, False),
+            pytest.param(
+                True,
+                None,
+                False,
+                False,
+                marks=pytest.mark.filterwarnings("ignore:.*async applyEdits"),
+            ),
+            pytest.param(
+                None,
+                True,
+                False,
+                False,
+                marks=pytest.mark.filterwarnings("ignore:.*async applyEdits"),
+            ),
+        ],
+        ids=[
+            "default-auto",
+            "per-call-true-supported",
+            "client-true-supported",
+            "per-call-false-overrides-client-true",
+            "per-call-true-unsupported",
+            "client-true-unsupported",
+        ],
+    )
+    async def test_forwards_effective_use_server_async_to_execute(
+        self,
+        feature_layer,
+        mock_apply_edits_execute,
+        mocker,
+        per_call,
+        client_default,
+        async_supported,
+        expected,
+    ):
+        feature_layer._client._use_server_async = client_default
+        mocker.patch.object(
+            feature_layer, "supports_async_apply_edits", return_value=async_supported
+        )
+
+        await feature_layer.apply_edits(deletes=[1], use_server_async=per_call)
+
+        assert mock_apply_edits_execute.call_args.kwargs["use_server_async"] is (
+            expected
+        )
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "per_call,client_default",
+        [(True, None), (None, True)],
+        ids=["per-call", "client"],
+    )
+    async def test_warns_when_server_async_requested_on_unsupported_layer(
+        self,
+        feature_layer,
+        mock_apply_edits_execute,
+        mocker,
+        per_call,
+        client_default,
+    ):
+        feature_layer._client._use_server_async = client_default
+        mocker.patch.object(
+            feature_layer, "supports_async_apply_edits", return_value=False
+        )
+
+        with pytest.warns(UserWarning, match=r"does not support async applyEdits"):
+            await feature_layer.apply_edits(deletes=[1], use_server_async=per_call)
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "per_call,client_default,async_supported",
+        [
+            (None, None, False),
+            (False, None, False),
+            (True, None, True),
+            (None, True, True),
+        ],
+        ids=["default-auto", "false-unsupported", "true-supported", "client-true"],
+    )
+    async def test_no_warning_when_server_async_request_is_honored(
+        self,
+        feature_layer,
+        mock_apply_edits_execute,
+        mocker,
+        recwarn,
+        per_call,
+        client_default,
+        async_supported,
+    ):
+        feature_layer._client._use_server_async = client_default
+        mocker.patch.object(
+            feature_layer, "supports_async_apply_edits", return_value=async_supported
+        )
+
+        await feature_layer.apply_edits(deletes=[1], use_server_async=per_call)
+
+        assert len(recwarn) == 0
+
+    @pytest.mark.anyio
+    async def test_forwards_max_batch_bytes_and_poll_timeout_to_execute(
+        self, feature_layer, mock_apply_edits_execute
+    ):
+        await feature_layer.apply_edits(
+            deletes=[1], max_batch_bytes=500_000, poll_timeout=60.0
+        )
+
+        assert mock_apply_edits_execute.call_args.kwargs["max_batch_bytes"] == 500_000
+        assert mock_apply_edits_execute.call_args.kwargs["poll_timeout"] == 60.0
+
 
 class TestAppend:
     @pytest.mark.anyio
@@ -278,7 +401,9 @@ class TestAppend:
 
         result = await feature_layer.append(df)
 
-        mock_apply.assert_called_once_with(adds=df, apply_coded_values=False)
+        mock_apply.assert_called_once_with(
+            adds=df, apply_coded_values=False, **DEFAULT_BATCHING_KWARGS
+        )
         assert result is expected
 
 
@@ -297,7 +422,10 @@ class TestUpsert:
         await feature_layer.upsert(adds_df, ["Name"])
 
         mock_apply.assert_called_once_with(
-            adds=adds_df, updates=updates_df, apply_coded_values=False
+            adds=adds_df,
+            updates=updates_df,
+            apply_coded_values=False,
+            **DEFAULT_BATCHING_KWARGS,
         )
 
     @pytest.mark.parametrize(
@@ -333,6 +461,7 @@ class TestUpsert:
             adds=None if adds_df.empty else adds_df,
             updates=None if updates_df.empty else updates_df,
             apply_coded_values=False,
+            **DEFAULT_BATCHING_KWARGS,
         )
 
 
@@ -352,7 +481,11 @@ class TestSync:
         await feature_layer.sync(adds_df, ["Name"])
 
         mock_apply.assert_called_once_with(
-            adds=adds_df, updates=updates_df, deletes=[2, 3], apply_coded_values=False
+            adds=adds_df,
+            updates=updates_df,
+            deletes=[2, 3],
+            apply_coded_values=False,
+            **DEFAULT_BATCHING_KWARGS,
         )
 
     @pytest.mark.anyio
@@ -369,8 +502,44 @@ class TestSync:
         await feature_layer.sync(adds_df, ["Name"])
 
         mock_apply.assert_called_once_with(
-            adds=adds_df, updates=updates_df, deletes=None, apply_coded_values=False
+            adds=adds_df,
+            updates=updates_df,
+            deletes=None,
+            apply_coded_values=False,
+            **DEFAULT_BATCHING_KWARGS,
         )
+
+
+class TestEditWrappers:
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "method,extra_args",
+        [("append", ()), ("upsert", (["Name"],)), ("sync", (["Name"],))],
+        ids=["append", "upsert", "sync"],
+    )
+    async def test_forwards_batching_kwargs_to_apply_edits(
+        self, feature_layer, mocker, method, extra_args
+    ):
+        df = pd.DataFrame({"Name": ["Alice"]})
+        batching_kwargs = {
+            "use_server_async": False,
+            "max_batch_bytes": 500_000,
+            "poll_timeout": 60.0,
+        }
+        mocker.patch.object(
+            feature_layer,
+            "_diff",
+            return_value=(df, pd.DataFrame(columns=["Name"]), []),
+        )
+        mock_apply = mocker.patch.object(
+            feature_layer, "apply_edits", return_value=make_apply_edits_result()
+        )
+
+        await getattr(feature_layer, method)(df, *extra_args, **batching_kwargs)
+
+        assert {
+            key: mock_apply.call_args.kwargs[key] for key in batching_kwargs
+        } == batching_kwargs
 
 
 class TestDiff:

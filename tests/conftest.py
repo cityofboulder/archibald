@@ -12,6 +12,7 @@ from archibald.operations import (
     QueryOperation,
     QueryAttachmentsOperation,
 )
+from archibald.serializers._features import DEFAULT_MAX_BATCH_BYTES
 from archibald.services import (
     BaseLayer,
     BaseService,
@@ -53,7 +54,10 @@ def client() -> ArchieClient:
 
 @pytest.fixture
 def mock_client(mocker):
-    return mocker.create_autospec(ArchieClient)
+    client = mocker.create_autospec(ArchieClient)
+    client._use_server_async = None
+    client._max_batch_bytes = DEFAULT_MAX_BATCH_BYTES
+    return client
 
 
 @pytest.fixture
@@ -260,6 +264,8 @@ def mock_layer(mocker, fields_result, attachment_fields, attachment_properties):
     layer._client = mocker.create_autospec(ArchieClient)
     layer._client._job_limiter = anyio.CapacityLimiter(4)
     layer._client._job_timeout = 300.0
+    layer._client._use_server_async = None
+    layer._client._max_batch_bytes = DEFAULT_MAX_BATCH_BYTES
     layer.fields.return_value = fields_result
     layer.objectid_field.return_value = "OBJECTID"
     layer.globalid_field.return_value = None

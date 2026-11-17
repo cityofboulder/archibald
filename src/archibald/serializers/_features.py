@@ -15,6 +15,11 @@ from archibald.serializers._geometry import geometry_to_esri
 if TYPE_CHECKING:
     from archibald.models.fields_result import FieldsResult
 
+DEFAULT_MAX_BATCH_BYTES = 1_800_000
+# ESRI documents no applyEdits size limit; ArcGIS Pro switches to upload-based
+# applyEdits above 6 MB, so treat that as the ceiling for a single POST body.
+MAX_BATCH_BYTES = 6_000_000
+
 
 def _select_attr_columns(
     df: pd.DataFrame,
@@ -146,7 +151,7 @@ def pack_batches(
     updates: list[dict],
     deletes: list[int],
     *,
-    max_bytes: int = 1_800_000,
+    max_bytes: int = DEFAULT_MAX_BATCH_BYTES,
     overhead_bytes: int = 4_096,
 ) -> list[dict]:
     """Pack adds, updates, and deletes into POST body dicts bounded by max_bytes.
