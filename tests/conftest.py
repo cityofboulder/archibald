@@ -54,7 +54,10 @@ def client() -> ArchieClient:
 
 @pytest.fixture
 def mock_client(mocker):
-    return mocker.create_autospec(ArchieClient)
+    client = mocker.create_autospec(ArchieClient)
+    client._use_server_async = None
+    client._max_batch_bytes = DEFAULT_MAX_BATCH_BYTES
+    return client
 
 
 @pytest.fixture
