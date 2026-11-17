@@ -9,9 +9,10 @@ import httpx
 import pandas as pd
 import pytest
 
-from archibald.exceptions import ServiceError
+from archibald.exceptions import InvalidParameterError, ServiceError
 from archibald.models import ApplyEditsResult
 from archibald.operations.apply_edits import ApplyEditsOperation
+from archibald.serializers._features import MAX_BATCH_BYTES
 from tests.helpers import (
     BASE_URL,
     REJECTED_POLL_ERROR_CASES,
@@ -1053,3 +1054,123 @@ class TestExecute:
         await apply_edits_op.execute(deletes=[1])
 
         assert mock_post_batches.call_args.kwargs["poll_timeout"] == 42.0
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "per_call,client_default,num_batches,layer_supports_async,expected",
+        [
+            (True, None, 1, False, True),
+            (False, None, 2, True, False),
+            (None, True, 1, False, True),
+            (None, False, 2, True, False),
+            (True, False, 1, False, True),
+            (False, True, 2, True, False),
+        ],
+        ids=[
+            "per-call-true-single-batch-unsupported",
+            "per-call-false-multi-batch-supported",
+            "client-true-single-batch-unsupported",
+            "client-false-multi-batch-supported",
+            "per-call-true-overrides-client-false",
+            "per-call-false-overrides-client-true",
+        ],
+    )
+    async def test_use_async_follows_explicit_setting_when_use_server_async_set(
+        self,
+        apply_edits_op,
+        mock_layer,
+        mocker,
+        per_call,
+        client_default,
+        num_batches,
+        layer_supports_async,
+        expected,
+    ):
+        mock_layer._client._use_server_async = client_default
+        mock_layer.supports_async_apply_edits.return_value = layer_supports_async
+        mocker.patch(
+            "archibald.operations.apply_edits.pack_batches",
+            return_value=[{"deletes": str(i)} for i in range(num_batches)],
+        )
+        mock_post_batches = mocker.patch.object(
+            apply_edits_op,
+            "_post_batches",
+            return_value=make_apply_edits_result(),
+        )
+
+        await apply_edits_op.execute(deletes=[1, 2], use_server_async=per_call)
+
+        assert mock_post_batches.call_args.kwargs["use_async"] is expected
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize("use_server_async", [True, False], ids=["true", "false"])
+    async def test_layer_async_support_not_checked_when_use_server_async_set(
+        self, apply_edits_op, mock_layer, mocker, use_server_async
+    ):
+        mocker.patch(
+            "archibald.operations.apply_edits.pack_batches",
+            return_value=[{"deletes": "1"}, {"deletes": "2"}],
+        )
+        mocker.patch.object(
+            apply_edits_op,
+            "_post_batches",
+            return_value=make_apply_edits_result(),
+        )
+
+        await apply_edits_op.execute(deletes=[1, 2], use_server_async=use_server_async)
+
+        mock_layer.supports_async_apply_edits.assert_not_awaited()
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "max_batch_bytes",
+        [1, 500_000, MAX_BATCH_BYTES],
+        ids=["minimum", "custom", "ceiling"],
+    )
+    async def test_max_batch_bytes_forwarded_to_pack_batches(
+        self, apply_edits_op, mocker, max_batch_bytes
+    ):
+        mock_pack_batches = mocker.patch(
+            "archibald.operations.apply_edits.pack_batches",
+            return_value=[{"deletes": "1"}],
+        )
+        mocker.patch.object(
+            apply_edits_op,
+            "_post_batches",
+            return_value=make_apply_edits_result(),
+        )
+
+        await apply_edits_op.execute(deletes=[1], max_batch_bytes=max_batch_bytes)
+
+        assert mock_pack_batches.call_args.kwargs["max_bytes"] == max_batch_bytes
+
+    @pytest.mark.anyio
+    async def test_max_batch_bytes_defaults_to_client_max_batch_bytes(
+        self, apply_edits_op, mock_layer, mocker
+    ):
+        mock_layer._client._max_batch_bytes = 750_000
+        mock_pack_batches = mocker.patch(
+            "archibald.operations.apply_edits.pack_batches",
+            return_value=[{"deletes": "1"}],
+        )
+        mocker.patch.object(
+            apply_edits_op,
+            "_post_batches",
+            return_value=make_apply_edits_result(),
+        )
+
+        await apply_edits_op.execute(deletes=[1])
+
+        assert mock_pack_batches.call_args.kwargs["max_bytes"] == 750_000
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "max_batch_bytes",
+        [0, -1, MAX_BATCH_BYTES + 1],
+        ids=["zero", "negative", "above-ceiling"],
+    )
+    async def test_raises_when_max_batch_bytes_out_of_range(
+        self, apply_edits_op, max_batch_bytes
+    ):
+        with pytest.raises(InvalidParameterError, match="max_batch_bytes"):
+            await apply_edits_op.execute(deletes=[1], max_batch_bytes=max_batch_bytes)
