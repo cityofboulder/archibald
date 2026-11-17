@@ -5,7 +5,13 @@ import httpx
 
 from archibald.auth import ArcGISAuth
 from archibald.errors import handle_esri_errors
-from archibald.exceptions import InvalidServiceURL, TokenExpiredError, TokenMissingError
+from archibald.exceptions import (
+    ConfigurationError,
+    InvalidServiceURL,
+    TokenExpiredError,
+    TokenMissingError,
+)
+from archibald.serializers._features import DEFAULT_MAX_BATCH_BYTES, MAX_BATCH_BYTES
 
 
 class ArchieClient:
@@ -32,6 +38,8 @@ class ArchieClient:
         max_concurrent_requests: int = 20,
         max_concurrent_jobs: int = 4,
         job_timeout: float = 300.0,
+        use_server_async: bool | None = None,
+        max_batch_bytes: int = DEFAULT_MAX_BATCH_BYTES,
     ) -> None:
         """Construct an ArchieClient.
 
@@ -57,18 +65,42 @@ class ArchieClient:
                 server's job queue rather than HTTP requests. Set it slightly
                 above the number of jobs the target service runs in parallel;
                 too high reintroduces queueing (and job_timeout expirations),
-                too low leaves the server idle between jobs.
+                too low leaves the server idle between jobs. Has no effect on
+                batches sent synchronously (see use_server_async).
             job_timeout: Default maximum seconds to wait for one async job to
                 complete once it holds a job permit. Queue time behind other
                 jobs from this client is not counted. Individual operations
-                may override it per call.
+                may override it per call. Has no effect on batches sent
+                synchronously.
+            use_server_async: Default for whether applyEdits batches use
+                server-side async processing. None (the default) auto-detects:
+                async only when an edit spans more than one batch and the layer
+                advertises supportsAsyncApplyEdits. True sends every batch
+                async; False always sends synchronously, which trades async's
+                resilience on slow commits for definite per-batch outcomes.
+                Individual calls may override it.
+            max_batch_bytes: Default soft upper bound, in bytes, for each
+                applyEdits POST body. Smaller batches commit faster and put
+                fewer edits at stake when one fails. Individual calls may
+                override it.
+
+        Raises:
+            ConfigurationError: If max_batch_bytes is not positive or exceeds
+                MAX_BATCH_BYTES.
         """
+        if not 0 < max_batch_bytes <= MAX_BATCH_BYTES:
+            raise ConfigurationError(
+                f"max_batch_bytes must be between 1 and {MAX_BATCH_BYTES}; "
+                f"got {max_batch_bytes}."
+            )
         self._base_url = self._validate_base_url(base_url.rstrip("/"))
         self._auth = auth
         self._request_timeout = timeout
         self._request_limiter = anyio.CapacityLimiter(max_concurrent_requests)
         self._job_timeout = job_timeout
         self._job_limiter = anyio.CapacityLimiter(max_concurrent_jobs)
+        self._use_server_async = use_server_async
+        self._max_batch_bytes = max_batch_bytes
         self._client: httpx.AsyncClient | None = None
 
     def _validate_base_url(self, url: str) -> str:
