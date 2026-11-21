@@ -17,6 +17,7 @@ from archibald.exceptions import (
 from archibald.models import (
     AttachmentsResult,
     ApplyEditsResult,
+    EditKind,
     EditResultItem,
     FieldsResult,
     QueryResult,
@@ -98,6 +99,8 @@ def make_edit_result_item(
     success: bool = True,
     global_id: str | None = None,
     error: dict | None = None,
+    kind: EditKind | None = None,
+    position: int | None = None,
 ) -> EditResultItem:
     """Create an EditResultItem for use in tests."""
     return EditResultItem(
@@ -105,6 +108,8 @@ def make_edit_result_item(
         global_id=global_id,
         success=success,
         error=error,
+        kind=kind,
+        position=position,
     )
 
 
