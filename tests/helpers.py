@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import httpx
+import pandas as pd
 import pytest
 from pytest_mock import MockerFixture
 from unittest.mock import AsyncMock
@@ -28,6 +31,32 @@ BASE_URL = "https://example.com/arcgis/rest/services/MyService/FeatureServer"
 SERVICE_PATH = "services/MyService/FeatureServer"
 MAP_LAYER_PATH = "services/MyService/MapServer"
 STATUS_URL = f"{BASE_URL}/0/applyEdits/jobs/abc123"
+ESRI_ITEM_ERROR = {"code": 1016, "description": "Setting of value for SITEGUID failed."}
+ESRI_ROLLBACK_ERROR = {
+    "code": 400,
+    "extendedCode": -2146,
+    "message": "Unable to complete operation.",
+    "details": ["Operation rolled back.", "Setting of value for SITEGUID failed."],
+}
+OUTCOME_UNKNOWN_ERROR = {
+    "code": -1,
+    "description": "timed out",
+    "exception": "ReadTimeout",
+    "outcome_unknown": True,
+}
+CORE_FRAME_DTYPES = {
+    "kind": "category",
+    "status": "category",
+    "object_id": "int64",
+    "global_id": "string",
+    "position": "Int64",
+    "error_code": "Int64",
+    "error_description": "string",
+    "error_exception": "string",
+    "error_outcome_unknown": "boolean",
+    "error_status_url": "string",
+}
+
 DEFAULT_BATCHING_KWARGS = {
     "use_server_async": None,
     "max_batch_bytes": None,
@@ -117,12 +146,33 @@ def make_apply_edits_result(
     adds: list[EditResultItem] | None = None,
     updates: list[EditResultItem] | None = None,
     deletes: list[EditResultItem] | None = None,
+    *,
+    inputs: dict[EditKind, pd.DataFrame] | None = None,
 ) -> ApplyEditsResult:
-    """Create an ApplyEditsResult for use in tests."""
+    """Create an ApplyEditsResult the way applyEdits builds one.
+
+    Each item is copied with ``kind`` set from the list it is passed in, as
+    ``ApplyEditsOperation.execute`` does; the passed items are not modified.
+    """
+
+    def tagged(items: list[EditResultItem] | None, kind: EditKind) -> list:
+        """Copies of ``items`` with ``kind`` set."""
+        return [replace(item, kind=kind) for item in items or []]
+
     return ApplyEditsResult(
-        add_results=adds or [],
-        update_results=updates or [],
-        delete_results=deletes or [],
+        add_results=tagged(adds, "adds"),
+        update_results=tagged(updates, "updates"),
+        delete_results=tagged(deletes, "deletes"),
+        _inputs=inputs or {},
+    )
+
+
+def positions_by_kind(result: ApplyEditsResult) -> tuple[list, list, list]:
+    """Item positions in each of the result's add, update, and delete lists."""
+    return (
+        [i.position for i in result.add_results],
+        [i.position for i in result.update_results],
+        [i.position for i in result.delete_results],
     )
 
 

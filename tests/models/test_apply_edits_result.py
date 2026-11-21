@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import pandas as pd
 import pytest
 
+from archibald.exceptions import InvalidParameterError
 from archibald.models.apply_edits_result import ApplyEditsResult
 from tests.helpers import (
+    CORE_FRAME_DTYPES,
     DEPRECATED_METHOD_CASES,
+    ESRI_ROLLBACK_ERROR,
     make_apply_edits_result,
     make_edit_result_item,
+    positions_by_kind,
 )
 
 
@@ -242,3 +247,172 @@ class TestApplyEditsResultDeprecatedMethods:
             result = getattr(ApplyEditsResult, name)(arg)
 
         assert result == expected
+
+
+class TestApplyEditsResultEquality:
+    def test_results_are_equal_when_only_inputs_differ(self):
+        item = make_edit_result_item(1)
+        with_inputs = make_apply_edits_result(
+            adds=[item], inputs={"adds": pd.DataFrame({"a": [1]})}
+        )
+
+        result = with_inputs == make_apply_edits_result(adds=[item])
+
+        assert result is True
+
+
+class TestApplyEditsResultFilter:
+    @pytest.mark.parametrize(
+        "kwargs, expected",
+        [
+            ({}, ([0, 1, 2], [0, 1], [0])),
+            ({"kinds": "adds"}, ([0, 1, 2], [], [])),
+            ({"kinds": ["updates", "deletes"]}, ([], [0, 1], [0])),
+            ({"statuses": "failed"}, ([1], [1], [])),
+            ({"statuses": ["succeeded", "unknown"]}, ([0, 2], [0], [0])),
+            ({"kinds": "updates", "statuses": "failed"}, ([], [1], [])),
+        ],
+        ids=[
+            "no-filter",
+            "one-kind",
+            "kind-list",
+            "one-status",
+            "status-list",
+            "kind-and-status",
+        ],
+    )
+    def test_filter_keeps_matching_items_when_criteria_given(
+        self, mixed_status_result, kwargs, expected
+    ):
+        result = mixed_status_result.filter(**kwargs)
+
+        assert positions_by_kind(result) == expected
+
+    def test_filter_carries_inputs_when_filtering(self, mixed_status_result):
+        result = mixed_status_result.filter(statuses="failed")
+
+        assert result._inputs is mixed_status_result._inputs
+
+    def test_filter_leaves_original_unchanged_when_filtering(self, mixed_status_result):
+        mixed_status_result.filter(kinds="adds", statuses="failed")
+
+        assert positions_by_kind(mixed_status_result) == ([0, 1, 2], [0, 1], [0])
+
+    @pytest.mark.parametrize(
+        "kwargs, match",
+        [
+            ({"kinds": "add"}, r"Invalid kinds: add\. Expected one of: adds, updates"),
+            (
+                {"statuses": ["failed", "error", "bad"]},
+                r"Invalid statuses: bad, error\. Expected one of: succeeded",
+            ),
+        ],
+        ids=["invalid-kind", "invalid-statuses"],
+    )
+    def test_filter_raises_when_value_is_invalid(
+        self, mixed_status_result, kwargs, match
+    ):
+        with pytest.raises(InvalidParameterError, match=match):
+            mixed_status_result.filter(**kwargs)
+
+
+class TestApplyEditsResultMetadataFrame:
+    @pytest.mark.parametrize(
+        "result_fixture",
+        ["mixed_status_result", "empty_apply_edits_result"],
+        ids=["mixed", "empty"],
+    )
+    def test_core_columns_have_fixed_dtypes_when_built(self, request, result_fixture):
+        result = request.getfixturevalue(result_fixture)
+
+        frame = result._metadata_frame()
+
+        core = frame.columns[: len(CORE_FRAME_DTYPES)]
+        assert {c: str(frame[c].dtype) for c in core} == CORE_FRAME_DTYPES
+
+    def test_rows_follow_adds_updates_deletes_order_when_built(
+        self, mixed_status_result
+    ):
+        frame = mixed_status_result._metadata_frame()
+
+        assert frame[["kind", "status", "object_id", "position"]].values.tolist() == [
+            ["adds", "succeeded", 10, 0],
+            ["adds", "failed", -1, 1],
+            ["adds", "unknown", -1, 2],
+            ["updates", "succeeded", 20, 0],
+            ["updates", "failed", 21, 1],
+            ["deletes", "succeeded", 30, 0],
+        ]
+
+    def test_position_is_null_when_item_has_none(self, rolled_back_result):
+        frame = rolled_back_result._metadata_frame()
+
+        assert frame["position"].isna().all()
+
+    def test_error_columns_are_null_when_item_succeeded(self, mixed_status_result):
+        frame = mixed_status_result._metadata_frame()
+
+        assert frame.loc[0, "error_code":].isna().all()
+
+    def test_error_values_are_flattened_when_outcome_unknown(self, mixed_status_result):
+        frame = mixed_status_result._metadata_frame()
+
+        assert frame.loc[2, "error_code":"error_outcome_unknown"].tolist() == [
+            -1,
+            "timed out",
+            "ReadTimeout",
+            True,
+        ]
+
+
+class TestApplyEditsResultErrorFrame:
+    def test_extra_keys_become_snake_case_columns_when_present(
+        self, rolled_back_result
+    ):
+        frame = rolled_back_result._metadata_frame()
+
+        assert frame.loc[0, ["error_extended_code", "error_message"]].tolist() == [
+            -2146,
+            "Unable to complete operation.",
+        ]
+        assert frame.loc[0, "error_details"] == ESRI_ROLLBACK_ERROR["details"]
+
+    @pytest.mark.parametrize(
+        "error, expected",
+        [
+            (
+                ESRI_ROLLBACK_ERROR,
+                "Unable to complete operation. Operation rolled back. "
+                "Setting of value for SITEGUID failed.",
+            ),
+            ({"code": 400, "message": "Only a message."}, "Only a message."),
+            ({"code": 400, "details": ["First.", "Second."]}, "First. Second."),
+            ({"code": 400, "description": "", "message": "Empty."}, "Empty."),
+            ({"code": 400, "description": "Only desc."}, "Only desc."),
+        ],
+        ids=[
+            "message-and-details",
+            "message-only",
+            "details-only",
+            "empty-description",
+            "description-only",
+        ],
+    )
+    def test_description_is_filled_when_esri_sent_none(self, error, expected):
+        items = [make_edit_result_item(-1, success=False, error=error)]
+
+        frame = ApplyEditsResult._error_frame(items)
+
+        assert frame.loc[0, "error_description"] == expected
+
+    def test_description_is_null_when_no_text_is_available(self):
+        items = [make_edit_result_item(-1, success=False, error={"code": 400})]
+
+        frame = ApplyEditsResult._error_frame(items)
+
+        assert pd.isna(frame.loc[0, "error_description"])
+
+    def test_item_error_is_unchanged_when_frame_is_built(self, rolled_back_result):
+        rolled_back_result._metadata_frame()
+
+        assert rolled_back_result.add_results[0].error == ESRI_ROLLBACK_ERROR

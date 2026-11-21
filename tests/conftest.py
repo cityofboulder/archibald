@@ -1,9 +1,15 @@
 import anyio
+import pandas as pd
 import pytest
 
 from archibald.auth import ARCGIS_ONLINE_BASE_URL, UserTokenAuth
 from archibald.client import ArchieClient
-from archibald.models import AttachmentsQueryResult, FieldsResult, QueryResult
+from archibald.models import (
+    ApplyEditsResult,
+    AttachmentsQueryResult,
+    FieldsResult,
+    QueryResult,
+)
 from archibald.operations import (
     AddAttachmentsOperation,
     DeleteAttachmentsOperation,
@@ -22,11 +28,15 @@ from archibald.services import (
     MapService,
 )
 from tests.helpers import (
+    ESRI_ITEM_ERROR,
+    ESRI_ROLLBACK_ERROR,
     MAP_LAYER_PATH,
+    OUTCOME_UNKNOWN_ERROR,
     SERVICE_PATH,
     MinimalService,
     StaticTokenAuth,
     make_apply_edits_result,
+    make_edit_result_item,
     make_attachment_info,
     make_small_feature,
 )
@@ -311,6 +321,46 @@ def mixed_edit_batch() -> dict:
         "updates": [{"attributes": {"OBJECTID": 7}}],
         "deletes": "4",
     }
+
+
+@pytest.fixture
+def mixed_status_result() -> ApplyEditsResult:
+    """An ApplyEditsResult with every status, positioned as applyEdits would.
+
+    Adds: succeeded OID 10, failed (ESRI item error), unknown
+    (outcome_unknown). Updates: succeeded OID 20, failed OID 21.
+    Deletes: succeeded OID 30.
+    """
+    return make_apply_edits_result(
+        adds=[
+            make_edit_result_item(10, position=0),
+            make_edit_result_item(-1, success=False, error=ESRI_ITEM_ERROR, position=1),
+            make_edit_result_item(
+                -1, success=False, error=OUTCOME_UNKNOWN_ERROR, position=2
+            ),
+        ],
+        updates=[
+            make_edit_result_item(20, position=0),
+            make_edit_result_item(21, success=False, error=ESRI_ITEM_ERROR, position=1),
+        ],
+        deletes=[make_edit_result_item(30, position=0)],
+        inputs={"adds": pd.DataFrame({"name": ["a", "b", "c"]})},
+    )
+
+
+@pytest.fixture
+def empty_apply_edits_result() -> ApplyEditsResult:
+    """An ApplyEditsResult with no items."""
+    return make_apply_edits_result()
+
+
+@pytest.fixture
+def rolled_back_result() -> ApplyEditsResult:
+    """An ApplyEditsResult whose add batch was rolled back, plus one successful update."""
+    return make_apply_edits_result(
+        adds=[make_edit_result_item(-1, success=False, error=ESRI_ROLLBACK_ERROR)],
+        updates=[make_edit_result_item(20)],
+    )
 
 
 @pytest.fixture
