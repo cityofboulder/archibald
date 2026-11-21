@@ -266,7 +266,7 @@ class ApplyEditsOperation:
                     status_url=status_url,
                 )
 
-        return ApplyEditsResult.from_esri_response(response_body)
+        return ApplyEditsResult._from_esri_response(response_body)
 
     @staticmethod
     def _failed_batch_result(
@@ -420,4 +420,4 @@ class ApplyEditsOperation:
             for idx, batch in enumerate(batches):
                 tg.start_soon(post_one, idx, batch)
 
-        return ApplyEditsResult.merge(batch_results)  # type: ignore[arg-type]
+        return ApplyEditsResult._merge(batch_results)  # type: ignore[arg-type]
