@@ -18,7 +18,14 @@ from archibald.exceptions import (
     TokenMissingError,
     TokenRefreshError,
 )
-from archibald.models import ApplyEditsResult, EditResultItem, FieldsResult, QueryResult
+from archibald.models import (
+    ApplyEditsResult,
+    EditKind,
+    EditResultItem,
+    EditStatus,
+    FieldsResult,
+    QueryResult,
+)
 from archibald.services import (
     BaseLayer,
     BaseService,
@@ -55,6 +62,8 @@ __all__ = [
     "FieldsResult",
     "ApplyEditsResult",
     "EditResultItem",
+    "EditKind",
+    "EditStatus",
     # services
     "BaseService",
     "BaseLayer",

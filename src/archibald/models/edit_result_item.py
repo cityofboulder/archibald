@@ -3,16 +3,60 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
+
+EditKind = Literal["adds", "updates", "deletes"]
+"""Kind of edit an applyEdits result item belongs to."""
+
+EditStatus = Literal["succeeded", "failed", "unknown"]
+"""Outcome of a single edit, derived from ``success`` and ``error``."""
 
 
 @dataclass
 class EditResultItem:
-    """Single per-feature result from an applyEdits or addAttachment operation."""
+    """Single per-feature result from an applyEdits or addAttachment operation.
+
+    Attributes:
+        object_id: OBJECTID ESRI reported, or -1 when there is none (e.g. a
+            failed add).
+        global_id: GlobalID ESRI reported, if any.
+        success: Whether the edit succeeded.
+        error: Raw ESRI error dict when ``success`` is False; None otherwise.
+        kind: Which applyEdits list the item belongs to; None for attachment
+            results.
+        position: Row position of the item's source row in the input frame
+            for its kind; None when unknown (attachment results, or results
+            whose count did not match their input).
+    """
 
     object_id: int
     global_id: str | None
     success: bool
-    error: dict | None  # raw ESRI error dict when success=False; None otherwise
+    error: dict | None
+    kind: EditKind | None = None
+    position: int | None = None
+
+    # ------------------------------------------------------------------
+    # Properties
+    # ------------------------------------------------------------------
+
+    @property
+    def status(self) -> EditStatus:
+        """``"succeeded"``, ``"unknown"`` when the server may have applied it anyway,
+        else ``"failed"``.
+
+        Failures carrying an ESRI error dict have no ``outcome_unknown`` key and
+        are therefore ``"failed"``: the server definitively rejected them.
+        """
+        if self.success:
+            return "succeeded"
+        if (self.error or {}).get("outcome_unknown"):
+            return "unknown"
+        return "failed"
+
+    # ------------------------------------------------------------------
+    # Private methods
+    # ------------------------------------------------------------------
 
     @classmethod
     def _from_esri(cls, item: dict) -> EditResultItem:
