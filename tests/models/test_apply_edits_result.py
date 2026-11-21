@@ -5,14 +5,18 @@ from __future__ import annotations
 import pytest
 
 from archibald.models.apply_edits_result import ApplyEditsResult
-from tests.helpers import make_apply_edits_result, make_edit_result_item
+from tests.helpers import (
+    DEPRECATED_METHOD_CASES,
+    make_apply_edits_result,
+    make_edit_result_item,
+)
 
 
 class TestApplyEditsResultFromEsriResponse:
     def test_returns_correct_type(self):
         body: dict = {}
 
-        result = ApplyEditsResult.from_esri_response(body)
+        result = ApplyEditsResult._from_esri_response(body)
 
         assert isinstance(result, ApplyEditsResult)
 
@@ -28,7 +32,7 @@ class TestApplyEditsResultFromEsriResponse:
     def test_parses_result_list(self, esri_key, attr):
         body = {esri_key: [{"objectId": 1, "success": True}]}
 
-        result = ApplyEditsResult.from_esri_response(body)
+        result = ApplyEditsResult._from_esri_response(body)
 
         items = getattr(result, attr)
         assert len(items) == 1
@@ -37,7 +41,7 @@ class TestApplyEditsResultFromEsriResponse:
     def test_defaults_empty_when_key_absent(self):
         body: dict = {}
 
-        result = ApplyEditsResult.from_esri_response(body)
+        result = ApplyEditsResult._from_esri_response(body)
 
         assert result.add_results == []
         assert result.update_results == []
@@ -52,7 +56,7 @@ class TestApplyEditsResultFromEsriResponse:
             ]
         }
 
-        result = ApplyEditsResult.from_esri_response(body)
+        result = ApplyEditsResult._from_esri_response(body)
 
         assert [r.object_id for r in result.add_results] == [10, 20, 30]
 
@@ -169,12 +173,12 @@ class TestApplyEditsResultMerge:
         r1 = make_apply_edits_result(**{kwarg: [make_edit_result_item(1)]})
         r2 = make_apply_edits_result(**{kwarg: [make_edit_result_item(2)]})
 
-        merged = ApplyEditsResult.merge([r1, r2])
+        merged = ApplyEditsResult._merge([r1, r2])
 
         assert [r.object_id for r in getattr(merged, attr)] == [1, 2]
 
     def test_merge_empty_list_returns_empty_result(self):
-        merged = ApplyEditsResult.merge([])
+        merged = ApplyEditsResult._merge([])
 
         assert merged.add_results == []
         assert merged.update_results == []
@@ -187,7 +191,7 @@ class TestApplyEditsResultMerge:
             deletes=[make_edit_result_item(3)],
         )
 
-        merged = ApplyEditsResult.merge([r])
+        merged = ApplyEditsResult._merge([r])
 
         assert len(merged.add_results) == 1
         assert len(merged.update_results) == 1
@@ -198,7 +202,7 @@ class TestApplyEditsResultMerge:
             make_apply_edits_result(adds=[make_edit_result_item(i)]) for i in range(5)
         ]
 
-        merged = ApplyEditsResult.merge(results)
+        merged = ApplyEditsResult._merge(results)
 
         assert len(merged.add_results) == 5
 
@@ -207,7 +211,7 @@ class TestApplyEditsResultMerge:
         r2 = make_apply_edits_result(adds=[make_edit_result_item(2)])
         original_r1_adds = list(r1.add_results)
 
-        ApplyEditsResult.merge([r1, r2])
+        ApplyEditsResult._merge([r1, r2])
 
         assert r1.add_results == original_r1_adds
 
@@ -215,8 +219,26 @@ class TestApplyEditsResultMerge:
         r1 = make_apply_edits_result(adds=[make_edit_result_item(1)])
         r2 = make_apply_edits_result()
 
-        merged = ApplyEditsResult.merge([r1, r2])
+        merged = ApplyEditsResult._merge([r1, r2])
 
         assert len(merged.add_results) == 1
         assert len(merged.update_results) == 0
         assert len(merged.delete_results) == 0
+
+
+class TestApplyEditsResultDeprecatedMethods:
+    @pytest.mark.parametrize("name, arg", DEPRECATED_METHOD_CASES)
+    def test_public_method_warns_when_called(self, name, arg):
+        method = getattr(ApplyEditsResult, name)
+
+        with pytest.warns(DeprecationWarning, match=f"{name} is deprecated"):
+            method(arg)
+
+    @pytest.mark.parametrize("name, arg", DEPRECATED_METHOD_CASES)
+    def test_public_method_matches_private_method_when_called(self, name, arg):
+        expected = getattr(ApplyEditsResult, f"_{name}")(arg)
+
+        with pytest.warns(DeprecationWarning):
+            result = getattr(ApplyEditsResult, name)(arg)
+
+        assert result == expected

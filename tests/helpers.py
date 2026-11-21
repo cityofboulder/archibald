@@ -134,7 +134,7 @@ def make_esri_apply_edits_response(
     """Build a raw ESRI applyEdits response dict for use in tests.
 
     Each ID list is expanded into success=True result dicts in the format
-    expected by ApplyEditsResult.from_esri_response.
+    expected by ApplyEditsResult._from_esri_response.
 
     Args:
         add_ids: OBJECTIDs for simulated add results.
@@ -467,5 +467,21 @@ REJECTED_POLL_ERROR_CASES = [
         make_arcgis_error(ServiceError, 400, "Invalid job id."),
         "Invalid job id.",
         id="esri-envelope",
+    ),
+]
+
+DEPRECATED_METHOD_CASES = [
+    pytest.param(
+        "from_esri_response",
+        make_esri_apply_edits_response(add_ids=[1], update_ids=[2], delete_ids=[3]),
+        id="from_esri_response",
+    ),
+    pytest.param(
+        "merge",
+        [
+            make_apply_edits_result(adds=[make_edit_result_item(1)]),
+            make_apply_edits_result(updates=[make_edit_result_item(2)]),
+        ],
+        id="merge",
     ),
 ]
