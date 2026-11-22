@@ -426,6 +426,27 @@ def feature_layer(mock_client) -> FeatureLayer:
 
 
 @pytest.fixture
+def diff_query(feature_layer, mocker):
+    """Patch feature_layer's diff query to return three existing features.
+
+    OBJECTIDs 1, 2, 3 with Name Alice / Bob / Cy and Status A / B / C, in
+    the column order Status, Name, OBJECTID (not the order requested).
+    Returns the patched ``query`` mock.
+    """
+    existing = pd.DataFrame(
+        {
+            "Status": ["A", "B", "C"],
+            "Name": ["Alice", "Bob", "Cy"],
+            "OBJECTID": [1, 2, 3],
+        }
+    )
+    mocker.patch.object(feature_layer, "objectid_field", return_value="OBJECTID")
+    result = mocker.MagicMock()
+    result.to_frame.return_value = existing
+    return mocker.patch.object(feature_layer, "query", return_value=result)
+
+
+@pytest.fixture
 def mock_apply_edits_execute(feature_layer, mocker):
     """Patched ApplyEditsOperation.execute on an edit-capable feature_layer.
 

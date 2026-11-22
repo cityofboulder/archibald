@@ -657,6 +657,37 @@ class TestDiff:
         assert updates.empty
         assert deletes["OBJECTID"].tolist() == [1, 2]
 
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "key_fields, expected_columns",
+        [
+            (["Name", "Status"], ["OBJECTID", "Name", "Status"]),
+            (["Status", "Name"], ["OBJECTID", "Status", "Name"]),
+        ],
+        ids=["name-then-status", "status-then-name"],
+    )
+    async def test_deletes_hold_objectid_then_key_fields_when_layer_orders_differently(
+        self, feature_layer, diff_query, key_fields, expected_columns
+    ):
+        input_df = pd.DataFrame({"Name": ["Alice"], "Status": ["A"]})
+
+        _, _, deletes = await feature_layer._diff(input_df, key_fields)
+
+        assert list(deletes.columns) == expected_columns
+        assert deletes["OBJECTID"].tolist() == [2, 3]
+
+    @pytest.mark.anyio
+    async def test_query_requests_objectid_then_key_fields_when_diffing(
+        self, feature_layer, diff_query
+    ):
+        input_df = pd.DataFrame({"Name": ["Alice"], "Status": ["A"]})
+
+        await feature_layer._diff(input_df, ["Status", "Name"])
+
+        diff_query.assert_called_once_with(
+            out_fields=["OBJECTID", "Status", "Name"], return_geometry=False
+        )
+
 
 class TestAddAttachmentMethods:
     @pytest.mark.anyio
