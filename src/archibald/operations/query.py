@@ -342,13 +342,40 @@ class QueryOperation:
             return []
 
         max_record_count = await self._layer.max_record_count()
+        not_for_count = {
+            # paging and ordering
+            "orderByFields",
+            "resultOffset",
+            "resultRecordCount",
+            "resultType",
+            "resultPaginationToken",
+            "returnExceededLimitFeatures",
+            # geometry output shaping
+            "returnGeometry",
+            "outSR",
+            "maxAllowableOffset",
+            "geometryPrecision",
+            "returnZ",
+            "returnM",
+            "multipatchOption",
+            "quantizationParameters",
+            "returnCentroid",
+            "returnTrueCurves",
+            "returnEnvelope",
+            # competing response modes
+            "returnIdsOnly",
+            "returnExtentOnly",
+            "returnUniqueIdsOnly",
+            "outStatistics",
+            "groupByFieldsForStatistics",
+            "havingClause",
+        }
+        count_params = {
+            k: v for k, v in initial_params.items() if k not in not_for_count
+        }
         total_count_response = await self._layer._client.get(
             endpoint=self._endpoint,
-            params={
-                "where": initial_params.get("where", "1=1"),
-                "returnCountOnly": "true",
-                "f": "json",
-            },
+            params={**count_params, "returnCountOnly": "true", "f": "json"},
         )
         total_count = total_count_response.json().get("count", 0)
 
