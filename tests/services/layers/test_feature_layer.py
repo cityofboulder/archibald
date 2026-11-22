@@ -413,7 +413,13 @@ class TestUpsert:
         adds_df = pd.DataFrame({"Name": ["Alice"]})
         updates_df = pd.DataFrame({"Name": ["Bob"], "OBJECTID": [1]})
         mocker.patch.object(
-            feature_layer, "_diff", return_value=(adds_df, updates_df, [])
+            feature_layer,
+            "_diff",
+            return_value=(
+                adds_df,
+                updates_df,
+                pd.DataFrame(columns=["OBJECTID", "Name"]),
+            ),
         )
         mock_apply = mocker.patch.object(
             feature_layer, "apply_edits", return_value=make_apply_edits_result()
@@ -449,7 +455,13 @@ class TestUpsert:
             else pd.DataFrame(columns=["Name"])
         )
         mocker.patch.object(
-            feature_layer, "_diff", return_value=(adds_df, updates_df, [])
+            feature_layer,
+            "_diff",
+            return_value=(
+                adds_df,
+                updates_df,
+                pd.DataFrame(columns=["OBJECTID", "Name"]),
+            ),
         )
         mock_apply = mocker.patch.object(
             feature_layer, "apply_edits", return_value=make_apply_edits_result()
@@ -470,9 +482,10 @@ class TestSync:
     async def test_routes_all_three(self, feature_layer, mocker):
         adds_df = pd.DataFrame({"Name": ["Alice"]})
         updates_df = pd.DataFrame({"Name": ["Bob"], "OBJECTID": [1]})
+        deletes_df = pd.DataFrame({"OBJECTID": [2, 3], "Name": ["Cy", "Dee"]})
         expected = make_apply_edits_result()
         mocker.patch.object(
-            feature_layer, "_diff", return_value=(adds_df, updates_df, [2, 3])
+            feature_layer, "_diff", return_value=(adds_df, updates_df, deletes_df)
         )
         mock_apply = mocker.patch.object(
             feature_layer, "apply_edits", return_value=expected
@@ -483,7 +496,7 @@ class TestSync:
         mock_apply.assert_called_once_with(
             adds=adds_df,
             updates=updates_df,
-            deletes=[2, 3],
+            deletes=deletes_df,
             apply_coded_values=False,
             **DEFAULT_BATCHING_KWARGS,
         )
@@ -493,7 +506,13 @@ class TestSync:
         adds_df = pd.DataFrame({"Name": ["Alice"]})
         updates_df = pd.DataFrame({"Name": ["Bob"], "OBJECTID": [1]})
         mocker.patch.object(
-            feature_layer, "_diff", return_value=(adds_df, updates_df, [])
+            feature_layer,
+            "_diff",
+            return_value=(
+                adds_df,
+                updates_df,
+                pd.DataFrame(columns=["OBJECTID", "Name"]),
+            ),
         )
         mock_apply = mocker.patch.object(
             feature_layer, "apply_edits", return_value=make_apply_edits_result()
@@ -529,7 +548,11 @@ class TestEditWrappers:
         mocker.patch.object(
             feature_layer,
             "_diff",
-            return_value=(df, pd.DataFrame(columns=["Name"]), []),
+            return_value=(
+                df,
+                pd.DataFrame(columns=["Name"]),
+                pd.DataFrame(columns=["OBJECTID", "Name"]),
+            ),
         )
         mock_apply = mocker.patch.object(
             feature_layer, "apply_edits", return_value=make_apply_edits_result()
@@ -552,11 +575,11 @@ class TestDiff:
         mock_result.to_frame.return_value = existing_df
         mocker.patch.object(feature_layer, "query", return_value=mock_result)
 
-        adds, updates, delete_oids = await feature_layer._diff(input_df, ["Name"])
+        adds, updates, deletes = await feature_layer._diff(input_df, ["Name"])
 
         assert sorted(adds["Name"].tolist()) == ["Alice", "Bob"]
         assert updates.empty
-        assert delete_oids == []
+        assert deletes.empty
 
     @pytest.mark.anyio
     async def test_matched_rows_become_updates_with_objectid(
@@ -569,12 +592,12 @@ class TestDiff:
         mock_result.to_frame.return_value = existing_df
         mocker.patch.object(feature_layer, "query", return_value=mock_result)
 
-        adds, updates, delete_oids = await feature_layer._diff(input_df, ["Name"])
+        adds, updates, deletes = await feature_layer._diff(input_df, ["Name"])
 
         assert adds.empty
         assert updates["Name"].tolist() == ["Alice"]
         assert updates["OBJECTID"].tolist() == [5]
-        assert delete_oids == []
+        assert deletes.empty
 
     @pytest.mark.anyio
     async def test_unmatched_existing_rows_are_deletes(self, feature_layer, mocker):
@@ -585,12 +608,12 @@ class TestDiff:
         mock_result.to_frame.return_value = existing_df
         mocker.patch.object(feature_layer, "query", return_value=mock_result)
 
-        adds, updates, delete_oids = await feature_layer._diff(input_df, ["Name"])
+        adds, updates, deletes = await feature_layer._diff(input_df, ["Name"])
 
         assert adds.empty
         assert updates["Name"].tolist() == ["Alice"]
         assert updates["OBJECTID"].tolist() == [1]
-        assert delete_oids == [2]
+        assert deletes["OBJECTID"].tolist() == [2]
 
     @pytest.mark.anyio
     async def test_composite_key_uses_all_fields(self, feature_layer, mocker):
@@ -612,14 +635,12 @@ class TestDiff:
         mock_result.to_frame.return_value = existing_df
         mocker.patch.object(feature_layer, "query", return_value=mock_result)
 
-        adds, updates, delete_oids = await feature_layer._diff(
-            input_df, ["Name", "Status"]
-        )
+        adds, updates, deletes = await feature_layer._diff(input_df, ["Name", "Status"])
 
         assert adds["Status"].tolist() == ["Inactive"]
         assert updates["Status"].tolist() == ["Active"]
         assert updates["OBJECTID"].tolist() == [1]
-        assert delete_oids == []
+        assert deletes.empty
 
     @pytest.mark.anyio
     async def test_empty_input_df_produces_all_deletes(self, feature_layer, mocker):
@@ -630,11 +651,11 @@ class TestDiff:
         mock_result.to_frame.return_value = existing_df
         mocker.patch.object(feature_layer, "query", return_value=mock_result)
 
-        adds, updates, delete_oids = await feature_layer._diff(input_df, ["Name"])
+        adds, updates, deletes = await feature_layer._diff(input_df, ["Name"])
 
         assert adds.empty
         assert updates.empty
-        assert delete_oids == [1, 2]
+        assert deletes["OBJECTID"].tolist() == [1, 2]
 
 
 class TestAddAttachmentMethods:

@@ -463,11 +463,11 @@ class FeatureLayer(FeatureService, BaseLayer):
             LayerCapabilityError: If the layer does not support applyEdits or query operations.
             InvalidParameterError: If key_fields is invalid.
         """
-        adds_df, updates_df, delete_oids = await self._diff(df, key_fields)
+        adds_df, updates_df, deletes_df = await self._diff(df, key_fields)
         return await self.apply_edits(
             adds=adds_df if not adds_df.empty else None,
             updates=updates_df if not updates_df.empty else None,
-            deletes=delete_oids if delete_oids else None,
+            deletes=deletes_df if not deletes_df.empty else None,
             apply_coded_values=apply_coded_values,
             use_server_async=use_server_async,
             max_batch_bytes=max_batch_bytes,
@@ -638,7 +638,7 @@ class FeatureLayer(FeatureService, BaseLayer):
         self,
         df: pd.DataFrame | gpd.GeoDataFrame,
         key_fields: list[str],
-    ) -> tuple[pd.DataFrame, pd.DataFrame, list[int]]:
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """Shared diff logic for upsert and sync.
 
         Issues a slim query (key_fields + OBJECTID, no geometry) and builds
@@ -652,11 +652,12 @@ class FeatureLayer(FeatureService, BaseLayer):
             key_fields: Column names that jointly identify a feature.
 
         Returns:
-            Tuple of (adds_df, updates_df, delete_oids):
+            Tuple of (adds_df, updates_df, deletes_df):
                 adds_df: Rows whose composite key is absent from the layer.
                 updates_df: Rows whose composite key is present in the layer, with
                     OBJECTID injected from the existing layer data.
-                delete_oids: OIDs in the layer whose composite key is absent from df.
+                deletes_df: Layer features whose composite key is absent from
+                    df, with the OBJECTID followed by the key fields.
 
         Raises:
             InvalidParameterError: If key_fields fails the uniqueness gate (see _validate_key_fields).
@@ -664,7 +665,7 @@ class FeatureLayer(FeatureService, BaseLayer):
         self._validate_key_fields(df, key_fields)
         objectid_field = await self.objectid_field()
 
-        query_fields = list(set([objectid_field, *key_fields]))
+        query_fields = list(dict.fromkeys([objectid_field, *key_fields]))
         existing_result = await self.query(
             out_fields=query_fields, return_geometry=False
         )
@@ -680,6 +681,6 @@ class FeatureLayer(FeatureService, BaseLayer):
         updates = df[updates_mask].copy()
         updates[objectid_field] = input_keys[updates_mask].map(key_to_oid)  # type: ignore
 
-        deletes = existing_df[~existing_keys.isin(input_keys)][objectid_field].tolist()
+        deletes = existing_df.loc[~existing_keys.isin(input_keys), query_fields]
 
         return adds, updates, deletes
