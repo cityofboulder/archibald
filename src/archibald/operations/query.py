@@ -47,6 +47,8 @@ class QueryOperation:
             out_sr: Output spatial reference (EPSG code) for geometries.
             **kwargs: Additional query parameters (e.g., orderByFields, resultType).
                 If orderByFields is not provided, defaults to "OBJECTID ASC".
+                resultOffset and resultRecordCount define a window; automatic
+                pagination fills that window rather than the whole result set.
 
         Returns:
             QueryResult with aggregated features, field definitions, and geometry type.
@@ -79,14 +81,7 @@ class QueryOperation:
         )
         first_data = first_response.json()
         features = first_data.get("features", [])
-
-        # Paginate the rest if needed
-        exceeded = (first_data.get("exceededTransferLimit", False)) or (
-            first_data.get("properties", {}).get("exceededTransferLimit", False)
-        )
-        if exceeded:
-            additional_features = await self._fetch_remaining_pages(params, first_data)
-            features.extend(additional_features)
+        features.extend(await self._fetch_remaining_pages(params, first_data))
 
         fields_result = await self._layer.fields()
         fields_result = fields_result.filter(names=normalized_fields.split(","))
@@ -273,14 +268,16 @@ class QueryOperation:
         """Build the query parameter dict.
 
         Always includes orderByFields=OBJECTID ASC unless the caller provides
-        their own orderByFields in kwargs.
+        their own orderByFields in kwargs. resultOffset and resultRecordCount
+        are cast to int when supplied and omitted otherwise.
 
         Args:
             where: WHERE clause.
             out_fields: Normalized field string or "*".
             return_geometry: Include geometries.
             out_sr: Output spatial reference (EPSG code) for geometries.
-            **kwargs: Additional params (e.g., orderByFields, resultType).
+            **kwargs: Additional params (e.g., orderByFields, resultType,
+                resultOffset, resultRecordCount).
 
         Returns:
             Dict of query parameters for the ESRI REST API.
@@ -298,6 +295,10 @@ class QueryOperation:
         if out_sr is not None:
             params["outSR"] = str(out_sr)
 
+        for key in ("resultOffset", "resultRecordCount"):
+            if key in params:
+                params[key] = int(params[key])
+
         # Always order by OBJECTID for deterministic pagination,
         # unless caller specified their own ordering.
         if "orderByFields" not in params:
@@ -314,7 +315,15 @@ class QueryOperation:
     async def _fetch_remaining_pages(
         self, initial_params: dict, first_data: dict
     ) -> list[dict]:
-        """Fetch remaining pages in parallel if pagination is needed.
+        """Fetch the rest of the requested window in parallel, if any remains.
+
+        Returns nothing unless the first response set exceededTransferLimit
+        and, when resultRecordCount was given, the first page fell short of
+        it. The window runs from resultOffset (default 0) to resultOffset +
+        resultRecordCount, or to the end of the matching records when no
+        resultRecordCount was given. Pages are sized by the first page
+        (capped at the layer's maxRecordCount), and the last page is trimmed
+        to the window's end.
 
         Args:
             initial_params: Query parameters from the first request.
@@ -323,6 +332,15 @@ class QueryOperation:
         Returns:
             List of all remaining feature objects from subsequent pages.
         """
+        exceeded = first_data.get("exceededTransferLimit", False) or (
+            first_data.get("properties", {}).get("exceededTransferLimit", False)
+        )
+        start = initial_params.get("resultOffset", 0)
+        limit = initial_params.get("resultRecordCount")
+        first_page_size = len(first_data.get("features", []))
+        if not exceeded or (limit is not None and first_page_size >= limit):
+            return []
+
         max_record_count = await self._layer.max_record_count()
         total_count_response = await self._layer._client.get(
             endpoint=self._endpoint,
@@ -334,8 +352,9 @@ class QueryOperation:
         )
         total_count = total_count_response.json().get("count", 0)
 
-        # Calculate offsets for remaining pages
-        offsets = list(range(max_record_count, total_count, max_record_count))
+        page_size = min(first_page_size, max_record_count) or max_record_count
+        end = total_count if limit is None else min(total_count, start + limit)
+        offsets = list(range(start + first_page_size, end, page_size))
 
         if not offsets:
             return []
@@ -349,7 +368,7 @@ class QueryOperation:
                 params={
                     **initial_params,
                     "resultOffset": offset,
-                    "resultRecordCount": max_record_count,
+                    "resultRecordCount": min(page_size, end - offset),
                 },
             )
             page_results[idx] = response.json().get("features", [])
