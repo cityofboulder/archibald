@@ -37,6 +37,7 @@ from tests.helpers import (
     StaticTokenAuth,
     make_apply_edits_result,
     make_edit_result_item,
+    make_geo_frame,
     make_attachment_info,
     make_small_feature,
 )
@@ -327,9 +328,10 @@ def mixed_edit_batch() -> dict:
 def mixed_status_result() -> ApplyEditsResult:
     """An ApplyEditsResult with every status, positioned as applyEdits would.
 
-    Adds: succeeded OID 10, failed (ESRI item error), unknown
-    (outcome_unknown). Updates: succeeded OID 20, failed OID 21.
-    Deletes: succeeded OID 30.
+    Adds (rows a, b, c; index 7, 7, 9): succeeded OID 10, failed (ESRI item
+    error), unknown (outcome_unknown). Updates (rows d, e with OBJECTIDs):
+    succeeded OID 20, failed OID 21. Deletes (an OBJECTID frame): succeeded
+    OID 30.
     """
     return make_apply_edits_result(
         adds=[
@@ -344,7 +346,28 @@ def mixed_status_result() -> ApplyEditsResult:
             make_edit_result_item(21, success=False, error=ESRI_ITEM_ERROR, position=1),
         ],
         deletes=[make_edit_result_item(30, position=0)],
-        inputs={"adds": pd.DataFrame({"name": ["a", "b", "c"]})},
+        inputs={
+            "adds": pd.DataFrame({"name": ["a", "b", "c"]}, index=[7, 7, 9]),
+            "updates": pd.DataFrame({"name": ["d", "e"], "OBJECTID": [20, 21]}),
+            "deletes": pd.DataFrame({"OBJECTID": [30]}),
+        },
+    )
+
+
+@pytest.fixture
+def geo_edit_result() -> ApplyEditsResult:
+    """An ApplyEditsResult with GeoDataFrame adds and a plain OBJECTID delete frame.
+
+    Adds (rows f0, f1): succeeded OID 10, failed (ESRI item error).
+    Deletes: succeeded OID 30.
+    """
+    return make_apply_edits_result(
+        adds=[
+            make_edit_result_item(10, position=0),
+            make_edit_result_item(-1, success=False, error=ESRI_ITEM_ERROR, position=1),
+        ],
+        deletes=[make_edit_result_item(30, position=0)],
+        inputs={"adds": make_geo_frame(2), "deletes": pd.DataFrame({"OBJECTID": [30]})},
     )
 
 

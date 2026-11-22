@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import geopandas as gpd
 import httpx
 import pandas as pd
 import pytest
 from pytest_mock import MockerFixture
+from shapely.geometry import Point
 from unittest.mock import AsyncMock
 
 from archibald.auth import ArcGISAuth, UserTokenAuth
@@ -176,6 +178,18 @@ def make_single_kind_result(
         updates=items if kind == "updates" else None,
         deletes=items if kind == "deletes" else None,
     )
+
+
+def make_geo_frame(
+    n: int, *, crs: str = "EPSG:4326", geometry_name: str = "geometry"
+) -> gpd.GeoDataFrame:
+    """Create an ``n``-row point GeoDataFrame with a ``name`` column (f0, f1, ...)."""
+    gdf = gpd.GeoDataFrame(
+        {"name": [f"f{i}" for i in range(n)]},
+        geometry=[Point(i, i) for i in range(n)],
+        crs=crs,
+    )
+    return gdf.rename_geometry(geometry_name) if geometry_name != "geometry" else gdf
 
 
 def positions_by_kind(result: ApplyEditsResult) -> tuple[list, list, list]:

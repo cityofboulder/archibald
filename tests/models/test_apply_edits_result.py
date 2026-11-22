@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import geopandas as gpd
 import pandas as pd
 import pytest
 
@@ -13,6 +14,7 @@ from tests.helpers import (
     ESRI_ROLLBACK_ERROR,
     make_apply_edits_result,
     make_edit_result_item,
+    make_geo_frame,
     make_single_kind_result,
     positions_by_kind,
 )
@@ -417,3 +419,178 @@ class TestApplyEditsResultErrorFrame:
         rolled_back_result._metadata_frame()
 
         assert rolled_back_result.add_results[0].error == ESRI_ROLLBACK_ERROR
+
+
+class TestApplyEditsResultToFrame:
+    def test_returns_metadata_table_when_input_excluded(self, mixed_status_result):
+        result = mixed_status_result.to_frame(include_input=False)
+
+        pd.testing.assert_frame_equal(result, mixed_status_result._metadata_frame())
+
+    def test_rows_come_from_inputs_in_kind_order_when_input_included(
+        self, mixed_status_result
+    ):
+        result = mixed_status_result.to_frame()
+
+        assert result["name"].iloc[:5].tolist() == ["a", "b", "c", "d", "e"]
+        assert pd.isna(result["name"].iloc[5])
+        assert result.index.tolist() == [7, 7, 9, 0, 1, 0]
+
+    @pytest.mark.parametrize(
+        "kwargs, prefix",
+        [({}, "_edit_"), ({"metadata_prefix": "meta_"}, "meta_")],
+        ids=["default-prefix", "custom-prefix"],
+    )
+    def test_metadata_columns_are_prefixed_when_input_included(
+        self, mixed_status_result, kwargs, prefix
+    ):
+        result = mixed_status_result.to_frame(**kwargs)
+
+        expected = [prefix + c for c in CORE_FRAME_DTYPES if c != "position"]
+        assert list(result.columns) == ["name", "OBJECTID", *expected]
+
+    def test_only_input_columns_remain_when_metadata_excluded(
+        self, mixed_status_result
+    ):
+        result = mixed_status_result.to_frame(include_metadata=False)
+
+        assert list(result.columns) == ["name", "OBJECTID"]
+
+    def test_returns_failed_input_rows_when_filtered(self, mixed_status_result):
+        failed = mixed_status_result.filter(statuses="failed")
+
+        result = failed.to_frame(include_metadata=False)
+
+        assert result["name"].tolist() == ["b", "e"]
+        assert result.index.tolist() == [7, 1]
+
+    def test_integer_column_stays_integer_when_missing_from_some_inputs(
+        self, mixed_status_result
+    ):
+        result = mixed_status_result.to_frame()
+
+        assert str(result["OBJECTID"].dtype) == "Int64"
+        assert result["OBJECTID"].tolist() == [pd.NA, pd.NA, pd.NA, 20, 21, 30]
+
+    def test_returns_empty_frame_when_result_has_no_inputs(
+        self, empty_apply_edits_result
+    ):
+        result = empty_apply_edits_result.to_frame()
+
+        assert result.empty
+
+    def test_returns_geodataframe_when_an_input_is_one(self, geo_edit_result):
+        result = geo_edit_result.to_frame()
+
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert result.crs == "EPSG:4326"
+        assert result.geometry.isna().tolist() == [False, False, True]
+
+    def test_returns_plain_frame_when_only_non_geo_rows_remain(self, geo_edit_result):
+        deletes = geo_edit_result.filter(kinds="deletes")
+
+        result = deletes.to_frame(include_metadata=False)
+
+        assert type(result) is pd.DataFrame
+        assert result["OBJECTID"].tolist() == [30]
+
+    def test_returns_empty_frame_shaped_like_input_when_nothing_matches(
+        self, geo_edit_result
+    ):
+        nothing = geo_edit_result.filter(statuses="unknown")
+
+        result = nothing.to_frame(include_metadata=False)
+
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert result.empty
+        assert list(result.columns) == ["name", "geometry"]
+
+    @pytest.mark.parametrize(
+        "result_kwargs, to_frame_kwargs, match",
+        [
+            (
+                {"adds": [make_edit_result_item(1, position=0)]},
+                {"include_input": False, "include_metadata": False},
+                "cannot both be False",
+            ),
+            (
+                {"adds": [make_edit_result_item(1)]},
+                {},
+                "Cannot include input rows for adds: the result count did not",
+            ),
+            (
+                {
+                    "adds": [make_edit_result_item(1, position=0)],
+                    "inputs": {"adds": pd.DataFrame({"_edit_status": ["x"]})},
+                },
+                {},
+                r"Columns \['_edit_status'\] already exist in the input",
+            ),
+        ],
+        ids=["both-excluded", "positions-unknown", "column-clash"],
+    )
+    def test_raises_when_rows_cannot_be_built(
+        self, result_kwargs, to_frame_kwargs, match
+    ):
+        result_kwargs = {
+            "inputs": {"adds": pd.DataFrame({"name": ["a"]})},
+            **result_kwargs,
+        }
+        result = make_apply_edits_result(**result_kwargs)
+
+        with pytest.raises(InvalidParameterError, match=match):
+            result.to_frame(**to_frame_kwargs)
+
+
+class TestApplyEditsResultConcatFrames:
+    def test_restores_integer_columns_when_missing_from_some_frames(self):
+        frames = [
+            pd.DataFrame({"oid": [1], "value": [1.5], "count": [3]}),
+            pd.DataFrame({"value": [2.5], "count": [4]}),
+        ]
+
+        result = ApplyEditsResult._concat_frames(frames)
+
+        assert result.dtypes.astype(str).to_dict() == {
+            "oid": "Int64",
+            "value": "float64",
+            "count": "int64",
+        }
+
+    def test_returns_geodataframe_when_a_later_frame_is_geo(self):
+        frames = [pd.DataFrame({"name": ["x"]}), make_geo_frame(1)]
+
+        result = ApplyEditsResult._concat_frames(frames)
+
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert result.geometry.isna().tolist() == [True, False]
+
+
+class TestApplyEditsResultGeometrySpec:
+    def test_returns_none_when_no_frame_is_geo(self):
+        frames = [pd.DataFrame({"a": [1]})]
+
+        result = ApplyEditsResult._geometry_spec(frames)
+
+        assert result is None
+
+    def test_returns_name_and_crs_when_geo_frames_agree(self):
+        frames = [make_geo_frame(1, geometry_name="shape"), pd.DataFrame()]
+
+        result = ApplyEditsResult._geometry_spec(frames)
+
+        assert result == ("shape", "EPSG:4326")
+
+    @pytest.mark.parametrize(
+        "other, match",
+        [
+            (make_geo_frame(1, crs="EPSG:3857"), "different CRS"),
+            (make_geo_frame(1, geometry_name="shape"), "different geometry columns"),
+        ],
+        ids=["crs-mismatch", "geometry-name-mismatch"],
+    )
+    def test_raises_when_geo_frames_disagree(self, other, match):
+        frames = [make_geo_frame(1), other]
+
+        with pytest.raises(InvalidParameterError, match=match):
+            ApplyEditsResult._geometry_spec(frames)
