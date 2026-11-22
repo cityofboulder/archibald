@@ -112,6 +112,16 @@ def make_paging_side_effect(total: int):
     return side_effect
 
 
+def get_count_request_params(get_mock) -> dict:
+    """Return the params of the single returnCountOnly request made on ``get_mock``."""
+    (count_params,) = [
+        call.kwargs["params"]
+        for call in get_mock.call_args_list
+        if call.kwargs["params"].get("returnCountOnly") == "true"
+    ]
+    return count_params
+
+
 def make_edit_result_item(
     object_id: int,
     *,

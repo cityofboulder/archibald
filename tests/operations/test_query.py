@@ -5,6 +5,7 @@ import pytest
 from archibald.exceptions import InvalidParameterError
 from archibald.models import FieldsResult, QueryResult
 from tests.helpers import (
+    get_count_request_params,
     make_feature,
     make_first_page,
     make_paging_side_effect,
@@ -381,6 +382,93 @@ class TestFetchRemainingPages:
         result = await query_op._fetch_remaining_pages(params, first_data)
 
         assert [f["properties"]["OBJECTID"] for f in result] == list(expected_oids)
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "key,value",
+        [
+            ("where", "Status = 'A'"),
+            ("objectIds", "1,2,3"),
+            ("geometry", '{"x": 1, "y": 2}'),
+            ("spatialRel", "esriSpatialRelWithin"),
+            ("time", "1700000000000"),
+            ("datumTransformation", "1241"),
+            ("returnDistinctValues", "true"),
+            ("outFields", "OBJECTID,Name"),
+        ],
+        ids=[
+            "where",
+            "object_ids",
+            "geometry",
+            "spatial_rel",
+            "time",
+            "datum_transformation",
+            "return_distinct_values",
+            "out_fields",
+        ],
+    )
+    async def test_count_request_keeps_param_when_it_affects_matching(
+        self, query_op, mock_layer, key, value
+    ):
+        mock_layer._client.get.side_effect = make_paging_side_effect(1500)
+        params = {"where": "1=1", key: value}
+
+        await query_op._fetch_remaining_pages(params, make_first_page(0, 1000))
+
+        assert get_count_request_params(mock_layer._client.get)[key] == value
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "key",
+        [
+            "orderByFields",
+            "resultOffset",
+            "resultRecordCount",
+            "resultType",
+            "resultPaginationToken",
+            "returnExceededLimitFeatures",
+            "returnGeometry",
+            "outSR",
+            "maxAllowableOffset",
+            "geometryPrecision",
+            "returnZ",
+            "returnM",
+            "multipatchOption",
+            "quantizationParameters",
+            "returnCentroid",
+            "returnTrueCurves",
+            "returnEnvelope",
+            "returnIdsOnly",
+            "returnExtentOnly",
+            "returnUniqueIdsOnly",
+            "outStatistics",
+            "groupByFieldsForStatistics",
+            "havingClause",
+        ],
+        ids=lambda key: key,
+    )
+    async def test_count_request_drops_param_when_it_only_shapes_output(
+        self, query_op, mock_layer, key
+    ):
+        mock_layer._client.get.side_effect = make_paging_side_effect(1500)
+        params = {"where": "1=1", key: 1500}
+
+        await query_op._fetch_remaining_pages(params, make_first_page(0, 1000))
+
+        assert key not in get_count_request_params(mock_layer._client.get)
+
+    @pytest.mark.anyio
+    async def test_count_request_uses_json_format_when_pages_use_geojson(
+        self, query_op, mock_layer
+    ):
+        mock_layer._client.get.side_effect = make_paging_side_effect(1500)
+        params = {"where": "1=1", "f": "geojson"}
+
+        await query_op._fetch_remaining_pages(params, make_first_page(0, 1000))
+
+        count_params = get_count_request_params(mock_layer._client.get)
+        assert count_params["f"] == "json"
+        assert count_params["returnCountOnly"] == "true"
 
 
 class TestExecute:
