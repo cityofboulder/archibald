@@ -37,7 +37,9 @@ from tests.helpers import (
     StaticTokenAuth,
     make_apply_edits_result,
     make_edit_result_item,
+    make_esri_apply_edits_response,
     make_geo_frame,
+    make_response,
     make_attachment_info,
     make_small_feature,
 )
@@ -312,6 +314,25 @@ def delete_attachments_op(mock_layer) -> DeleteAttachmentsOperation:
 def apply_edits_op(mock_layer) -> ApplyEditsOperation:
     """An ApplyEditsOperation instance backed by mock_layer."""
     return ApplyEditsOperation(mock_layer)
+
+
+@pytest.fixture
+def all_kinds_edit_inputs() -> dict:
+    """execute() kwargs with two adds (index 7, 7), one update (OID 7), one delete (OID 9)."""
+    return {
+        "adds": pd.DataFrame({"Name": ["a", "b"]}, index=[7, 7]),
+        "updates": pd.DataFrame({"Name": ["u"], "OBJECTID": [7]}),
+        "deletes": [9],
+    }
+
+
+@pytest.fixture
+def all_kinds_post(mock_layer):
+    """Make mock_layer's client answer applyEdits with one success per all_kinds_edit_inputs edit."""
+    mock_layer._client.post.return_value = make_response(
+        make_esri_apply_edits_response(add_ids=[5, 6], update_ids=[7], delete_ids=[9])
+    )
+    return mock_layer._client.post
 
 
 @pytest.fixture

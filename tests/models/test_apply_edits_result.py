@@ -222,6 +222,31 @@ class TestApplyEditsResultMerge:
         ApplyEditsResult._merge([r1, r2])
 
         assert r1.add_results == original_r1_adds
+        assert [i.position for i in r1.add_results + r2.add_results] == [None, None]
+
+    def test_merge_numbers_items_per_kind_when_batches_are_merged(self):
+        batches = [
+            ApplyEditsResult(
+                add_results=[make_edit_result_item(1), make_edit_result_item(2)],
+                update_results=[make_edit_result_item(9)],
+                delete_results=[],
+            ),
+            ApplyEditsResult(
+                add_results=[make_edit_result_item(3)],
+                update_results=[],
+                delete_results=[make_edit_result_item(7)],
+            ),
+        ]
+
+        merged = ApplyEditsResult._merge(batches)
+
+        assert [(i.kind, i.position, i.object_id) for i in merged._items] == [
+            ("adds", 0, 1),
+            ("adds", 1, 2),
+            ("adds", 2, 3),
+            ("updates", 0, 9),
+            ("deletes", 0, 7),
+        ]
 
     def test_merge_batch_with_empty_sublists_does_not_inflate_result(self):
         r1 = make_apply_edits_result(adds=[make_edit_result_item(1)])

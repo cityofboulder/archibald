@@ -914,6 +914,60 @@ class TestExecute:
         assert result.add_results[0].object_id == 5
 
     @pytest.mark.anyio
+    @pytest.mark.usefixtures("all_kinds_post")
+    async def test_items_carry_kind_and_position_when_all_kinds_sent(
+        self, apply_edits_op, all_kinds_edit_inputs
+    ):
+        result = await apply_edits_op.execute(**all_kinds_edit_inputs)
+
+        assert [(i.kind, i.position) for i in result._items] == [
+            ("adds", 0),
+            ("adds", 1),
+            ("updates", 0),
+            ("deletes", 0),
+        ]
+
+    @pytest.mark.anyio
+    @pytest.mark.usefixtures("all_kinds_post")
+    async def test_inputs_stored_in_kind_order_when_all_kinds_sent(
+        self, apply_edits_op, all_kinds_edit_inputs
+    ):
+        result = await apply_edits_op.execute(**all_kinds_edit_inputs)
+
+        assert list(result._inputs) == ["adds", "updates", "deletes"]
+        pd.testing.assert_frame_equal(
+            result._inputs["adds"], all_kinds_edit_inputs["adds"]
+        )
+        pd.testing.assert_frame_equal(
+            result._inputs["updates"], all_kinds_edit_inputs["updates"]
+        )
+        pd.testing.assert_frame_equal(
+            result._inputs["deletes"], pd.DataFrame({"OBJECTID": [9]})
+        )
+
+    @pytest.mark.anyio
+    @pytest.mark.usefixtures("all_kinds_post")
+    async def test_stored_input_unchanged_when_caller_mutates_frame_afterwards(
+        self, apply_edits_op, all_kinds_edit_inputs
+    ):
+        adds = all_kinds_edit_inputs["adds"]
+        result = await apply_edits_op.execute(**all_kinds_edit_inputs)
+
+        adds.loc[7, "Name"] = "changed"
+        adds.drop(index=7, inplace=True)
+
+        assert result._inputs["adds"]["Name"].tolist() == ["a", "b"]
+
+    @pytest.mark.anyio
+    async def test_inputs_stored_when_nothing_to_send(self, apply_edits_op, mock_layer):
+        empty = pd.DataFrame({"Name": pd.Series([], dtype=str)})
+
+        result = await apply_edits_op.execute(adds=empty)
+
+        assert list(result._inputs) == ["adds"]
+        mock_layer._client.post.assert_not_called()
+
+    @pytest.mark.anyio
     @pytest.mark.parametrize(
         "kwargs,expected",
         [
