@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import warnings
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, get_args
 
 import geopandas as gpd
@@ -25,9 +25,10 @@ class ApplyEditsResult:
     exceptions. Inspect ``has_failures`` and ``failed_*`` properties to detect
     partial failures without iterating manually.
 
-    Built only by applyEdits, which sets every item's ``kind`` and stores
-    each kind's input frame in ``_inputs`` (in adds, updates, deletes order);
-    an item's ``position`` is its row in that frame. ``_inputs`` is excluded
+    Built only by applyEdits: ``_merge`` sets every item's ``kind`` and
+    ``position`` (its row in that kind's input frame), and the operation
+    stores each kind's input frame in ``_inputs`` (in adds, updates, deletes
+    order). ``_inputs`` is excluded
     from equality and repr.
     """
 
@@ -197,10 +198,8 @@ class ApplyEditsResult:
 
         Raises:
             InvalidParameterError: If both ``include_input`` and
-                ``include_metadata`` are False; if ``include_input`` and a
-                kind's input positions are unknown (its result count did not
-                match its input count); or if a prefixed metadata column
-                already exists in an input frame.
+                ``include_metadata`` are False, or if a prefixed metadata
+                column already exists in an input frame.
         """
         if not include_input and not include_metadata:
             raise InvalidParameterError(
@@ -211,11 +210,10 @@ class ApplyEditsResult:
             return meta
         if not self._inputs:
             return pd.DataFrame()
+        positions = meta["position"].astype(int)
         rows = self._concat_frames(
             [
-                self._select_rows(
-                    kind, frame, meta.loc[meta["kind"] == kind, "position"]
-                )
+                frame.iloc[positions[meta["kind"] == kind].to_numpy()]
                 for kind, frame in self._inputs.items()
             ]
         )
@@ -410,16 +408,30 @@ class ApplyEditsResult:
     def _merge(cls, results: list[ApplyEditsResult]) -> ApplyEditsResult:
         """Merge per-batch ApplyEditsResults from one applyEdits call into one.
 
+        Batches hold consecutive runs of each kind's inputs and come back with
+        one item per input, so an item's index in its merged list is its row
+        position in that kind's input frame. Each item is copied with that
+        ``position`` and its ``kind``.
+
         Args:
             results: List of per-batch results in posting order.
 
         Returns:
             Single ApplyEditsResult with all items concatenated in order.
         """
+
+        def numbered(kind: EditKind, items: list[EditResultItem]) -> list:
+            """Copies of ``items`` with ``kind`` and their index as ``position``."""
+            return [replace(i, kind=kind, position=n) for n, i in enumerate(items)]
+
         return cls(
-            add_results=[i for r in results for i in r.add_results],
-            update_results=[i for r in results for i in r.update_results],
-            delete_results=[i for r in results for i in r.delete_results],
+            add_results=numbered("adds", [i for r in results for i in r.add_results]),
+            update_results=numbered(
+                "updates", [i for r in results for i in r.update_results]
+            ),
+            delete_results=numbered(
+                "deletes", [i for r in results for i in r.delete_results]
+            ),
         )
 
     def _metadata_frame(self) -> pd.DataFrame:
@@ -467,30 +479,3 @@ class ApplyEditsResult:
             and all(pd.api.types.is_integer_dtype(f[c]) for f in frames if c in f)
         ]
         return out.astype(dict.fromkeys(upcast, "Int64"))
-
-    @staticmethod
-    def _select_rows(
-        kind: EditKind,
-        frame: pd.DataFrame | gpd.GeoDataFrame,
-        positions: pd.Series,
-    ) -> pd.DataFrame | gpd.GeoDataFrame:
-        """Return the rows of one kind's input frame at ``positions``, in order.
-
-        Selection is by position, so the frame's index labels (even
-        duplicates) are kept as-is.
-
-        Args:
-            kind: The kind ``frame`` holds, named in the error message.
-            frame: That kind's stored input frame.
-            positions: The kind's item positions (nullable integers).
-
-        Raises:
-            InvalidParameterError: If any position is null, i.e. the kind's
-                result count did not match its input count.
-        """
-        if positions.isna().any():
-            raise InvalidParameterError(
-                f"Cannot include input rows for {kind}: the result count "
-                "did not match the input count, so rows are unknown."
-            )
-        return frame.iloc[positions.to_numpy(dtype=int)]

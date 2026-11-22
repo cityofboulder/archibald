@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import anyio
 import geopandas as gpd
@@ -14,7 +14,7 @@ import pandas as pd
 from archibald.errors import failed_items, is_outcome_unknown
 from archibald.exceptions import InvalidParameterError, ServiceError
 from archibald.models.apply_edits_result import ApplyEditsResult
-from archibald.models.edit_result_item import EditResultItem
+from archibald.models.edit_result_item import EditKind, EditResultItem
 from archibald.serializers._features import (
     MAX_BATCH_BYTES,
     pack_batches,
@@ -51,8 +51,9 @@ class ApplyEditsOperation:
         """Serialize inputs, pack into batches, POST, and return aggregated results.
 
         Adds are serialized with include_objectid=False; updates with
-        include_objectid=True. Deletes are normalized to list[int] from whatever
-        the caller provides (list[int], DataFrame, or Series).
+        include_objectid=True. Deletes are normalized to a DataFrame with an
+        OBJECTID column from whatever the caller provides (list[int],
+        DataFrame, or Series).
 
         Args:
             adds: Rows to add as new features. OBJECTIDs are excluded.
@@ -94,6 +95,12 @@ class ApplyEditsOperation:
             ``object_id`` -1 and line up with input rows only by position.
             Retrying an add whose outcome is unknown can create a duplicate.
 
+            Every item's ``kind`` and ``position`` (its row in that kind's
+            input frame) are set by ``ApplyEditsResult._merge``. The result
+            keeps shallow copies of the input frames (deletes as a frame) so
+            ``to_frame`` can return each edit's input row; this keeps them in
+            memory while the result is.
+
         Raises:
             InvalidParameterError: If max_batch_bytes is not positive or
                 exceeds MAX_BATCH_BYTES.
@@ -102,6 +109,11 @@ class ApplyEditsOperation:
             UserWarning: For each DataFrame column that falls outside the editable
                 field set and will not be sent.
         """
+        serialized_adds: list[dict[str, Any]] = []
+        serialized_updates: list[dict[str, Any]] = []
+        delete_oids: list[int] = []
+        inputs: dict[EditKind, pd.DataFrame | gpd.GeoDataFrame] = {}
+
         if max_batch_bytes is None:
             max_batch_bytes = self._layer._client._max_batch_bytes
         elif not 0 < max_batch_bytes <= MAX_BATCH_BYTES:
@@ -115,28 +127,29 @@ class ApplyEditsOperation:
         fields = await self._layer.fields()
         objectid_field = await self._layer.objectid_field()
 
-        serialized_adds = (
-            serialize_features(
+        if adds is not None:
+            serialized_adds = serialize_features(
                 adds, fields, objectid_field=None, apply_coded_values=apply_coded_values
             )
-            if adds is not None
-            else []
-        )
-        serialized_updates = (
-            serialize_features(
+            inputs["adds"] = adds.copy(deep=False)
+
+        if updates is not None:
+            serialized_updates = serialize_features(
                 updates,
                 fields,
                 objectid_field=objectid_field,
                 apply_coded_values=apply_coded_values,
             )
-            if updates is not None
-            else []
-        )
-        delete_oids = await self._normalize_deletes(deletes)
+            inputs["updates"] = updates.copy(deep=False)
+
+        delete_frame = self._normalize_deletes(deletes, objectid_field)
+        if delete_frame is not None:
+            delete_oids = delete_frame[objectid_field].tolist()
+            inputs["deletes"] = delete_frame.copy(deep=False)
 
         if not serialized_adds and not serialized_updates and not delete_oids:
             return ApplyEditsResult(
-                add_results=[], update_results=[], delete_results=[]
+                add_results=[], update_results=[], delete_results=[], _inputs=inputs
             )
 
         batches = pack_batches(
@@ -156,36 +169,33 @@ class ApplyEditsOperation:
         if poll_timeout is None:
             poll_timeout = self._layer._client._job_timeout
 
-        return await self._post_batches(
+        result = await self._post_batches(
             batches,
             objectid_field=objectid_field,
             rollback_on_failure=rollback_on_failure,
             use_async=use_async,
             poll_timeout=poll_timeout,
         )
+        result._inputs = inputs
+        return result
 
-    async def _normalize_deletes(
-        self,
-        deletes: pd.DataFrame | pd.Series | list[int] | None,
-    ) -> list[int]:
-        """Normalize the deletes argument to a list of integer OBJECTIDs.
+    @staticmethod
+    def _normalize_deletes(
+        deletes: pd.DataFrame | pd.Series | list[int] | None, objectid_field: str
+    ) -> pd.DataFrame | None:
+        """Return the deletes argument as a DataFrame with an OBJECTID column.
+
+        A DataFrame is returned as-is; a list or Series of OBJECTIDs becomes a
+        one-column frame named ``objectid_field`` (a Series keeps its index).
 
         Args:
-            deletes: OBJECTIDs as list[int], DataFrame (uses objectid_field column),
-                or Series. None returns an empty list.
-
-        Returns:
-            List of integer OBJECTIDs.
+            deletes: OBJECTIDs as list[int], DataFrame (uses the objectid_field
+                column), or Series. None returns None.
+            objectid_field: Name of the layer's OBJECTID field.
         """
-        objectid_field = await self._layer.objectid_field()
-
-        if deletes is None:
-            return []
-        if isinstance(deletes, list):
+        if deletes is None or isinstance(deletes, pd.DataFrame):
             return deletes
-        if isinstance(deletes, pd.DataFrame):
-            return deletes[objectid_field].tolist()
-        return deletes.tolist()
+        return pd.DataFrame({objectid_field: deletes})
 
     async def _post_batch(
         self,

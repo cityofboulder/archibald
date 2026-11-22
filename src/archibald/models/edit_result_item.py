@@ -25,8 +25,7 @@ class EditResultItem:
         kind: Which applyEdits list the item belongs to; None for attachment
             results.
         position: Row position of the item's source row in the input frame
-            for its kind; None when unknown (attachment results, or results
-            whose count did not match their input).
+            for its kind; None for attachment results.
     """
 
     object_id: int

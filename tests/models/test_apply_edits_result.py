@@ -514,11 +514,6 @@ class TestApplyEditsResultToFrame:
                 "cannot both be False",
             ),
             (
-                {"adds": [make_edit_result_item(1)]},
-                {},
-                "Cannot include input rows for adds: the result count did not",
-            ),
-            (
                 {
                     "adds": [make_edit_result_item(1, position=0)],
                     "inputs": {"adds": pd.DataFrame({"_edit_status": ["x"]})},
@@ -527,7 +522,7 @@ class TestApplyEditsResultToFrame:
                 r"Columns \['_edit_status'\] already exist in the input",
             ),
         ],
-        ids=["both-excluded", "positions-unknown", "column-clash"],
+        ids=["both-excluded", "column-clash"],
     )
     def test_raises_when_rows_cannot_be_built(
         self, result_kwargs, to_frame_kwargs, match
