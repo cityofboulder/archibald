@@ -2,7 +2,7 @@ import pytest
 
 from archibald.exceptions import ArcGISError
 from archibald.models.edit_result_item import EditResultItem
-from tests.helpers import STATUS_URL
+from tests.helpers import STATUS_URL, make_edit_result_item
 
 
 class TestEditResultItem:
@@ -135,3 +135,59 @@ class TestEditResultItemFromException:
 
         assert result.error is not None
         assert {k: v for k, v in result.error.items() if k == "status_url"} == expected
+
+
+class TestEditResultItemStatus:
+    @pytest.mark.parametrize(
+        "success, error, expected",
+        [
+            (True, None, "succeeded"),
+            (False, {"code": 1001, "description": "Insert failed."}, "failed"),
+            (False, {"code": -1, "outcome_unknown": False}, "failed"),
+            (False, {"code": -1, "outcome_unknown": True}, "unknown"),
+            (False, None, "failed"),
+        ],
+        ids=[
+            "success",
+            "esri-error",
+            "outcome-known",
+            "outcome-unknown",
+            "failure-without-error",
+        ],
+    )
+    def test_status_reflects_outcome_when_success_and_error_vary(
+        self, success, error, expected
+    ):
+        item = make_edit_result_item(1, success=success, error=error)
+
+        result = item.status
+
+        assert result == expected
+
+
+class TestEditResultItemRowLink:
+    @pytest.mark.parametrize(
+        "item",
+        [
+            EditResultItem._from_esri({"objectId": 1, "success": True}),
+            EditResultItem._from_exception(ValueError("boom")),
+            make_edit_result_item(1),
+        ],
+        ids=["from-esri", "from-exception", "constructor"],
+    )
+    def test_kind_and_position_are_none_when_not_set(self, item):
+        assert item.kind is None
+        assert item.position is None
+
+    @pytest.mark.parametrize(
+        "other",
+        [
+            make_edit_result_item(1, kind="updates", position=0),
+            make_edit_result_item(1, kind="adds", position=1),
+        ],
+        ids=["different-kind", "different-position"],
+    )
+    def test_items_are_unequal_when_only_kind_or_position_differs(self, other):
+        item = make_edit_result_item(1, kind="adds", position=0)
+
+        assert item != other

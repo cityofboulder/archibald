@@ -405,6 +405,39 @@ for item in edits.failed_adds:
 
 Failed adds have `object_id` -1, since no feature was created. Results for adds line up with your input rows only by position. Retrying an add whose outcome is unknown can create a duplicate feature. Retrying an update or delete can't create a duplicate, since it targets an existing OBJECTID.
 
+#### Matching results to your rows
+
+`to_frame()` returns one row per edit: the input row it came from, followed by `_edit_`-prefixed columns describing the result.
+
+```python
+review = edits.filter(statuses=["failed", "unknown"]).to_frame()
+```
+
+Each edit has one of three statuses:
+
+- `"succeeded"`: the server applied it.
+- `"failed"`: the server rejected it, or the batch failed in a way that means it wasn't applied. Safe to retry.
+- `"unknown"`: the request failed after it may have reached the server (`error["outcome_unknown"]` is `True`). Check the layer before retrying an add.
+
+The metadata columns are `_edit_kind` (`"adds"`, `"updates"`, or `"deletes"`), `_edit_status`, `_edit_object_id` (-1 for a failed add), `_edit_global_id`, and the error dict flattened into `_edit_error_*` columns such as `_edit_error_code` and `_edit_error_description`. Pass `metadata_prefix=` to use a different prefix, or `include_metadata=False` to get only the input rows.
+
+Rows come out in adds, updates, deletes order and keep their original index, even if it has duplicate labels. What the input row holds depends on the call:
+
+- `append(df)`: rows of `df`.
+- `upsert(df)` and `sync(df)`: rows of `df`, new rows first, then rows that matched an existing feature (with its OBJECTID added). `sync` deletes are the layer's existing features, with their OBJECTID and key fields.
+- `apply_edits(adds=..., updates=..., deletes=...)`: rows of each frame you passed. Deletes given as a list or Series of OBJECTIDs appear as a one-column OBJECTID frame.
+
+A GeoDataFrame input gives a GeoDataFrame back; rows without geometry, such as deletes, get null geometry. `filter(kinds=, statuses=)` accepts a single value or a list for each.
+
+To retry the adds the server rejected:
+
+```python
+rejected = edits.filter(kinds="adds", statuses="failed").to_frame(include_metadata=False)
+retry = await layer.append(rejected)
+```
+
+For a table of results without input rows, use `to_frame(include_input=False)`. Its columns are the same metadata without the prefix, plus `position`, the row's position in its input frame.
+
 ---
 
 ## Attachments

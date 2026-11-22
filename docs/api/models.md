@@ -7,3 +7,7 @@
 ::: archibald.models.ApplyEditsResult
 
 ::: archibald.models.EditResultItem
+
+::: archibald.models.EditKind
+
+::: archibald.models.EditStatus

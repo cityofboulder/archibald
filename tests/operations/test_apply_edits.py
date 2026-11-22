@@ -29,40 +29,38 @@ from tests.helpers import (
 
 
 class TestNormalizeDeletes:
-    @pytest.mark.anyio
     @pytest.mark.parametrize(
-        "deletes,expected",
+        "deletes, objectid_field, expected",
         [
-            (None, []),
-            ([1, 2, 3], [1, 2, 3]),
-            (pd.Series([7, 8, 9]), [7, 8, 9]),
+            ([1, 2], "OBJECTID", pd.DataFrame({"OBJECTID": [1, 2]})),
+            ([5, 6], "FID", pd.DataFrame({"FID": [5, 6]})),
+            (
+                pd.Series([7, 8], index=["x", "y"], name="oids"),
+                "OBJECTID",
+                pd.DataFrame({"OBJECTID": [7, 8]}, index=["x", "y"]),
+            ),
         ],
-        ids=["none", "list", "series"],
+        ids=["list", "list-custom-objectid-field", "series-keeps-index"],
     )
-    async def test_normalizes_to_list(self, apply_edits_op, deletes, expected):
-        result = await apply_edits_op._normalize_deletes(deletes)
+    def test_returns_objectid_frame_when_given_ids(
+        self, deletes, objectid_field, expected
+    ):
+        result = ApplyEditsOperation._normalize_deletes(deletes, objectid_field)
 
-        assert result == expected
-        assert isinstance(result, list)
+        assert result is not None
+        pd.testing.assert_frame_equal(result, expected)
 
-    @pytest.mark.anyio
-    async def test_dataframe_uses_objectid_field_column(self, apply_edits_op):
+    def test_returns_frame_unchanged_when_given_dataframe(self):
         df = pd.DataFrame({"OBJECTID": [10, 20], "Name": ["a", "b"]})
 
-        result = await apply_edits_op._normalize_deletes(df)
+        result = ApplyEditsOperation._normalize_deletes(df, "OBJECTID")
 
-        assert result == [10, 20]
+        assert result is df
 
-    @pytest.mark.anyio
-    async def test_dataframe_uses_custom_objectid_field(
-        self, apply_edits_op, mock_layer
-    ):
-        mock_layer.objectid_field.return_value = "FID"
-        df = pd.DataFrame({"FID": [5, 6]})
+    def test_returns_none_when_deletes_is_none(self):
+        result = ApplyEditsOperation._normalize_deletes(None, "OBJECTID")
 
-        result = await apply_edits_op._normalize_deletes(df)
-
-        assert result == [5, 6]
+        assert result is None
 
 
 class TestPostBatch:
@@ -718,7 +716,7 @@ class TestPostBatches:
             poll_timeout=300.0,
         )
 
-        assert result.add_results == expected.add_results
+        assert [r.object_id for r in result.add_results] == [1]
 
     @pytest.mark.anyio
     async def test_multiple_batches_merged_in_order(self, apply_edits_op, mocker):
@@ -914,6 +912,60 @@ class TestExecute:
         assert isinstance(result, ApplyEditsResult)
         assert len(result.add_results) == 1
         assert result.add_results[0].object_id == 5
+
+    @pytest.mark.anyio
+    @pytest.mark.usefixtures("all_kinds_post")
+    async def test_items_carry_kind_and_position_when_all_kinds_sent(
+        self, apply_edits_op, all_kinds_edit_inputs
+    ):
+        result = await apply_edits_op.execute(**all_kinds_edit_inputs)
+
+        assert [(i.kind, i.position) for i in result._items] == [
+            ("adds", 0),
+            ("adds", 1),
+            ("updates", 0),
+            ("deletes", 0),
+        ]
+
+    @pytest.mark.anyio
+    @pytest.mark.usefixtures("all_kinds_post")
+    async def test_inputs_stored_in_kind_order_when_all_kinds_sent(
+        self, apply_edits_op, all_kinds_edit_inputs
+    ):
+        result = await apply_edits_op.execute(**all_kinds_edit_inputs)
+
+        assert list(result._inputs) == ["adds", "updates", "deletes"]
+        pd.testing.assert_frame_equal(
+            result._inputs["adds"], all_kinds_edit_inputs["adds"]
+        )
+        pd.testing.assert_frame_equal(
+            result._inputs["updates"], all_kinds_edit_inputs["updates"]
+        )
+        pd.testing.assert_frame_equal(
+            result._inputs["deletes"], pd.DataFrame({"OBJECTID": [9]})
+        )
+
+    @pytest.mark.anyio
+    @pytest.mark.usefixtures("all_kinds_post")
+    async def test_stored_input_unchanged_when_caller_mutates_frame_afterwards(
+        self, apply_edits_op, all_kinds_edit_inputs
+    ):
+        adds = all_kinds_edit_inputs["adds"]
+        result = await apply_edits_op.execute(**all_kinds_edit_inputs)
+
+        adds.loc[7, "Name"] = "changed"
+        adds.drop(index=7, inplace=True)
+
+        assert result._inputs["adds"]["Name"].tolist() == ["a", "b"]
+
+    @pytest.mark.anyio
+    async def test_inputs_stored_when_nothing_to_send(self, apply_edits_op, mock_layer):
+        empty = pd.DataFrame({"Name": pd.Series([], dtype=str)})
+
+        result = await apply_edits_op.execute(adds=empty)
+
+        assert list(result._inputs) == ["adds"]
+        mock_layer._client.post.assert_not_called()
 
     @pytest.mark.anyio
     @pytest.mark.parametrize(

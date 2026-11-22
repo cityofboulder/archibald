@@ -33,6 +33,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ArchieClient` accepts `max_concurrent_jobs` (default 4) and `job_timeout` (default 300 s) to bound concurrent async server-side jobs and set their default per-job timeout.
 - Failed `applyEdits` items not built from an ESRI error dict carry `error["exception"]` and `error["outcome_unknown"]`, matching attachments. Items from a failed async batch also carry `error["status_url"]`. Retrying an add whose outcome is unknown could create a duplicate.
 - Failed attachment items not built from an ESRI error dict carry `error["exception"]` (exception class name) and `error["outcome_unknown"]`, which is `True` when the server may have applied the change despite the failure (e.g. a read timeout or 5xx). Retrying an unknown `add_attachments()` could create a duplicate.
+- `ApplyEditsResult.to_frame()` returns one row per edit: the input row it came from followed by `_edit_`-prefixed metadata (kind, status, OBJECTID, GlobalID, and the error dict flattened into columns). `include_input=False` gives the metadata alone and `include_metadata=False` the input rows alone. A GeoDataFrame input gives a GeoDataFrame back.
+- `ApplyEditsResult.filter(kinds=, statuses=)` returns a result with only the matching edits, e.g. `edits.filter(kinds="adds", statuses="failed").to_frame(include_metadata=False)` for the rows to retry.
+- `EditResultItem.status` is `"succeeded"`, `"failed"`, or `"unknown"` (the server may have applied it). `EditResultItem.kind` and `EditResultItem.position` give an `applyEdits` item's kind and its row position in that kind's input; both are `None` on attachment results. New `EditKind` and `EditStatus` type aliases are exported from `archibald`.
+- `sync()` passes the features to delete with their key fields, so their key values appear in `to_frame()`.
+
+### Deprecated
+
+- `ApplyEditsResult.merge()` and `ApplyEditsResult.from_esri_response()` emit `DeprecationWarning` and will be removed in 2.0. Both only assemble results inside `applyEdits`; results come from the `FeatureLayer` edit methods.
 
 ## [1.2.5] - 2026-10-16
 
