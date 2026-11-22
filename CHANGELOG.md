@@ -42,6 +42,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `ApplyEditsResult.merge()` and `ApplyEditsResult.from_esri_response()` emit `DeprecationWarning` and will be removed in 2.0. Both only assemble results inside `applyEdits`; results come from the `FeatureLayer` edit methods.
 
+## [1.2.6] - 2026-11-22
+
+### Fixed
+
+- `query()` now honors a caller-supplied `resultOffset` / `resultRecordCount`. Previously, when the first response set `exceededTransferLimit`, automatic pagination counted the whole layer, started its pages at `maxRecordCount` and overwrote `resultRecordCount`, so `resultRecordCount=1` returned the first feature plus everything from `maxRecordCount` onward, silently skipping the rows in between. Pagination now fills only the requested window, and makes no extra requests when the first page already satisfies `resultRecordCount`.
+- Pagination no longer assumes the first page held exactly `maxRecordCount` features; later pages are sized and offset from what the first page actually returned, so a server returning smaller pages no longer leaves gaps.
+- The pagination count request now carries the query's filters (`geometry`, `objectIds`, `time`, etc.) instead of only `where`, so the page plan matches the real number of matches instead of issuing empty extra requests.
+
 ## [1.2.5] - 2026-10-16
 
 ### Fixed
@@ -200,7 +208,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - When an async `applyEdits` job completes, the operation now follows the `resultUrl` returned in the status body to fetch the actual edit results (`addResults`, `updateResults`, `deleteResults`). Previously the status body itself was parsed as the result, which always produced empty result sets.
 - Async polling loop is now bounded by `anyio.fail_after`; previously it could spin indefinitely if the server never returned a terminal status.
 
-[Unreleased]: https://github.com/cityofboulder/archibald/compare/v1.2.5...HEAD
+[Unreleased]: https://github.com/cityofboulder/archibald/compare/v1.2.6...HEAD
+[1.2.6]: https://github.com/cityofboulder/archibald/compare/v1.2.5...v1.2.6
 [1.2.5]: https://github.com/cityofboulder/archibald/compare/v1.2.4...v1.2.5
 [1.2.4]: https://github.com/cityofboulder/archibald/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/cityofboulder/archibald/compare/v1.2.2...v1.2.3

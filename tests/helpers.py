@@ -124,6 +124,52 @@ def make_response(body: dict, *, status_code: int = 200) -> httpx.Response:
     return response
 
 
+def make_first_page(
+    start: int, size: int, *, exceeded: bool = True, in_properties: bool = False
+) -> dict:
+    """Create a first query response holding OBJECTIDs start..start+size-1.
+
+    ``in_properties`` puts exceededTransferLimit under ``properties``, as
+    f=geojson responses do, instead of at the top level.
+    """
+    data: dict = {"features": [make_feature(oid) for oid in range(start, start + size)]}
+    if in_properties:
+        data["properties"] = {"exceededTransferLimit": exceeded}
+    else:
+        data["exceededTransferLimit"] = exceeded
+    return data
+
+
+def make_paging_side_effect(total: int):
+    """Create a client.post side effect simulating a layer of ``total`` rows.
+
+    Count requests return ``total``; page requests return features whose
+    OBJECTID equals their row position, honouring resultOffset and
+    resultRecordCount.
+    """
+
+    def side_effect(endpoint, *, data=None, **kwargs):
+        if data.get("returnCountOnly") == "true":
+            return make_response({"count": total})
+        offset = data["resultOffset"]
+        stop = min(offset + data["resultRecordCount"], total)
+        return make_response(
+            {"features": [make_feature(oid) for oid in range(offset, stop)]}
+        )
+
+    return side_effect
+
+
+def get_count_request_params(post_mock) -> dict:
+    """Return the body of the single returnCountOnly request made on ``post_mock``."""
+    (count_params,) = [
+        call.kwargs["data"]
+        for call in post_mock.call_args_list
+        if call.kwargs["data"].get("returnCountOnly") == "true"
+    ]
+    return count_params
+
+
 def make_edit_result_item(
     object_id: int,
     *,

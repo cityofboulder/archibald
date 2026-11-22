@@ -64,7 +64,7 @@ class TestQueryPagination:
         def query_side_effect(request):
             params = dict(parse_qsl(request.content.decode()))
             if params.get("returnCountOnly") == "true":
-                return httpx.Response(200, json={"count": 1500})
+                return httpx.Response(200, json={"count": 2})
             if "resultOffset" in params:
                 return httpx.Response(200, json={"features": [FEATURES[1]]})
             return httpx.Response(

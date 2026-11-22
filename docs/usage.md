@@ -170,6 +170,8 @@ schema_df = fields.to_frame()
 
 Use `layer.query()` to retrieve features. Results are automatically paginated when the record count exceeds the service maximum.
 
+Passing `resultOffset` and/or `resultRecordCount` defines a window: pagination fills that window and stops, rather than fetching the whole result set. For example, `resultRecordCount=1` makes a single request and returns one feature, while `resultOffset=500` returns every matching feature from position 500 onward.
+
 ### Parameter reference
 
 `layer.query()` accepts Pythonic arguments that archibald translates into ESRI REST parameters before sending the request:
