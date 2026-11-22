@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `query()` now honors a caller-supplied `resultOffset` / `resultRecordCount`. Previously, when the first response set `exceededTransferLimit`, automatic pagination counted the whole layer, started its pages at `maxRecordCount` and overwrote `resultRecordCount`, so `resultRecordCount=1` returned the first feature plus everything from `maxRecordCount` onward, silently skipping the rows in between. Pagination now fills only the requested window, and makes no extra requests when the first page already satisfies `resultRecordCount`.
+- Pagination no longer assumes the first page held exactly `maxRecordCount` features; later pages are sized and offset from what the first page actually returned, so a server returning smaller pages no longer leaves gaps.
+- The pagination count request now carries the query's filters (`geometry`, `objectIds`, `time`, etc.) instead of only `where`, so the page plan matches the real number of matches instead of issuing empty extra requests.
+
 ## [1.2.5] - 2026-10-16
 
 ### Fixed
