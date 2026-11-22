@@ -1782,6 +1782,7 @@
 <hr />
 <h2 id="querying">Querying</h2>
 <p>Use <code>layer.query()</code> to retrieve features. Results are automatically paginated when the record count exceeds the service maximum.</p>
+<p>Passing <code>resultOffset</code> and/or <code>resultRecordCount</code> defines a window: pagination fills that window and stops, rather than fetching the whole result set. For example, <code>resultRecordCount=1</code> makes a single request and returns one feature, while <code>resultOffset=500</code> returns every matching feature from position 500 onward.</p>
 <h3 id="parameter-reference">Parameter reference</h3>
 <p><code>layer.query()</code> accepts Pythonic arguments that archibald translates into ESRI REST parameters before sending the request:</p>
 <table>
