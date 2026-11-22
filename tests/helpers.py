@@ -167,6 +167,17 @@ def make_apply_edits_result(
     )
 
 
+def make_single_kind_result(
+    kind: EditKind, items: list[EditResultItem]
+) -> ApplyEditsResult:
+    """Create an ApplyEditsResult whose only items are ``items``, all of ``kind``."""
+    return make_apply_edits_result(
+        adds=items if kind == "adds" else None,
+        updates=items if kind == "updates" else None,
+        deletes=items if kind == "deletes" else None,
+    )
+
+
 def positions_by_kind(result: ApplyEditsResult) -> tuple[list, list, list]:
     """Item positions in each of the result's add, update, and delete lists."""
     return (

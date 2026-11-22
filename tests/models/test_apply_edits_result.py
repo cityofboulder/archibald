@@ -13,6 +13,7 @@ from tests.helpers import (
     ESRI_ROLLBACK_ERROR,
     make_apply_edits_result,
     make_edit_result_item,
+    make_single_kind_result,
     positions_by_kind,
 )
 
@@ -82,8 +83,8 @@ class TestApplyEditsResultHasFailures:
         ids=["add-fails", "update-fails", "delete-fails"],
     )
     def test_has_failures_true_when_any_item_fails(self, kwarg):
-        result = make_apply_edits_result(
-            **{kwarg: [make_edit_result_item(1, success=False)]}
+        result = make_single_kind_result(
+            kwarg, [make_edit_result_item(1, success=False)]
         )
 
         assert result.has_failures is True
@@ -114,7 +115,7 @@ class TestApplyEditsResultFailedProperties:
             make_edit_result_item(1, success=True),
             make_edit_result_item(2, success=False, error={"code": 1001}),
         ]
-        result = make_apply_edits_result(**{kwarg: items})
+        result = make_single_kind_result(kwarg, items)
 
         failures = getattr(result, prop)
 
@@ -141,8 +142,8 @@ class TestApplyEditsResultFailedProperties:
         ],
     )
     def test_failed_property_does_not_cross_contaminate(self, prop, failure_kwarg):
-        result = make_apply_edits_result(
-            **{failure_kwarg: [make_edit_result_item(1, success=False)]}
+        result = make_single_kind_result(
+            failure_kwarg, [make_edit_result_item(1, success=False)]
         )
 
         assert getattr(result, prop) == []
@@ -157,8 +158,8 @@ class TestApplyEditsResultFailedProperties:
         ids=["adds", "updates", "deletes"],
     )
     def test_failed_property_empty_when_no_failures(self, prop, kwarg):
-        result = make_apply_edits_result(
-            **{kwarg: [make_edit_result_item(1), make_edit_result_item(2)]}
+        result = make_single_kind_result(
+            kwarg, [make_edit_result_item(1), make_edit_result_item(2)]
         )
 
         assert getattr(result, prop) == []
@@ -175,8 +176,8 @@ class TestApplyEditsResultMerge:
         ids=["adds", "updates", "deletes"],
     )
     def test_merge_concatenates_results_in_order(self, kwarg, attr):
-        r1 = make_apply_edits_result(**{kwarg: [make_edit_result_item(1)]})
-        r2 = make_apply_edits_result(**{kwarg: [make_edit_result_item(2)]})
+        r1 = make_single_kind_result(kwarg, [make_edit_result_item(1)])
+        r2 = make_single_kind_result(kwarg, [make_edit_result_item(2)])
 
         merged = ApplyEditsResult._merge([r1, r2])
 
