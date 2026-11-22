@@ -4,7 +4,13 @@ import pytest
 
 from archibald.exceptions import InvalidParameterError
 from archibald.models import FieldsResult, QueryResult
-from tests.helpers import make_feature, make_response
+from tests.helpers import (
+    get_count_request_params,
+    make_feature,
+    make_first_page,
+    make_paging_side_effect,
+    make_response,
+)
 
 
 class TestNormalizeOutFields:
@@ -269,51 +275,200 @@ class TestBuildParams:
 
         assert params["resultType"] == "tile"
 
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "window,expected",
+        [
+            (
+                {"resultOffset": "500", "resultRecordCount": "1"},
+                {"resultOffset": 500, "resultRecordCount": 1},
+            ),
+            (
+                {"resultOffset": 500, "resultRecordCount": 1},
+                {"resultOffset": 500, "resultRecordCount": 1},
+            ),
+            ({}, {}),
+        ],
+        ids=["strings_cast_to_int", "ints_unchanged", "omitted_when_not_supplied"],
+    )
+    async def test_window_params_cast_to_int_when_supplied(
+        self, query_op, window, expected
+    ):
+        params = await query_op._build_params(
+            where="1=1",
+            out_fields="OBJECTID",
+            return_geometry=False,
+            **window,
+        )
+
+        actual = {
+            k: params[k] for k in ("resultOffset", "resultRecordCount") if k in params
+        }
+        assert actual == expected
+
 
 class TestFetchRemainingPages:
     @pytest.mark.anyio
-    async def test_returns_empty_when_count_equals_max_record_count(
-        self, query_op, mock_layer
+    @pytest.mark.parametrize(
+        "window,first_data",
+        [
+            ({}, make_first_page(0, 1000, exceeded=False)),
+            ({}, make_first_page(0, 1000, exceeded=False, in_properties=True)),
+            ({"resultRecordCount": 1}, make_first_page(0, 1)),
+            ({"resultOffset": 500, "resultRecordCount": 1}, make_first_page(500, 1)),
+        ],
+        ids=[
+            "flag_not_set",
+            "flag_not_set_in_properties",
+            "record_count_met_by_first_page",
+            "offset_and_record_count_met_by_first_page",
+        ],
+    )
+    async def test_makes_no_requests_when_nothing_remains(
+        self, query_op, mock_layer, window, first_data
     ):
-        mock_layer._client.get.return_value = make_response({"count": 1000})
+        params = {"where": "1=1", **window}
 
-        result = await query_op._fetch_remaining_pages({"where": "1=1"}, {})
+        result = await query_op._fetch_remaining_pages(params, first_data)
 
         assert result == []
+        mock_layer._client.get.assert_not_called()
 
     @pytest.mark.anyio
-    async def test_fetches_single_additional_page(self, query_op, mock_layer):
-        page_features = [make_feature(1001), make_feature(1002)]
+    @pytest.mark.parametrize(
+        "window,first_data,total,expected_oids",
+        [
+            ({}, make_first_page(0, 1000), 1000, []),
+            ({}, make_first_page(0, 1000), 2500, range(1000, 2500)),
+            ({}, make_first_page(0, 500), 1200, range(500, 1200)),
+            ({}, make_first_page(0, 1000, in_properties=True), 1500, range(1000, 1500)),
+            ({}, make_first_page(0, 0), 1500, range(0, 1500)),
+            (
+                {"resultOffset": 500},
+                make_first_page(500, 1000),
+                2500,
+                range(1500, 2500),
+            ),
+            (
+                {"resultRecordCount": 1500},
+                make_first_page(0, 1000),
+                2500,
+                range(1000, 1500),
+            ),
+            (
+                {"resultOffset": 2000, "resultRecordCount": 1000},
+                make_first_page(2000, 400),
+                2500,
+                range(2400, 2500),
+            ),
+        ],
+        ids=[
+            "total_equals_first_page",
+            "full_first_page",
+            "short_first_page_sizes_later_pages",
+            "flag_in_properties",
+            "empty_first_page_falls_back_to_max_record_count",
+            "offset_pages_to_end",
+            "record_count_above_max_trims_last_page",
+            "offset_and_record_count_capped_by_total",
+        ],
+    )
+    async def test_fetches_exactly_the_rest_of_the_window(
+        self, query_op, mock_layer, window, first_data, total, expected_oids
+    ):
+        mock_layer._client.get.side_effect = make_paging_side_effect(total)
+        params = {"where": "1=1", **window}
 
-        def get_side_effect(endpoint, *, params=None, **kwargs):
-            if params and params.get("returnCountOnly") == "true":
-                return make_response({"count": 1500})
-            return make_response({"features": page_features})
+        result = await query_op._fetch_remaining_pages(params, first_data)
 
-        mock_layer._client.get.side_effect = get_side_effect
-
-        result = await query_op._fetch_remaining_pages({"where": "1=1"}, {})
-
-        assert result == page_features
+        assert [f["properties"]["OBJECTID"] for f in result] == list(expected_oids)
 
     @pytest.mark.anyio
-    async def test_fetches_multiple_pages_in_order(self, query_op, mock_layer):
-        page2_features = [make_feature(1001)]
-        page3_features = [make_feature(2001)]
+    @pytest.mark.parametrize(
+        "key,value",
+        [
+            ("where", "Status = 'A'"),
+            ("objectIds", "1,2,3"),
+            ("geometry", '{"x": 1, "y": 2}'),
+            ("spatialRel", "esriSpatialRelWithin"),
+            ("time", "1700000000000"),
+            ("datumTransformation", "1241"),
+            ("returnDistinctValues", "true"),
+            ("outFields", "OBJECTID,Name"),
+        ],
+        ids=[
+            "where",
+            "object_ids",
+            "geometry",
+            "spatial_rel",
+            "time",
+            "datum_transformation",
+            "return_distinct_values",
+            "out_fields",
+        ],
+    )
+    async def test_count_request_keeps_param_when_it_affects_matching(
+        self, query_op, mock_layer, key, value
+    ):
+        mock_layer._client.get.side_effect = make_paging_side_effect(1500)
+        params = {"where": "1=1", key: value}
 
-        def get_side_effect(endpoint, *, params=None, **kwargs):
-            if params and params.get("returnCountOnly") == "true":
-                return make_response({"count": 2500})
-            offset = params.get("resultOffset")  # type: ignore
-            if offset == 1000:
-                return make_response({"features": page2_features})
-            return make_response({"features": page3_features})
+        await query_op._fetch_remaining_pages(params, make_first_page(0, 1000))
 
-        mock_layer._client.get.side_effect = get_side_effect
+        assert get_count_request_params(mock_layer._client.get)[key] == value
 
-        result = await query_op._fetch_remaining_pages({"where": "1=1"}, {})
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "key",
+        [
+            "orderByFields",
+            "resultOffset",
+            "resultRecordCount",
+            "resultType",
+            "resultPaginationToken",
+            "returnExceededLimitFeatures",
+            "returnGeometry",
+            "outSR",
+            "maxAllowableOffset",
+            "geometryPrecision",
+            "returnZ",
+            "returnM",
+            "multipatchOption",
+            "quantizationParameters",
+            "returnCentroid",
+            "returnTrueCurves",
+            "returnEnvelope",
+            "returnIdsOnly",
+            "returnExtentOnly",
+            "returnUniqueIdsOnly",
+            "outStatistics",
+            "groupByFieldsForStatistics",
+            "havingClause",
+        ],
+        ids=lambda key: key,
+    )
+    async def test_count_request_drops_param_when_it_only_shapes_output(
+        self, query_op, mock_layer, key
+    ):
+        mock_layer._client.get.side_effect = make_paging_side_effect(1500)
+        params = {"where": "1=1", key: 1500}
 
-        assert result == page2_features + page3_features
+        await query_op._fetch_remaining_pages(params, make_first_page(0, 1000))
+
+        assert key not in get_count_request_params(mock_layer._client.get)
+
+    @pytest.mark.anyio
+    async def test_count_request_uses_json_format_when_pages_use_geojson(
+        self, query_op, mock_layer
+    ):
+        mock_layer._client.get.side_effect = make_paging_side_effect(1500)
+        params = {"where": "1=1", "f": "geojson"}
+
+        await query_op._fetch_remaining_pages(params, make_first_page(0, 1000))
+
+        count_params = get_count_request_params(mock_layer._client.get)
+        assert count_params["f"] == "json"
+        assert count_params["returnCountOnly"] == "true"
 
 
 class TestExecute:
@@ -392,19 +547,6 @@ class TestExecute:
         result = await query_op.execute(out_fields=["OBJECTID", "Name"])
 
         assert result.features == first_page + second_page
-
-    @pytest.mark.anyio
-    async def test_no_pagination_when_transfer_limit_not_exceeded(
-        self, query_op, mock_layer, mocker
-    ):
-        mock_layer._client.get.return_value = make_response(
-            {"features": [make_feature(1)]}
-        )
-        mock_fetch = mocker.patch.object(query_op, "_fetch_remaining_pages")
-
-        await query_op.execute(out_fields=["OBJECTID", "Name"])
-
-        mock_fetch.assert_not_called()
 
     @pytest.mark.anyio
     async def test_raises_invalid_parameter_error_when_where_clause_has_bad_date_literal(

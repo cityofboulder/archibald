@@ -170,6 +170,8 @@ class BaseLayer(BaseService):
                 ``to_geodataframe()`` methods in the QueryResult will replace coded
                 domain values with their human-readable names automatically.
             **kwargs: Additional query parameters (e.g., orderByFields, resultType).
+                resultOffset and resultRecordCount define a window; automatic
+                pagination fills that window rather than the whole result set.
 
         Returns:
             QueryResult with aggregated features, field definitions, and geometry type.
