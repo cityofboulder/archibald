@@ -358,6 +358,7 @@ class FeatureLayer(FeatureService, BaseLayer):
         self,
         df: pd.DataFrame | gpd.GeoDataFrame,
         *,
+        rollback_on_failure: bool = True,
         apply_coded_values: bool = False,
         use_server_async: bool | None = None,
         max_batch_bytes: int | None = None,
@@ -372,6 +373,7 @@ class FeatureLayer(FeatureService, BaseLayer):
             df: Rows to add. OBJECTIDs are excluded from the payload.
             apply_coded_values: When True, translate human-readable domain names
                 back to their raw codes before serialization.
+            rollback_on_failure: Passed to apply_edits; see there.
             use_server_async: Passed to apply_edits; see there.
             max_batch_bytes: Passed to apply_edits; see there.
             poll_timeout: Passed to apply_edits; see there.
@@ -381,6 +383,7 @@ class FeatureLayer(FeatureService, BaseLayer):
         """
         return await self.apply_edits(
             adds=df,
+            rollback_on_failure=rollback_on_failure,
             apply_coded_values=apply_coded_values,
             use_server_async=use_server_async,
             max_batch_bytes=max_batch_bytes,
@@ -392,6 +395,7 @@ class FeatureLayer(FeatureService, BaseLayer):
         df: pd.DataFrame | gpd.GeoDataFrame,
         key_fields: list[str],
         *,
+        rollback_on_failure: bool = True,
         apply_coded_values: bool = False,
         use_server_async: bool | None = None,
         max_batch_bytes: int | None = None,
@@ -409,6 +413,7 @@ class FeatureLayer(FeatureService, BaseLayer):
                 feature. Used to match rows in df against existing layer features.
             apply_coded_values: When True, translate human-readable domain names
                 back to their raw codes before serialization.
+            rollback_on_failure: Passed to apply_edits; see there.
             use_server_async: Passed to apply_edits; see there.
             max_batch_bytes: Passed to apply_edits; see there.
             poll_timeout: Passed to apply_edits; see there.
@@ -424,6 +429,7 @@ class FeatureLayer(FeatureService, BaseLayer):
         return await self.apply_edits(
             adds=adds_df if not adds_df.empty else None,
             updates=updates_df if not updates_df.empty else None,
+            rollback_on_failure=rollback_on_failure,
             apply_coded_values=apply_coded_values,
             use_server_async=use_server_async,
             max_batch_bytes=max_batch_bytes,
@@ -435,6 +441,7 @@ class FeatureLayer(FeatureService, BaseLayer):
         df: pd.DataFrame | gpd.GeoDataFrame,
         key_fields: list[str],
         *,
+        rollback_on_failure: bool = True,
         apply_coded_values: bool = False,
         use_server_async: bool | None = None,
         max_batch_bytes: int | None = None,
@@ -452,6 +459,7 @@ class FeatureLayer(FeatureService, BaseLayer):
                 feature. Used to match rows in df against existing layer features.
             apply_coded_values: When True, translate human-readable domain names
                 back to their raw codes before serialization.
+            rollback_on_failure: Passed to apply_edits; see there.
             use_server_async: Passed to apply_edits; see there.
             max_batch_bytes: Passed to apply_edits; see there.
             poll_timeout: Passed to apply_edits; see there.
@@ -468,6 +476,7 @@ class FeatureLayer(FeatureService, BaseLayer):
             adds=adds_df if not adds_df.empty else None,
             updates=updates_df if not updates_df.empty else None,
             deletes=deletes_df if not deletes_df.empty else None,
+            rollback_on_failure=rollback_on_failure,
             apply_coded_values=apply_coded_values,
             use_server_async=use_server_async,
             max_batch_bytes=max_batch_bytes,
