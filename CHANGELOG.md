@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-24
+
 ### Changed
 
 - Async `applyEdits` batches are now bounded to `max_concurrent_jobs` (default 4) server-side jobs at a time, shared across everything using the same `ArchieClient`. Previously every batch was submitted at once, so a large edit queued dozens or hundreds of jobs on the server and the later batches could exhaust `poll_timeout` while still waiting their turn; the resulting `TimeoutError` cancelled the remaining batches while the server went on to commit them. `poll_timeout` now measures a job's own run time, starting once it holds a job permit. Total wall time is unchanged when the server was the bottleneck. Raise `max_concurrent_jobs` if the target service runs more jobs in parallel than the default.
@@ -209,7 +211,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - When an async `applyEdits` job completes, the operation now follows the `resultUrl` returned in the status body to fetch the actual edit results (`addResults`, `updateResults`, `deleteResults`). Previously the status body itself was parsed as the result, which always produced empty result sets.
 - Async polling loop is now bounded by `anyio.fail_after`; previously it could spin indefinitely if the server never returned a terminal status.
 
-[Unreleased]: https://github.com/cityofboulder/archibald/compare/v1.2.6...HEAD
+[Unreleased]: https://github.com/cityofboulder/archibald/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/cityofboulder/archibald/compare/v1.2.6...v1.3.0
 [1.2.6]: https://github.com/cityofboulder/archibald/compare/v1.2.5...v1.2.6
 [1.2.5]: https://github.com/cityofboulder/archibald/compare/v1.2.4...v1.2.5
 [1.2.4]: https://github.com/cityofboulder/archibald/compare/v1.2.3...v1.2.4
