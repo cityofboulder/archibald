@@ -541,6 +541,7 @@ class TestEditWrappers:
     ):
         df = pd.DataFrame({"Name": ["Alice"]})
         batching_kwargs = {
+            "rollback_on_failure": False,
             "use_server_async": False,
             "max_batch_bytes": 500_000,
             "poll_timeout": 60.0,

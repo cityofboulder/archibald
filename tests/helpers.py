@@ -60,6 +60,7 @@ CORE_FRAME_DTYPES = {
 }
 
 DEFAULT_BATCHING_KWARGS = {
+    "rollback_on_failure": True,
     "use_server_async": None,
     "max_batch_bytes": None,
     "poll_timeout": None,
