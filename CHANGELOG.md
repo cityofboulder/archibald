@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - A value passed to an individual call takes precedence over the client's.
 - `max_batch_bytes` in the same places sets the approximate size limit for each `applyEdits` request. It defaults to 1.8 MB, as before, and accepts values from 1 byte to 6 MB. An out-of-range value raises `ConfigurationError` from `ArchieClient` and `InvalidParameterError` per call.
 - `apply_edits()`, `append()`, `upsert()`, and `sync()` also accept `poll_timeout`, which was previously available only on `ApplyEditsOperation.execute()`.
+- `append()`, `upsert()`, and `sync()` accept `rollback_on_failure` (default `True`) and pass it to `apply_edits()`, which already accepted it.
 - `ArchieClient` accepts `max_concurrent_jobs` (default 4) and `job_timeout` (default 300 s) to bound concurrent async server-side jobs and set their default per-job timeout.
 - Failed `applyEdits` items not built from an ESRI error dict carry `error["exception"]` and `error["outcome_unknown"]`, matching attachments. Items from a failed async batch also carry `error["status_url"]`. Retrying an add whose outcome is unknown could create a duplicate.
 - Failed attachment items not built from an ESRI error dict carry `error["exception"]` (exception class name) and `error["outcome_unknown"]`, which is `True` when the server may have applied the change despite the failure (e.g. a read timeout or 5xx). Retrying an unknown `add_attachments()` could create a duplicate.
