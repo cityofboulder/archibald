@@ -651,6 +651,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#archibald.models.ApplyEditsResult.filter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filter
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#archibald.models.ApplyEditsResult.from_esri_response" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -672,6 +683,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#archibald.models.ApplyEditsResult.to_frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        to_frame
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -682,6 +704,45 @@
     <span class="md-ellipsis">
       
         EditResultItem
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="EditResultItem">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#archibald.models.EditResultItem.status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        status
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#archibald.models.EditKind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EditKind
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#archibald.models.EditStatus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EditStatus
       
     </span>
   </a>
@@ -926,6 +987,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#archibald.models.ApplyEditsResult.filter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filter
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#archibald.models.ApplyEditsResult.from_esri_response" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -947,6 +1019,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#archibald.models.ApplyEditsResult.to_frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        to_frame
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -957,6 +1040,45 @@
     <span class="md-ellipsis">
       
         EditResultItem
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="EditResultItem">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#archibald.models.EditResultItem.status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        status
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#archibald.models.EditKind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EditKind
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#archibald.models.EditStatus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EditStatus
       
     </span>
   </a>
@@ -1557,6 +1679,11 @@ as nullable.</p>
 <p>Per-feature errors are captured in result items rather than raised as
 exceptions. Inspect <code>has_failures</code> and <code>failed_*</code> properties to detect
 partial failures without iterating manually.</p>
+<p>Built only by applyEdits: <code>_merge</code> sets every item's <code>kind</code> and
+<code>position</code> (its row in that kind's input frame), and the operation
+stores each kind's input frame in <code>_inputs</code> (in adds, updates, deletes
+order). <code>_inputs</code> is excluded
+from equality and repr.</p>
 
 
 
@@ -1670,6 +1797,143 @@ partial failures without iterating manually.</p>
 <div class="doc doc-object doc-function">
 
 
+<h3 id="archibald.models.ApplyEditsResult.filter" class="doc doc-heading">
+            <code class="highlight language-python"><span class="nb">filter</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">kinds</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">statuses</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return a new ApplyEditsResult keeping only items matching all criteria.</p>
+<p>The input frames are carried over, so the filtered result still maps
+its items back to their input rows.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>kinds</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="archibald.models.EditKind = Literal['adds', 'updates', 'deletes']
+
+  
+      module-attribute
+   (archibald.models.edit_result_item.EditKind)" href="#archibald.models.EditKind">EditKind</a> | <span title="list">list</span>[<a class="autorefs autorefs-internal" title="archibald.models.EditKind = Literal['adds', 'updates', 'deletes']
+
+  
+      module-attribute
+   (archibald.models.edit_result_item.EditKind)" href="#archibald.models.EditKind">EditKind</a>] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Keep only these kinds (<code>"adds"</code>, <code>"updates"</code>,
+<code>"deletes"</code>). A single value or a list; None keeps all.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>statuses</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="archibald.models.EditStatus = Literal['succeeded', 'failed', 'unknown']
+
+  
+      module-attribute
+   (archibald.models.edit_result_item.EditStatus)" href="#archibald.models.EditStatus">EditStatus</a> | <span title="list">list</span>[<a class="autorefs autorefs-internal" title="archibald.models.EditStatus = Literal['succeeded', 'failed', 'unknown']
+
+  
+      module-attribute
+   (archibald.models.edit_result_item.EditStatus)" href="#archibald.models.EditStatus">EditStatus</a>] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Keep only items with these statuses (<code>"succeeded"</code>,
+<code>"failed"</code>, <code>"unknown"</code>). A single value or a list; None
+keeps all.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="archibald.models.ApplyEditsResult
+
+
+  
+      dataclass
+   (archibald.models.apply_edits_result.ApplyEditsResult)" href="#archibald.models.ApplyEditsResult">ApplyEditsResult</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A new ApplyEditsResult; kinds that are filtered out have no items.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="archibald.exceptions.InvalidParameterError" href="../exceptions/#archibald.exceptions.InvalidParameterError">InvalidParameterError</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If any kind or status is not a valid value.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h3 id="archibald.models.ApplyEditsResult.from_esri_response" class="doc doc-heading">
             <code class="highlight language-python"><span class="n">from_esri_response</span><span class="p">(</span><span class="n">body</span><span class="p">)</span></code>
 
@@ -1683,6 +1947,9 @@ partial failures without iterating manually.</p>
     <div class="doc doc-contents ">
 
         <p>Parse a single synchronous applyEdits response body.</p>
+<p>.. deprecated::
+    Internal to applyEdits; will be removed in 2.0. Results come from
+    <code>FeatureLayer</code> edit methods.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -1764,6 +2031,8 @@ partial failures without iterating manually.</p>
     <div class="doc doc-contents ">
 
         <p>Merge multiple per-batch ApplyEditsResults into one aggregate.</p>
+<p>.. deprecated::
+    Internal to applyEdits batching; will be removed in 2.0.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -1834,6 +2103,177 @@ partial failures without iterating manually.</p>
 
 </div>
 
+<div class="doc doc-object doc-function">
+
+
+<h3 id="archibald.models.ApplyEditsResult.to_frame" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">to_frame</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">include_input</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">include_metadata</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">metadata_prefix</span><span class="o">=</span><span class="s1">&#39;_edit_&#39;</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return one row per edit, in adds, updates, deletes order.</p>
+<p>With <code>include_input</code>, each row is the input row the edit came from,
+with its original index: for <code>append</code> / <code>upsert</code> / <code>sync</code>, rows
+of the df passed in (<code>upsert</code> / <code>sync</code> updates also carry the
+matched OBJECTID); for <code>apply_edits</code>, rows of <code>adds</code> / <code>updates</code>
+/ <code>deletes</code>. Deletes given as OBJECTIDs are rows of a one-column
+OBJECTID frame; <code>sync</code> deletes hold the OBJECTID and key fields.
+Combine with <code>filter</code> to get some rows, e.g.
+<code>result.filter(statuses="failed").to_frame()</code>.</p>
+<p>Metadata columns: <code>kind</code> and <code>status</code> (categoricals of the
+<code>EditKind</code> / <code>EditStatus</code> values), <code>object_id</code> (-1 when ESRI
+reports none, e.g. a failed add), <code>global_id</code>, <code>position</code> (the
+row's position in its input frame), then each error dict flattened
+into <code>error_&lt;snake_case_key&gt;</code> columns. <code>error_code</code>,
+<code>error_description</code>, <code>error_exception</code>, <code>error_outcome_unknown</code>,
+and <code>error_status_url</code> are always present; other keys (e.g.
+<code>extendedCode</code>, <code>message</code>, <code>details</code> from a rolled-back batch)
+add columns as they appear. <code>error_description</code> holds readable text
+for every failure: when ESRI sent none, <code>message</code> and <code>details</code>
+joined.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>include_input</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Include the input row of each edit.</p>
+              </div>
+            </td>
+            <td>
+                  <code>True</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>include_metadata</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Include the metadata columns. Alongside input
+rows they are prefixed with <code>metadata_prefix</code> and
+<code>position</code> is left out.</p>
+              </div>
+            </td>
+            <td>
+                  <code>True</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>metadata_prefix</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Prefix for metadata columns when
+<code>include_input</code> is True; ignored otherwise.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;_edit_&#39;</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="pandas.DataFrame">DataFrame</span> | <span title="geopandas.GeoDataFrame">GeoDataFrame</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The DataFrame described above; a GeoDataFrame when an input frame</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="pandas.DataFrame">DataFrame</span> | <span title="geopandas.GeoDataFrame">GeoDataFrame</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>is one (rows without geometry, such as deletes, get null</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="pandas.DataFrame">DataFrame</span> | <span title="geopandas.GeoDataFrame">GeoDataFrame</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>geometry).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="archibald.exceptions.InvalidParameterError" href="../exceptions/#archibald.exceptions.InvalidParameterError">InvalidParameterError</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If both <code>include_input</code> and
+<code>include_metadata</code> are False, or if a prefixed metadata
+column already exists in an input frame.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
 
 
   </div>
@@ -1864,6 +2304,93 @@ partial failures without iterating manually.</p>
         <p>Single per-feature result from an applyEdits or addAttachment operation.</p>
 
 
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="archibald.models.EditResultItem.object_id">object_id</span></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>OBJECTID ESRI reported, or -1 when there is none (e.g. a
+failed add).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="archibald.models.EditResultItem.global_id">global_id</span></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>GlobalID ESRI reported, if any.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="archibald.models.EditResultItem.success">success</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether the edit succeeded.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="archibald.models.EditResultItem.error">error</span></code></td>
+            <td>
+                  <code><span title="dict">dict</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Raw ESRI error dict when <code>success</code> is False; None otherwise.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="archibald.models.EditResultItem.kind">kind</span></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="archibald.models.EditKind = Literal['adds', 'updates', 'deletes']
+
+  
+      module-attribute
+   (archibald.models.edit_result_item.EditKind)" href="#archibald.models.EditKind">EditKind</a> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Which applyEdits list the item belongs to; None for attachment
+results.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="archibald.models.EditResultItem.position">position</span></code></td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Row position of the item's source row in the input frame
+for its kind; None for attachment results.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
 
 
 
@@ -1881,12 +2408,81 @@ partial failures without iterating manually.</p>
 
 
 
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="archibald.models.EditResultItem.status" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">status</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p><code>"succeeded"</code>, <code>"unknown"</code> when the server may have applied it anyway,
+else <code>"failed"</code>.</p>
+<p>Failures carrying an ESRI error dict have no <code>outcome_unknown</code> key and
+are therefore <code>"failed"</code>: the server definitively rejected them.</p>
+
+    </div>
+
+</div>
+
 
 
 
 
 
   </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="archibald.models.EditKind" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">archibald</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">EditKind</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s1">&#39;adds&#39;</span><span class="p">,</span> <span class="s1">&#39;updates&#39;</span><span class="p">,</span> <span class="s1">&#39;deletes&#39;</span><span class="p">]</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents first">
+
+        <p>Kind of edit an applyEdits result item belongs to.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="archibald.models.EditStatus" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">archibald</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">EditStatus</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s1">&#39;succeeded&#39;</span><span class="p">,</span> <span class="s1">&#39;failed&#39;</span><span class="p">,</span> <span class="s1">&#39;unknown&#39;</span><span class="p">]</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents first">
+
+        <p>Outcome of a single edit, derived from <code>success</code> and <code>error</code>.</p>
 
     </div>
 

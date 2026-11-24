@@ -763,7 +763,9 @@ f=json on all requests (preserving f=geojson when explicitly set), handles
 token refresh on 498/499 responses, and raises for HTTP-level errors before
 ESRI envelope errors are inspected. Bounds the number of concurrent
 in-flight requests so fan-out callers (batched applyEdits, paged query,
-bulk attachment operations) can't overrun the connection pool.</p>
+bulk attachment operations) can't overrun the connection pool, and
+separately bounds concurrent server-side async jobs so a large applyEdits
+can't queue every batch on the server at once.</p>
 <p>Can be used as an async context manager or instantiated directly; in the
 latter case call aclose() manually when done.</p>
 
@@ -836,7 +838,7 @@ latter case call aclose() manually when done.</p>
 
 
 <h3 id="archibald.client.ArchieClient.__init__" class="doc doc-heading">
-            <code class="highlight language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">base_url</span><span class="p">,</span> <span class="n">auth</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">60.0</span><span class="p">,</span> <span class="n">max_concurrent_requests</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">base_url</span><span class="p">,</span> <span class="n">auth</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">60.0</span><span class="p">,</span> <span class="n">max_concurrent_requests</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">max_concurrent_jobs</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">job_timeout</span><span class="o">=</span><span class="mf">300.0</span><span class="p">,</span> <span class="n">use_server_async</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">max_batch_bytes</span><span class="o">=</span><span class="n">DEFAULT_MAX_BATCH_BYTES</span><span class="p">)</span></code>
 
 </h3>
 
@@ -929,6 +931,115 @@ is known to tolerate.</p>
             </td>
             <td>
                   <code>20</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_concurrent_jobs</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Maximum number of async server-side jobs
+(e.g. async applyEdits batches) alive at once, shared across
+all callers and layers using this client. A job permit is held
+from the POST until the result is fetched, so this bounds the
+server's job queue rather than HTTP requests. Set it slightly
+above the number of jobs the target service runs in parallel;
+too high reintroduces queueing (and job_timeout expirations),
+too low leaves the server idle between jobs. Has no effect on
+batches sent synchronously (see use_server_async).</p>
+              </div>
+            </td>
+            <td>
+                  <code>4</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>job_timeout</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Default maximum seconds to wait for one async job to
+complete once it holds a job permit. Queue time behind other
+jobs from this client is not counted. Individual operations
+may override it per call. Has no effect on batches sent
+synchronously.</p>
+              </div>
+            </td>
+            <td>
+                  <code>300.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>use_server_async</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Default for whether applyEdits batches use
+server-side async processing. None (the default) auto-detects:
+async only when an edit spans more than one batch and the layer
+advertises supportsAsyncApplyEdits. True sends every batch
+async; False always sends synchronously, which trades async's
+resilience on slow commits for definite per-batch outcomes.
+Individual calls may override it.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_batch_bytes</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Default soft upper bound, in bytes, for each
+applyEdits POST body. Smaller batches commit faster and put
+fewer edits at stake when one fails. Individual calls may
+override it.</p>
+              </div>
+            </td>
+            <td>
+                  <code><span title="archibald.serializers._features.DEFAULT_MAX_BATCH_BYTES">DEFAULT_MAX_BATCH_BYTES</span></code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="archibald.exceptions.ConfigurationError" href="../exceptions/#archibald.exceptions.ConfigurationError">ConfigurationError</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If max_batch_bytes is not positive or exceeds
+MAX_BATCH_BYTES.</p>
+              </div>
             </td>
           </tr>
       </tbody>

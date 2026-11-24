@@ -1708,7 +1708,57 @@ falls back to <code>application/octet-stream</code>.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>rather than raised, and do not abort the other uploads.</p>
+                <p>rather than raised, as is any other per-file failure (unreadable</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td></td>            <td>
+                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>file, transport error, HTTP error status, malformed response);</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td></td>            <td>
+                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>none of them abort the other uploads. Failures that did not come</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td></td>            <td>
+                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>from an ESRI error dict carry <code>error["exception"]</code> and</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td></td>            <td>
+                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>error["outcome_unknown"]</code>. When the latter is True the server</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td></td>            <td>
+                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>may have attached the file anyway, so retrying could duplicate it.</p>
               </div>
             </td>
           </tr>
@@ -1758,7 +1808,7 @@ bytes file has no resolvable filename.</p>
 
 
 <h3 id="archibald.services.FeatureLayer.append" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">append</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">apply_coded_values</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">append</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">rollback_on_failure</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">apply_coded_values</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">use_server_async</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">max_batch_bytes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">poll_timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-async"><code>async</code></small>
@@ -1818,6 +1868,70 @@ back to their raw codes before serialization.</p>
                   <code>False</code>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>rollback_on_failure</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Passed to apply_edits; see there.</p>
+              </div>
+            </td>
+            <td>
+                  <code>True</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>use_server_async</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Passed to apply_edits; see there.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_batch_bytes</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Passed to apply_edits; see there.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>poll_timeout</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Passed to apply_edits; see there.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -1858,7 +1972,7 @@ back to their raw codes before serialization.</p>
 
 
 <h3 id="archibald.services.FeatureLayer.apply_edits" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">apply_edits</span><span class="p">(</span><span class="n">adds</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">updates</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">deletes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">rollback_on_failure</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">apply_coded_values</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">apply_edits</span><span class="p">(</span><span class="n">adds</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">updates</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">deletes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">rollback_on_failure</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">apply_coded_values</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">use_server_async</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">max_batch_bytes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">poll_timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-async"><code>async</code></small>
@@ -1974,6 +2088,65 @@ in the DataFrame back to their raw codes before serialization.</p>
                   <code>False</code>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>use_server_async</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether batches use server-side async processing.
+True sends every batch async; False always sends synchronously,
+so each failed batch has a definite outcome unless the request
+itself times out. None falls back to the client's
+use_server_async, and if that is also None, uses async only
+when the edit spans more than one batch and the layer supports
+it. True on a layer without async support emits a warning and
+sends synchronously.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_batch_bytes</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Soft upper bound, in bytes, for each POST body.
+Smaller batches commit faster and put fewer edits at stake when
+one fails. Defaults to the client's max_batch_bytes.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>poll_timeout</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Maximum seconds to wait for each async batch to
+complete. Defaults to the client's job_timeout. Ignored when
+batches are sent synchronously.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -2002,6 +2175,36 @@ in the DataFrame back to their raw codes before serialization.</p>
               </div>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="archibald.models.ApplyEditsResult
+
+
+  
+      dataclass
+   (archibald.models.apply_edits_result.ApplyEditsResult)" href="../models/#archibald.models.ApplyEditsResult">ApplyEditsResult</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A batch that fails as a whole is returned as <code>success=False</code></p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="archibald.models.ApplyEditsResult
+
+
+  
+      dataclass
+   (archibald.models.apply_edits_result.ApplyEditsResult)" href="../models/#archibald.models.ApplyEditsResult">ApplyEditsResult</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>items rather than raised; see ApplyEditsOperation.execute.</p>
+              </div>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -2025,6 +2228,17 @@ in the DataFrame back to their raw codes before serialization.</p>
               </div>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="archibald.exceptions.InvalidParameterError" href="../exceptions/#archibald.exceptions.InvalidParameterError">InvalidParameterError</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If max_batch_bytes is not positive or
+exceeds MAX_BATCH_BYTES.</p>
+              </div>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -2045,7 +2259,8 @@ in the DataFrame back to their raw codes before serialization.</p>
             <td>
               <div class="doc-md-description">
                 <p>If rollback_on_failure=False but the layer does not
-support disabling rollback.</p>
+support disabling rollback, or if use_server_async resolves to
+True but the layer does not support async applyEdits.</p>
               </div>
             </td>
           </tr>
@@ -2151,6 +2366,76 @@ feature are removed in a single request.</p>
             <td>
               <div class="doc-md-description">
                 <p>AttachmentsResult with one result per input pair, in input order.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If a feature's request fails, every pair in it is returned as a</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>success=False</code> result (<code>object_id</code> is the attachment ID)</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>rather than raised, and the other features' deletes are</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>unaffected. Failures that did not come from an ESRI error dict</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>carry <code>error["exception"]</code> and <code>error["outcome_unknown"]</code>. When</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>the latter is True the attachments may have been deleted anyway;</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>a retry can then report them as not found.</p>
               </div>
             </td>
           </tr>
@@ -2399,7 +2684,7 @@ feature are removed in a single request.</p>
 
 
 <h3 id="archibald.services.FeatureLayer.sync" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">sync</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">key_fields</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">apply_coded_values</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">sync</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">key_fields</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">rollback_on_failure</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">apply_coded_values</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">use_server_async</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">max_batch_bytes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">poll_timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-async"><code>async</code></small>
@@ -2475,6 +2760,70 @@ back to their raw codes before serialization.</p>
             </td>
             <td>
                   <code>False</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>rollback_on_failure</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Passed to apply_edits; see there.</p>
+              </div>
+            </td>
+            <td>
+                  <code>True</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>use_server_async</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Passed to apply_edits; see there.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_batch_bytes</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Passed to apply_edits; see there.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>poll_timeout</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Passed to apply_edits; see there.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
             </td>
           </tr>
       </tbody>
@@ -2741,7 +3090,57 @@ falls back to <code>application/octet-stream</code>.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>rather than raised, and do not abort the other updates.</p>
+                <p>rather than raised, as is any other per-file failure (unreadable</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td></td>            <td>
+                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>file, transport error, HTTP error status, malformed response);</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td></td>            <td>
+                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>none of them abort the other updates. Failures that did not come</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td></td>            <td>
+                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>from an ESRI error dict carry <code>error["exception"]</code> and</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td></td>            <td>
+                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>error["outcome_unknown"]</code>. When the latter is True the server</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td></td>            <td>
+                  <code><span title="archibald.models.attachments_result.AttachmentsResult">AttachmentsResult</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>may have replaced the file anyway; retrying is safe.</p>
               </div>
             </td>
           </tr>
@@ -2792,7 +3191,7 @@ bytes file has no resolvable filename.</p>
 
 
 <h3 id="archibald.services.FeatureLayer.upsert" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">upsert</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">key_fields</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">apply_coded_values</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">upsert</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">key_fields</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">rollback_on_failure</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">apply_coded_values</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">use_server_async</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">max_batch_bytes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">poll_timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-async"><code>async</code></small>
@@ -2868,6 +3267,70 @@ back to their raw codes before serialization.</p>
             </td>
             <td>
                   <code>False</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>rollback_on_failure</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Passed to apply_edits; see there.</p>
+              </div>
+            </td>
+            <td>
+                  <code>True</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>use_server_async</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Passed to apply_edits; see there.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_batch_bytes</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Passed to apply_edits; see there.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>poll_timeout</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Passed to apply_edits; see there.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
             </td>
           </tr>
       </tbody>
