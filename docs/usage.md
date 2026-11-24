@@ -291,7 +291,7 @@ Before any data reaches the API, archibald runs a serialization pipeline on your
     - `float` → `NaN` becomes `null`
     - Strings → truncated to the field's defined `length` if one is set on the service, with a warning
 3. **Geometry serialization** — if you pass a `GeoDataFrame`, each row's geometry is converted to ESRI JSON automatically. Null geometries are omitted from the feature dict rather than sent as null.
-4. **Automatic batching** — large payloads are split into batches bounded by ~1.8 MB and POSTed to the service in parallel on the server side, so you can write large DataFrames without worrying about request size limits. 
+4. **Automatic batching** — large payloads are split into batches of about 1.8 MB each, which are POSTed concurrently, so you can write large DataFrames without worrying about request size limits. See [Batching and server-side async](#batching-and-server-side-async) to change the batch size or how batches are processed.
 
 ### Append
 
@@ -334,6 +334,34 @@ edits = await layer.apply_edits(
 
 By default (`rollback_on_failure=True`, matching ESRI), a batch is applied only if every edit in it succeeds; otherwise the whole batch is rolled back. Pass `rollback_on_failure=False` to apply the edits that succeed and report the rest as per-item failures (see [Checking for failures](#checking-for-failures)). Rollback is per batch: when a large edit is split into several requests, a failed batch does not undo batches that already succeeded. Layers that don't advertise `supportsRollbackOnFailureParameter` always roll back, and requesting `False` on one emits a warning.
 
+### Batching and server-side async
+
+`apply_edits()`, `append()`, `upsert()`, and `sync()` all accept three batching options:
+
+- `max_batch_bytes`: the approximate size limit for each request, from 1 byte up to 6 MB. Defaults to 1.8 MB. Smaller batches finish faster, and less is at stake when one fails.
+- `use_server_async`: whether each batch is submitted as a server-side async job that archibald polls until it finishes.
+    - `None` (the default) uses async only when the edit spans more than one batch and the layer advertises `supportsAsyncApplyEdits`.
+    - `True` uses async for every batch. On a layer without async support, it emits a warning and sends the batches synchronously instead.
+    - `False` always sends batches synchronously.
+- `poll_timeout`: how many seconds to wait for each async job. It has no effect on synchronous batches.
+
+```python
+edits = await layer.append(df, use_server_async=False, max_batch_bytes=500_000)
+```
+
+The two modes fail differently:
+
+- **Synchronous** batches give a definite answer whenever the server responds. With rollback on, an error response means nothing in that batch was applied, so it's safe to retry. If a slow batch hits the request timeout, though, the outcome is unknown and there's nothing to check later.
+- **Async** jobs ride out slow commits, and a failed batch carries a `status_url` you can check later. A job the server marks as failed is always reported as `outcome_unknown`.
+
+To set defaults for everything that uses a client, pass the same options to `ArchieClient`. Any value passed to an individual call takes precedence:
+
+```python
+client = ArchieClient(base_url, auth, use_server_async=False, max_batch_bytes=1_000_000)
+```
+
+An out-of-range `max_batch_bytes` raises `ConfigurationError` from `ArchieClient` and `InvalidParameterError` from an individual call.
+
 ### Round-trip domain translation
 
 Because `apply_coded_values` works in both directions, archibald supports a clean read-modify-write workflow without ever touching raw domain codes:
@@ -364,6 +392,53 @@ if edits.has_failures:
 ```
 
 Each item in those lists is an `EditResultItem` with `object_id`, `success`, and `error` attributes.
+
+A batch that fails as a whole doesn't raise and doesn't stop the other batches. That covers a rolled-back batch, a timeout or connection error, an HTTP error status, and an async job that fails or never finishes. Instead, every edit in that batch comes back as a `success=False` item, in input order:
+
+- If the server rejected the batch (for example "Unable to complete operation." when a batch is rolled back), `error` is the server's error dict.
+- Otherwise `error` describes the exception. It has `code`, `description`, `exception` (the exception class name) and `outcome_unknown`. `outcome_unknown` is `True` when the server may have applied the edits anyway, such as after a read timeout, a 5xx, or an async job that failed or timed out.
+- Items from an async batch also carry `status_url`, the job's status endpoint, so you can check on it later.
+
+```python
+for item in edits.failed_adds:
+    if item.error.get("outcome_unknown"):
+        print("May have been applied; check before retrying:", item.error)
+```
+
+Failed adds have `object_id` -1, since no feature was created. Results for adds line up with your input rows only by position. Retrying an add whose outcome is unknown can create a duplicate feature. Retrying an update or delete can't create a duplicate, since it targets an existing OBJECTID.
+
+#### Matching results to your rows
+
+`to_frame()` returns one row per edit: the input row it came from, followed by `_edit_`-prefixed columns describing the result.
+
+```python
+review = edits.filter(statuses=["failed", "unknown"]).to_frame()
+```
+
+Each edit has one of three statuses:
+
+- `"succeeded"`: the server applied it.
+- `"failed"`: the server rejected it, or the batch failed in a way that means it wasn't applied. Safe to retry.
+- `"unknown"`: the request failed after it may have reached the server (`error["outcome_unknown"]` is `True`). Check the layer before retrying an add.
+
+The metadata columns are `_edit_kind` (`"adds"`, `"updates"`, or `"deletes"`), `_edit_status`, `_edit_object_id` (-1 for a failed add), `_edit_global_id`, and the error dict flattened into `_edit_error_*` columns such as `_edit_error_code` and `_edit_error_description`. Pass `metadata_prefix=` to use a different prefix, or `include_metadata=False` to get only the input rows.
+
+Rows come out in adds, updates, deletes order and keep their original index, even if it has duplicate labels. What the input row holds depends on the call:
+
+- `append(df)`: rows of `df`.
+- `upsert(df)` and `sync(df)`: rows of `df`, new rows first, then rows that matched an existing feature (with its OBJECTID added). `sync` deletes are the layer's existing features, with their OBJECTID and key fields.
+- `apply_edits(adds=..., updates=..., deletes=...)`: rows of each frame you passed. Deletes given as a list or Series of OBJECTIDs appear as a one-column OBJECTID frame.
+
+A GeoDataFrame input gives a GeoDataFrame back; rows without geometry, such as deletes, get null geometry. `filter(kinds=, statuses=)` accepts a single value or a list for each.
+
+To retry the adds the server rejected:
+
+```python
+rejected = edits.filter(kinds="adds", statuses="failed").to_frame(include_metadata=False)
+retry = await layer.append(rejected)
+```
+
+For a table of results without input rows, use `to_frame(include_input=False)`. Its columns are the same metadata without the prefix, plus `position`, the row's position in its input frame.
 
 ---
 
@@ -562,7 +637,7 @@ df = result.to_frame()
 # Columns: object_id, global_id, success, plus error_* columns for failed rows
 ```
 
-`add_attachments()` and `update_attachments()` also record requests that ESRI rejects outright, such as a file with an unsupported type, as `success=False` items instead of raising an exception. Results are always one per input file, in input order, so a failure lines up with the file that caused it:
+All three methods record per-item failures as `success=False` items instead of raising an exception. That covers requests ESRI rejects outright, such as a file with an unsupported type, and failures that never produced an ESRI response: an unreadable local file, a timeout or connection error, an HTTP error status, or a malformed response. Results are always one per input, in input order, so a failure lines up with the input that caused it:
 
 ```python
 files = [Path("a.jpg"), Path("macro.exe"), Path("c.pdf")]
@@ -573,12 +648,21 @@ for path, item in zip(files, result.results):
         print(f"{path} rejected: {item.error}")
 ```
 
-Two details differ for these rejected items:
+Failed items differ from normal results in a few ways:
 
-- `object_id` is `-1`, because no attachment was created or identified. This applies to `update_attachments()` too.
-- `error` is the server's raw error dict, which uses a `message` key (`{"code": 403, "message": "..."}`). Per-attachment failures that ESRI reports inside a normal response use `description` instead, so `to_frame()` has `error_message` or `error_description` columns respectively.
+- For `add_attachments()` and `update_attachments()`, `object_id` is `-1`, because no attachment was created or identified. For `delete_attachments()`, `object_id` is the attachment ID, as it is for every delete result.
+- When ESRI rejected the request, `error` is the server's raw error dict, which uses a `message` key (`{"code": 403, "message": "..."}`). Per-attachment failures that ESRI reports inside a normal response use `description` instead, so `to_frame()` has `error_message` or `error_description` columns respectively.
+- When the failure did not come from an ESRI error dict, `error` has `code` (`-1` unless the exception carried one), `description`, `exception` (the exception class name), and `outcome_unknown`. Read the flag with `item.error.get("outcome_unknown")`, because ESRI error dicts do not have the key.
 
-Because every ESRI error from these two methods is captured this way, always check `has_failures`. A `try/except arc.AuthorizationError` around `add_attachments()` or `update_attachments()` will no longer fire, and a systemic problem such as a bad token shows up as every item failed. `delete_attachments()` is unchanged and still raises on a rejected request.
+`outcome_unknown` is `True` when the request may have reached the server before it failed (a timeout or dropped connection after connecting, a 5xx status, or a response that could not be parsed). The change may then have been applied even though the item reports `success=False`:
+
+- `add_attachments()`: retrying could create a duplicate attachment, so check the feature's attachments first.
+- `update_attachments()`: retrying is safe.
+- `delete_attachments()`: retrying is safe, but the attachment may already be gone, so a retry can report it as not found.
+
+It is `False` for failures that happened before the request was sent (an unreadable file, a connection failure) and for 4xx statuses.
+
+Always check `has_failures`. A `try/except arc.AuthorizationError` around any of these methods will no longer fire for a single failed item. Problems with the layer itself still raise before any request is sent: bad authentication, a missing layer, a layer without attachment support, and invalid arguments. The first call on a `FeatureLayer` fetches its metadata, which is where most of these surface. A failure that begins after that, such as a token that cannot be refreshed, shows up as every remaining item failed.
 
 ---
 

@@ -75,9 +75,9 @@ class QueryOperation:
         )
 
         # First request
-        first_response = await self._layer._client.get(
+        first_response = await self._layer._client.post(
             endpoint=self._endpoint,
-            params=params,
+            data=params,
         )
         first_data = first_response.json()
         features = first_data.get("features", [])
@@ -373,9 +373,9 @@ class QueryOperation:
         count_params = {
             k: v for k, v in initial_params.items() if k not in not_for_count
         }
-        total_count_response = await self._layer._client.get(
+        total_count_response = await self._layer._client.post(
             endpoint=self._endpoint,
-            params={**count_params, "returnCountOnly": "true", "f": "json"},
+            data={**count_params, "returnCountOnly": "true", "f": "json"},
         )
         total_count = total_count_response.json().get("count", 0)
 
@@ -390,9 +390,9 @@ class QueryOperation:
         page_results: list[list[dict]] = [[] for _ in offsets]
 
         async def fetch_page(idx: int, offset: int) -> None:
-            response = await self._layer._client.get(
+            response = await self._layer._client.post(
                 endpoint=self._endpoint,
-                params={
+                data={
                     **initial_params,
                     "resultOffset": offset,
                     "resultRecordCount": min(page_size, end - offset),

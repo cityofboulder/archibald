@@ -1,6 +1,12 @@
+import httpx
 import pytest
 
-from archibald.errors import handle_esri_errors, parse_esri_error
+from archibald.errors import (
+    failed_items,
+    handle_esri_errors,
+    is_outcome_unknown,
+    parse_esri_error,
+)
 from archibald.exceptions import (
     AuthorizationError,
     NotFoundError,
@@ -8,7 +14,76 @@ from archibald.exceptions import (
     TokenExpiredError,
     TokenMissingError,
 )
-from tests.helpers import make_decorated_call, make_response
+from tests.helpers import (
+    NON_ENVELOPE_FAILURE_CASES,
+    OUTCOME_UNKNOWN_CASES,
+    STATUS_URL,
+    make_arcgis_error,
+    make_decorated_call,
+    make_response,
+)
+
+
+class TestIsOutcomeUnknown:
+    @pytest.mark.parametrize("exc, expected", OUTCOME_UNKNOWN_CASES)
+    def test_returns_expected_when_exception_given(self, exc, expected):
+        assert is_outcome_unknown(exc) is expected
+
+
+class TestFailedItems:
+    def test_returns_one_failed_item_per_id_in_order_when_ids_given(self):
+        exc = httpx.ReadTimeout("slow")
+
+        items = failed_items(exc, [3, 1, 2], outcome_unknown=True)
+
+        assert [item.object_id for item in items] == [3, 1, 2]
+        assert all(item.success is False for item in items)
+
+    @pytest.mark.parametrize("outcome_unknown", [True, False], ids=["unknown", "known"])
+    def test_returns_server_error_when_exception_carries_envelope(
+        self, outcome_unknown
+    ):
+        exc = make_arcgis_error(ServiceError, 400, "Unable to complete operation.")
+
+        items = failed_items(exc, [1, 2], outcome_unknown=outcome_unknown)
+
+        assert [item.error for item in items] == [
+            {"code": 400, "message": "Unable to complete operation."}
+        ] * 2
+
+    @pytest.mark.parametrize("outcome_unknown", [True, False], ids=["unknown", "known"])
+    @pytest.mark.parametrize("exc", NON_ENVELOPE_FAILURE_CASES)
+    def test_returns_exception_error_when_exception_has_no_envelope(
+        self, exc, outcome_unknown
+    ):
+        items = failed_items(exc, [7], outcome_unknown=outcome_unknown)
+
+        assert items[0].error is not None
+        assert items[0].error["exception"] == type(exc).__name__
+        assert items[0].error["outcome_unknown"] is outcome_unknown
+
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            pytest.param(
+                make_arcgis_error(ServiceError, 400, "Rolled back."), id="envelope"
+            ),
+            *NON_ENVELOPE_FAILURE_CASES,
+        ],
+    )
+    def test_items_carry_status_url_when_provided(self, exc):
+        items = failed_items(exc, [1, 2], outcome_unknown=True, status_url=STATUS_URL)
+
+        assert [(item.error or {}).get("status_url") for item in items] == [
+            STATUS_URL
+        ] * 2
+
+    def test_leaves_envelope_unchanged_when_status_url_provided(self):
+        exc = make_arcgis_error(ServiceError, 400, "Rolled back.")
+
+        failed_items(exc, [1], outcome_unknown=True, status_url=STATUS_URL)
+
+        assert exc.raw_response == {"error": {"code": 400, "message": "Rolled back."}}
 
 
 class TestParseEsriError:

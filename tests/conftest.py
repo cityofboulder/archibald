@@ -1,8 +1,15 @@
+import anyio
+import pandas as pd
 import pytest
 
 from archibald.auth import ARCGIS_ONLINE_BASE_URL, UserTokenAuth
 from archibald.client import ArchieClient
-from archibald.models import AttachmentsQueryResult, FieldsResult, QueryResult
+from archibald.models import (
+    ApplyEditsResult,
+    AttachmentsQueryResult,
+    FieldsResult,
+    QueryResult,
+)
 from archibald.operations import (
     AddAttachmentsOperation,
     DeleteAttachmentsOperation,
@@ -11,6 +18,7 @@ from archibald.operations import (
     QueryOperation,
     QueryAttachmentsOperation,
 )
+from archibald.serializers._features import DEFAULT_MAX_BATCH_BYTES
 from archibald.services import (
     BaseLayer,
     BaseService,
@@ -20,12 +28,20 @@ from archibald.services import (
     MapService,
 )
 from tests.helpers import (
+    ESRI_ITEM_ERROR,
+    ESRI_ROLLBACK_ERROR,
     MAP_LAYER_PATH,
+    OUTCOME_UNKNOWN_ERROR,
     SERVICE_PATH,
     MinimalService,
     StaticTokenAuth,
     make_apply_edits_result,
+    make_edit_result_item,
+    make_esri_apply_edits_response,
+    make_geo_frame,
+    make_response,
     make_attachment_info,
+    make_small_feature,
 )
 
 
@@ -51,7 +67,10 @@ def client() -> ArchieClient:
 
 @pytest.fixture
 def mock_client(mocker):
-    return mocker.create_autospec(ArchieClient)
+    client = mocker.create_autospec(ArchieClient)
+    client._use_server_async = None
+    client._max_batch_bytes = DEFAULT_MAX_BATCH_BYTES
+    return client
 
 
 @pytest.fixture
@@ -256,6 +275,10 @@ def mock_layer(mocker, fields_result, attachment_fields, attachment_properties):
     layer = mocker.create_autospec(FeatureLayer)
     layer._layer_path = f"{SERVICE_PATH}/0"
     layer._client = mocker.create_autospec(ArchieClient)
+    layer._client._job_limiter = anyio.CapacityLimiter(4)
+    layer._client._job_timeout = 300.0
+    layer._client._use_server_async = None
+    layer._client._max_batch_bytes = DEFAULT_MAX_BATCH_BYTES
     layer.fields.return_value = fields_result
     layer.objectid_field.return_value = "OBJECTID"
     layer.globalid_field.return_value = None
@@ -294,6 +317,97 @@ def apply_edits_op(mock_layer) -> ApplyEditsOperation:
 
 
 @pytest.fixture
+def all_kinds_edit_inputs() -> dict:
+    """execute() kwargs with two adds (index 7, 7), one update (OID 7), one delete (OID 9)."""
+    return {
+        "adds": pd.DataFrame({"Name": ["a", "b"]}, index=[7, 7]),
+        "updates": pd.DataFrame({"Name": ["u"], "OBJECTID": [7]}),
+        "deletes": [9],
+    }
+
+
+@pytest.fixture
+def all_kinds_post(mock_layer):
+    """Make mock_layer's client answer applyEdits with one success per all_kinds_edit_inputs edit."""
+    mock_layer._client.post.return_value = make_response(
+        make_esri_apply_edits_response(add_ids=[5, 6], update_ids=[7], delete_ids=[9])
+    )
+    return mock_layer._client.post
+
+
+@pytest.fixture
+def mixed_edit_batch() -> dict:
+    """A pack_batches-style batch with one add, one update (OID 7), one delete (OID 4)."""
+    return {
+        "adds": [make_small_feature(1)],
+        "updates": [{"attributes": {"OBJECTID": 7}}],
+        "deletes": "4",
+    }
+
+
+@pytest.fixture
+def mixed_status_result() -> ApplyEditsResult:
+    """An ApplyEditsResult with every status, positioned as applyEdits would.
+
+    Adds (rows a, b, c; index 7, 7, 9): succeeded OID 10, failed (ESRI item
+    error), unknown (outcome_unknown). Updates (rows d, e with OBJECTIDs):
+    succeeded OID 20, failed OID 21. Deletes (an OBJECTID frame): succeeded
+    OID 30.
+    """
+    return make_apply_edits_result(
+        adds=[
+            make_edit_result_item(10, position=0),
+            make_edit_result_item(-1, success=False, error=ESRI_ITEM_ERROR, position=1),
+            make_edit_result_item(
+                -1, success=False, error=OUTCOME_UNKNOWN_ERROR, position=2
+            ),
+        ],
+        updates=[
+            make_edit_result_item(20, position=0),
+            make_edit_result_item(21, success=False, error=ESRI_ITEM_ERROR, position=1),
+        ],
+        deletes=[make_edit_result_item(30, position=0)],
+        inputs={
+            "adds": pd.DataFrame({"name": ["a", "b", "c"]}, index=[7, 7, 9]),
+            "updates": pd.DataFrame({"name": ["d", "e"], "OBJECTID": [20, 21]}),
+            "deletes": pd.DataFrame({"OBJECTID": [30]}),
+        },
+    )
+
+
+@pytest.fixture
+def geo_edit_result() -> ApplyEditsResult:
+    """An ApplyEditsResult with GeoDataFrame adds and a plain OBJECTID delete frame.
+
+    Adds (rows f0, f1): succeeded OID 10, failed (ESRI item error).
+    Deletes: succeeded OID 30.
+    """
+    return make_apply_edits_result(
+        adds=[
+            make_edit_result_item(10, position=0),
+            make_edit_result_item(-1, success=False, error=ESRI_ITEM_ERROR, position=1),
+        ],
+        deletes=[make_edit_result_item(30, position=0)],
+        inputs={"adds": make_geo_frame(2), "deletes": pd.DataFrame({"OBJECTID": [30]})},
+    )
+
+
+@pytest.fixture
+def empty_apply_edits_result() -> ApplyEditsResult:
+    """An ApplyEditsResult with no items."""
+    return make_apply_edits_result()
+
+
+@pytest.fixture
+def rolled_back_result() -> ApplyEditsResult:
+    """An ApplyEditsResult whose add batch was rolled back, plus one successful update."""
+    return make_apply_edits_result(
+        adds=[make_edit_result_item(-1, success=False, error=ESRI_ROLLBACK_ERROR)],
+        updates=[make_edit_result_item(20)],
+    )
+
+
+@pytest.fixture
 def query_op(mock_layer) -> QueryOperation:
     """A QueryOperation instance backed by mock_layer."""
     return QueryOperation(mock_layer)
@@ -309,6 +423,27 @@ def query_attachments_op(mock_layer) -> QueryAttachmentsOperation:
 def feature_layer(mock_client) -> FeatureLayer:
     """A real FeatureLayer backed by mock_client, at layer 0."""
     return FeatureLayer(client=mock_client, service_path=SERVICE_PATH, layer_id=0)
+
+
+@pytest.fixture
+def diff_query(feature_layer, mocker):
+    """Patch feature_layer's diff query to return three existing features.
+
+    OBJECTIDs 1, 2, 3 with Name Alice / Bob / Cy and Status A / B / C, in
+    the column order Status, Name, OBJECTID (not the order requested).
+    Returns the patched ``query`` mock.
+    """
+    existing = pd.DataFrame(
+        {
+            "Status": ["A", "B", "C"],
+            "Name": ["Alice", "Bob", "Cy"],
+            "OBJECTID": [1, 2, 3],
+        }
+    )
+    mocker.patch.object(feature_layer, "objectid_field", return_value="OBJECTID")
+    result = mocker.MagicMock()
+    result.to_frame.return_value = existing
+    return mocker.patch.object(feature_layer, "query", return_value=result)
 
 
 @pytest.fixture

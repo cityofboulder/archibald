@@ -7,11 +7,13 @@ from unittest.mock import AsyncMock
 
 from archibald.client import ArchieClient
 from archibald.exceptions import (
+    ConfigurationError,
     InvalidServiceURL,
     ServiceError,
     TokenExpiredError,
     TokenMissingError,
 )
+from archibald.serializers._features import DEFAULT_MAX_BATCH_BYTES, MAX_BATCH_BYTES
 from tests.helpers import StaticTokenAuth, inject_mock_client, make_response
 
 
@@ -365,7 +367,7 @@ class TestInit:
             auth=StaticTokenAuth("token"),
         )
 
-        assert client._limiter.total_tokens == 20
+        assert client._request_limiter.total_tokens == 20
 
     def test_custom_max_concurrent_requests_forwarded(self):
         client = ArchieClient(
@@ -374,7 +376,90 @@ class TestInit:
             max_concurrent_requests=2,
         )
 
-        assert client._limiter.total_tokens == 2
+        assert client._request_limiter.total_tokens == 2
+
+    def test_default_max_concurrent_jobs_is_4(self):
+        client = ArchieClient(
+            base_url="https://example.com/arcgis/rest/services",
+            auth=StaticTokenAuth("token"),
+        )
+
+        assert client._job_limiter.total_tokens == 4
+
+    def test_custom_max_concurrent_jobs_forwarded(self):
+        client = ArchieClient(
+            base_url="https://example.com/arcgis/rest/services",
+            auth=StaticTokenAuth("token"),
+            max_concurrent_jobs=8,
+        )
+
+        assert client._job_limiter.total_tokens == 8
+
+    @pytest.mark.parametrize(
+        "kwargs, expected",
+        [({}, 300.0), ({"job_timeout": 900.0}, 900.0)],
+        ids=["default", "custom"],
+    )
+    def test_job_timeout(self, kwargs, expected):
+        client = ArchieClient(
+            base_url="https://example.com/arcgis/rest/services",
+            auth=StaticTokenAuth("token"),
+            **kwargs,
+        )
+
+        assert client._job_timeout == expected
+
+    @pytest.mark.parametrize(
+        "kwargs, expected",
+        [
+            ({}, None),
+            ({"use_server_async": True}, True),
+            ({"use_server_async": False}, False),
+        ],
+        ids=["default-auto", "true", "false"],
+    )
+    def test_use_server_async(self, kwargs, expected):
+        client = ArchieClient(
+            base_url="https://example.com/arcgis/rest/services",
+            auth=StaticTokenAuth("token"),
+            **kwargs,
+        )
+
+        assert client._use_server_async is expected
+
+    @pytest.mark.parametrize(
+        "kwargs, expected",
+        [
+            ({}, DEFAULT_MAX_BATCH_BYTES),
+            ({"max_batch_bytes": 1}, 1),
+            ({"max_batch_bytes": MAX_BATCH_BYTES}, MAX_BATCH_BYTES),
+        ],
+        ids=["default", "minimum", "ceiling"],
+    )
+    def test_max_batch_bytes(self, kwargs, expected):
+        client = ArchieClient(
+            base_url="https://example.com/arcgis/rest/services",
+            auth=StaticTokenAuth("token"),
+            **kwargs,
+        )
+
+        assert client._max_batch_bytes == expected
+
+    @pytest.mark.parametrize(
+        "max_batch_bytes",
+        [0, -1, MAX_BATCH_BYTES + 1],
+        ids=["zero", "negative", "above-ceiling"],
+    )
+    def test_raises_for_out_of_range_max_batch_bytes(self, max_batch_bytes):
+        with pytest.raises(ConfigurationError, match="max_batch_bytes"):
+            ArchieClient(
+                base_url="https://example.com/arcgis/rest/services",
+                auth=StaticTokenAuth("token"),
+                max_batch_bytes=max_batch_bytes,
+            )
+
+    def test_job_limiter_is_separate_from_request_limiter(self, client):
+        assert client._job_limiter is not client._request_limiter
 
 
 class TestRequestConcurrencyLimit:

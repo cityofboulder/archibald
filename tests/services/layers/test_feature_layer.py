@@ -6,6 +6,7 @@ import pytest
 from archibald.exceptions import InvalidParameterError, LayerCapabilityError
 from archibald.services import FeatureLayer
 from tests.helpers import (
+    DEFAULT_BATCHING_KWARGS,
     make_attachments_result,
     make_apply_edits_result,
     make_attachment_result_item,
@@ -158,6 +159,9 @@ class TestApplyEdits:
             deletes=None,
             rollback_on_failure=True,
             apply_coded_values=False,
+            use_server_async=None,
+            max_batch_bytes=None,
+            poll_timeout=None,
         )
         assert result is expected
 
@@ -180,6 +184,9 @@ class TestApplyEdits:
             deletes=None,
             rollback_on_failure=True,
             apply_coded_values=True,
+            use_server_async=None,
+            max_batch_bytes=None,
+            poll_timeout=None,
         )
 
     @pytest.mark.anyio
@@ -266,6 +273,122 @@ class TestApplyEdits:
 
         assert len(recwarn) == 0
 
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "per_call,client_default,async_supported,expected",
+        [
+            (None, None, False, None),
+            (True, None, True, True),
+            (None, True, True, True),
+            (False, True, True, False),
+            pytest.param(
+                True,
+                None,
+                False,
+                False,
+                marks=pytest.mark.filterwarnings("ignore:.*async applyEdits"),
+            ),
+            pytest.param(
+                None,
+                True,
+                False,
+                False,
+                marks=pytest.mark.filterwarnings("ignore:.*async applyEdits"),
+            ),
+        ],
+        ids=[
+            "default-auto",
+            "per-call-true-supported",
+            "client-true-supported",
+            "per-call-false-overrides-client-true",
+            "per-call-true-unsupported",
+            "client-true-unsupported",
+        ],
+    )
+    async def test_forwards_effective_use_server_async_to_execute(
+        self,
+        feature_layer,
+        mock_apply_edits_execute,
+        mocker,
+        per_call,
+        client_default,
+        async_supported,
+        expected,
+    ):
+        feature_layer._client._use_server_async = client_default
+        mocker.patch.object(
+            feature_layer, "supports_async_apply_edits", return_value=async_supported
+        )
+
+        await feature_layer.apply_edits(deletes=[1], use_server_async=per_call)
+
+        assert mock_apply_edits_execute.call_args.kwargs["use_server_async"] is (
+            expected
+        )
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "per_call,client_default",
+        [(True, None), (None, True)],
+        ids=["per-call", "client"],
+    )
+    async def test_warns_when_server_async_requested_on_unsupported_layer(
+        self,
+        feature_layer,
+        mock_apply_edits_execute,
+        mocker,
+        per_call,
+        client_default,
+    ):
+        feature_layer._client._use_server_async = client_default
+        mocker.patch.object(
+            feature_layer, "supports_async_apply_edits", return_value=False
+        )
+
+        with pytest.warns(UserWarning, match=r"does not support async applyEdits"):
+            await feature_layer.apply_edits(deletes=[1], use_server_async=per_call)
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "per_call,client_default,async_supported",
+        [
+            (None, None, False),
+            (False, None, False),
+            (True, None, True),
+            (None, True, True),
+        ],
+        ids=["default-auto", "false-unsupported", "true-supported", "client-true"],
+    )
+    async def test_no_warning_when_server_async_request_is_honored(
+        self,
+        feature_layer,
+        mock_apply_edits_execute,
+        mocker,
+        recwarn,
+        per_call,
+        client_default,
+        async_supported,
+    ):
+        feature_layer._client._use_server_async = client_default
+        mocker.patch.object(
+            feature_layer, "supports_async_apply_edits", return_value=async_supported
+        )
+
+        await feature_layer.apply_edits(deletes=[1], use_server_async=per_call)
+
+        assert len(recwarn) == 0
+
+    @pytest.mark.anyio
+    async def test_forwards_max_batch_bytes_and_poll_timeout_to_execute(
+        self, feature_layer, mock_apply_edits_execute
+    ):
+        await feature_layer.apply_edits(
+            deletes=[1], max_batch_bytes=500_000, poll_timeout=60.0
+        )
+
+        assert mock_apply_edits_execute.call_args.kwargs["max_batch_bytes"] == 500_000
+        assert mock_apply_edits_execute.call_args.kwargs["poll_timeout"] == 60.0
+
 
 class TestAppend:
     @pytest.mark.anyio
@@ -278,7 +401,9 @@ class TestAppend:
 
         result = await feature_layer.append(df)
 
-        mock_apply.assert_called_once_with(adds=df, apply_coded_values=False)
+        mock_apply.assert_called_once_with(
+            adds=df, apply_coded_values=False, **DEFAULT_BATCHING_KWARGS
+        )
         assert result is expected
 
 
@@ -288,7 +413,13 @@ class TestUpsert:
         adds_df = pd.DataFrame({"Name": ["Alice"]})
         updates_df = pd.DataFrame({"Name": ["Bob"], "OBJECTID": [1]})
         mocker.patch.object(
-            feature_layer, "_diff", return_value=(adds_df, updates_df, [])
+            feature_layer,
+            "_diff",
+            return_value=(
+                adds_df,
+                updates_df,
+                pd.DataFrame(columns=["OBJECTID", "Name"]),
+            ),
         )
         mock_apply = mocker.patch.object(
             feature_layer, "apply_edits", return_value=make_apply_edits_result()
@@ -297,7 +428,10 @@ class TestUpsert:
         await feature_layer.upsert(adds_df, ["Name"])
 
         mock_apply.assert_called_once_with(
-            adds=adds_df, updates=updates_df, apply_coded_values=False
+            adds=adds_df,
+            updates=updates_df,
+            apply_coded_values=False,
+            **DEFAULT_BATCHING_KWARGS,
         )
 
     @pytest.mark.parametrize(
@@ -321,7 +455,13 @@ class TestUpsert:
             else pd.DataFrame(columns=["Name"])
         )
         mocker.patch.object(
-            feature_layer, "_diff", return_value=(adds_df, updates_df, [])
+            feature_layer,
+            "_diff",
+            return_value=(
+                adds_df,
+                updates_df,
+                pd.DataFrame(columns=["OBJECTID", "Name"]),
+            ),
         )
         mock_apply = mocker.patch.object(
             feature_layer, "apply_edits", return_value=make_apply_edits_result()
@@ -333,6 +473,7 @@ class TestUpsert:
             adds=None if adds_df.empty else adds_df,
             updates=None if updates_df.empty else updates_df,
             apply_coded_values=False,
+            **DEFAULT_BATCHING_KWARGS,
         )
 
 
@@ -341,9 +482,10 @@ class TestSync:
     async def test_routes_all_three(self, feature_layer, mocker):
         adds_df = pd.DataFrame({"Name": ["Alice"]})
         updates_df = pd.DataFrame({"Name": ["Bob"], "OBJECTID": [1]})
+        deletes_df = pd.DataFrame({"OBJECTID": [2, 3], "Name": ["Cy", "Dee"]})
         expected = make_apply_edits_result()
         mocker.patch.object(
-            feature_layer, "_diff", return_value=(adds_df, updates_df, [2, 3])
+            feature_layer, "_diff", return_value=(adds_df, updates_df, deletes_df)
         )
         mock_apply = mocker.patch.object(
             feature_layer, "apply_edits", return_value=expected
@@ -352,7 +494,11 @@ class TestSync:
         await feature_layer.sync(adds_df, ["Name"])
 
         mock_apply.assert_called_once_with(
-            adds=adds_df, updates=updates_df, deletes=[2, 3], apply_coded_values=False
+            adds=adds_df,
+            updates=updates_df,
+            deletes=deletes_df,
+            apply_coded_values=False,
+            **DEFAULT_BATCHING_KWARGS,
         )
 
     @pytest.mark.anyio
@@ -360,7 +506,13 @@ class TestSync:
         adds_df = pd.DataFrame({"Name": ["Alice"]})
         updates_df = pd.DataFrame({"Name": ["Bob"], "OBJECTID": [1]})
         mocker.patch.object(
-            feature_layer, "_diff", return_value=(adds_df, updates_df, [])
+            feature_layer,
+            "_diff",
+            return_value=(
+                adds_df,
+                updates_df,
+                pd.DataFrame(columns=["OBJECTID", "Name"]),
+            ),
         )
         mock_apply = mocker.patch.object(
             feature_layer, "apply_edits", return_value=make_apply_edits_result()
@@ -369,8 +521,49 @@ class TestSync:
         await feature_layer.sync(adds_df, ["Name"])
 
         mock_apply.assert_called_once_with(
-            adds=adds_df, updates=updates_df, deletes=None, apply_coded_values=False
+            adds=adds_df,
+            updates=updates_df,
+            deletes=None,
+            apply_coded_values=False,
+            **DEFAULT_BATCHING_KWARGS,
         )
+
+
+class TestEditWrappers:
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "method,extra_args",
+        [("append", ()), ("upsert", (["Name"],)), ("sync", (["Name"],))],
+        ids=["append", "upsert", "sync"],
+    )
+    async def test_forwards_batching_kwargs_to_apply_edits(
+        self, feature_layer, mocker, method, extra_args
+    ):
+        df = pd.DataFrame({"Name": ["Alice"]})
+        batching_kwargs = {
+            "rollback_on_failure": False,
+            "use_server_async": False,
+            "max_batch_bytes": 500_000,
+            "poll_timeout": 60.0,
+        }
+        mocker.patch.object(
+            feature_layer,
+            "_diff",
+            return_value=(
+                df,
+                pd.DataFrame(columns=["Name"]),
+                pd.DataFrame(columns=["OBJECTID", "Name"]),
+            ),
+        )
+        mock_apply = mocker.patch.object(
+            feature_layer, "apply_edits", return_value=make_apply_edits_result()
+        )
+
+        await getattr(feature_layer, method)(df, *extra_args, **batching_kwargs)
+
+        assert {
+            key: mock_apply.call_args.kwargs[key] for key in batching_kwargs
+        } == batching_kwargs
 
 
 class TestDiff:
@@ -383,11 +576,11 @@ class TestDiff:
         mock_result.to_frame.return_value = existing_df
         mocker.patch.object(feature_layer, "query", return_value=mock_result)
 
-        adds, updates, delete_oids = await feature_layer._diff(input_df, ["Name"])
+        adds, updates, deletes = await feature_layer._diff(input_df, ["Name"])
 
         assert sorted(adds["Name"].tolist()) == ["Alice", "Bob"]
         assert updates.empty
-        assert delete_oids == []
+        assert deletes.empty
 
     @pytest.mark.anyio
     async def test_matched_rows_become_updates_with_objectid(
@@ -400,12 +593,12 @@ class TestDiff:
         mock_result.to_frame.return_value = existing_df
         mocker.patch.object(feature_layer, "query", return_value=mock_result)
 
-        adds, updates, delete_oids = await feature_layer._diff(input_df, ["Name"])
+        adds, updates, deletes = await feature_layer._diff(input_df, ["Name"])
 
         assert adds.empty
         assert updates["Name"].tolist() == ["Alice"]
         assert updates["OBJECTID"].tolist() == [5]
-        assert delete_oids == []
+        assert deletes.empty
 
     @pytest.mark.anyio
     async def test_unmatched_existing_rows_are_deletes(self, feature_layer, mocker):
@@ -416,12 +609,12 @@ class TestDiff:
         mock_result.to_frame.return_value = existing_df
         mocker.patch.object(feature_layer, "query", return_value=mock_result)
 
-        adds, updates, delete_oids = await feature_layer._diff(input_df, ["Name"])
+        adds, updates, deletes = await feature_layer._diff(input_df, ["Name"])
 
         assert adds.empty
         assert updates["Name"].tolist() == ["Alice"]
         assert updates["OBJECTID"].tolist() == [1]
-        assert delete_oids == [2]
+        assert deletes["OBJECTID"].tolist() == [2]
 
     @pytest.mark.anyio
     async def test_composite_key_uses_all_fields(self, feature_layer, mocker):
@@ -443,14 +636,12 @@ class TestDiff:
         mock_result.to_frame.return_value = existing_df
         mocker.patch.object(feature_layer, "query", return_value=mock_result)
 
-        adds, updates, delete_oids = await feature_layer._diff(
-            input_df, ["Name", "Status"]
-        )
+        adds, updates, deletes = await feature_layer._diff(input_df, ["Name", "Status"])
 
         assert adds["Status"].tolist() == ["Inactive"]
         assert updates["Status"].tolist() == ["Active"]
         assert updates["OBJECTID"].tolist() == [1]
-        assert delete_oids == []
+        assert deletes.empty
 
     @pytest.mark.anyio
     async def test_empty_input_df_produces_all_deletes(self, feature_layer, mocker):
@@ -461,11 +652,42 @@ class TestDiff:
         mock_result.to_frame.return_value = existing_df
         mocker.patch.object(feature_layer, "query", return_value=mock_result)
 
-        adds, updates, delete_oids = await feature_layer._diff(input_df, ["Name"])
+        adds, updates, deletes = await feature_layer._diff(input_df, ["Name"])
 
         assert adds.empty
         assert updates.empty
-        assert delete_oids == [1, 2]
+        assert deletes["OBJECTID"].tolist() == [1, 2]
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "key_fields, expected_columns",
+        [
+            (["Name", "Status"], ["OBJECTID", "Name", "Status"]),
+            (["Status", "Name"], ["OBJECTID", "Status", "Name"]),
+        ],
+        ids=["name-then-status", "status-then-name"],
+    )
+    async def test_deletes_hold_objectid_then_key_fields_when_layer_orders_differently(
+        self, feature_layer, diff_query, key_fields, expected_columns
+    ):
+        input_df = pd.DataFrame({"Name": ["Alice"], "Status": ["A"]})
+
+        _, _, deletes = await feature_layer._diff(input_df, key_fields)
+
+        assert list(deletes.columns) == expected_columns
+        assert deletes["OBJECTID"].tolist() == [2, 3]
+
+    @pytest.mark.anyio
+    async def test_query_requests_objectid_then_key_fields_when_diffing(
+        self, feature_layer, diff_query
+    ):
+        input_df = pd.DataFrame({"Name": ["Alice"], "Status": ["A"]})
+
+        await feature_layer._diff(input_df, ["Status", "Name"])
+
+        diff_query.assert_called_once_with(
+            out_fields=["OBJECTID", "Status", "Name"], return_geometry=False
+        )
 
 
 class TestAddAttachmentMethods:

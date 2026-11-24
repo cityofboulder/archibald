@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-24
+
+### Changed
+
+- Async `applyEdits` batches are now bounded to `max_concurrent_jobs` (default 4) server-side jobs at a time, shared across everything using the same `ArchieClient`. Previously every batch was submitted at once, so a large edit queued dozens or hundreds of jobs on the server and the later batches could exhaust `poll_timeout` while still waiting their turn; the resulting `TimeoutError` cancelled the remaining batches while the server went on to commit them. `poll_timeout` now measures a job's own run time, starting once it holds a job permit. Total wall time is unchanged when the server was the bottleneck. Raise `max_concurrent_jobs` if the target service runs more jobs in parallel than the default.
+- `ApplyEditsOperation.execute()`'s `poll_timeout` now defaults to the client's `job_timeout` (300 s unless changed) instead of a fixed 300 s. Passing it explicitly behaves as before.
+- The private `ArchieClient._limiter` and `_timeout` attributes are now `_request_limiter` and `_request_timeout`, to distinguish them from the new job limiter and timeout. The public `timeout` and `max_concurrent_requests` constructor parameters are unchanged.
+
+### Fixed
+
+- `add_attachments()` and `update_attachments()` no longer abort the batch when one item fails for a non-ESRI reason (unreadable file, timeout or connection error, HTTP error status, malformed response, failed token refresh). Previously the exception cancelled every sibling upload and discarded completed results. These are now `success=False` items in `AttachmentsResult`, one per input, in order.
+- `delete_attachments()` now returns a failed request as `success=False` items, one per attachment in that feature's request, instead of raising and cancelling the other features' deletes. An attachment missing from the server's response is also a `success=False` item rather than a `KeyError`. Callers that wrapped it in `try/except ArcGISError` should check `has_failures` instead.
+- `apply_edits()` no longer raises or cancels the other batches when one batch fails. That covers a rolled-back batch, a transport or HTTP error, and an async job that fails or times out. Previously the first failure cancelled sibling batches while the server might still commit them, discarded results from batches that had already succeeded, and surfaced as an `ExceptionGroup` that `except ServiceError` could not catch. Each edit in a failed batch is now a `success=False` item in `ApplyEditsResult`, in input order. Callers that wrapped `apply_edits()` in `try/except` should check `has_failures` instead.
+- Async `applyEdits` polling now retries a status or `resultUrl` request that fails with a network error or a 5xx response, using the usual backoff, until `poll_timeout` runs out. Previously one failed status check raised and abandoned a job that was still running on the server. ESRI errors and 4xx responses still raise immediately.
+- `QueryOperation` now sends `/query` requests (initial, count, and paging) as POST with a form-encoded body instead of GET. Long `where` clauses, such as large `OBJECTID IN (...)` lists, previously exceeded server and proxy URL length limits and failed.
+
+### Added
+
+- `use_server_async` on `apply_edits()`, `append()`, `upsert()`, `sync()`, `ApplyEditsOperation.execute()`, and `ArchieClient`.
+    - `None` (the default) keeps today's behavior: async only for multi-batch edits on layers that advertise `supportsAsyncApplyEdits`.
+    - `True` submits every batch as a server-side async job. On a layer without async support, `FeatureLayer` methods warn and send synchronously instead.
+    - `False` always sends synchronously. A failed synchronous batch reports a definite outcome unless the request itself times out, which makes failures easier to sort and retry.
+    - A value passed to an individual call takes precedence over the client's.
+- `max_batch_bytes` in the same places sets the approximate size limit for each `applyEdits` request. It defaults to 1.8 MB, as before, and accepts values from 1 byte to 6 MB. An out-of-range value raises `ConfigurationError` from `ArchieClient` and `InvalidParameterError` per call.
+- `apply_edits()`, `append()`, `upsert()`, and `sync()` also accept `poll_timeout`, which was previously available only on `ApplyEditsOperation.execute()`.
+- `append()`, `upsert()`, and `sync()` accept `rollback_on_failure` (default `True`) and pass it to `apply_edits()`, which already accepted it.
+- `ArchieClient` accepts `max_concurrent_jobs` (default 4) and `job_timeout` (default 300 s) to bound concurrent async server-side jobs and set their default per-job timeout.
+- Failed `applyEdits` items not built from an ESRI error dict carry `error["exception"]` and `error["outcome_unknown"]`, matching attachments. Items from a failed async batch also carry `error["status_url"]`. Retrying an add whose outcome is unknown could create a duplicate.
+- Failed attachment items not built from an ESRI error dict carry `error["exception"]` (exception class name) and `error["outcome_unknown"]`, which is `True` when the server may have applied the change despite the failure (e.g. a read timeout or 5xx). Retrying an unknown `add_attachments()` could create a duplicate.
+- `ApplyEditsResult.to_frame()` returns one row per edit: the input row it came from followed by `_edit_`-prefixed metadata (kind, status, OBJECTID, GlobalID, and the error dict flattened into columns). `include_input=False` gives the metadata alone and `include_metadata=False` the input rows alone. A GeoDataFrame input gives a GeoDataFrame back.
+- `ApplyEditsResult.filter(kinds=, statuses=)` returns a result with only the matching edits, e.g. `edits.filter(kinds="adds", statuses="failed").to_frame(include_metadata=False)` for the rows to retry.
+- `EditResultItem.status` is `"succeeded"`, `"failed"`, or `"unknown"` (the server may have applied it). `EditResultItem.kind` and `EditResultItem.position` give an `applyEdits` item's kind and its row position in that kind's input; both are `None` on attachment results. New `EditKind` and `EditStatus` type aliases are exported from `archibald`.
+- `sync()` passes the features to delete with their key fields, so their key values appear in `to_frame()`.
+
+### Deprecated
+
+- `ApplyEditsResult.merge()` and `ApplyEditsResult.from_esri_response()` emit `DeprecationWarning` and will be removed in 2.0. Both only assemble results inside `applyEdits`; results come from the `FeatureLayer` edit methods.
+
 ## [1.2.6] - 2026-11-22
 
 ### Fixed
@@ -173,7 +211,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - When an async `applyEdits` job completes, the operation now follows the `resultUrl` returned in the status body to fetch the actual edit results (`addResults`, `updateResults`, `deleteResults`). Previously the status body itself was parsed as the result, which always produced empty result sets.
 - Async polling loop is now bounded by `anyio.fail_after`; previously it could spin indefinitely if the server never returned a terminal status.
 
-[Unreleased]: https://github.com/cityofboulder/archibald/compare/v1.2.6...HEAD
+[Unreleased]: https://github.com/cityofboulder/archibald/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/cityofboulder/archibald/compare/v1.2.6...v1.3.0
 [1.2.6]: https://github.com/cityofboulder/archibald/compare/v1.2.5...v1.2.6
 [1.2.5]: https://github.com/cityofboulder/archibald/compare/v1.2.4...v1.2.5
 [1.2.4]: https://github.com/cityofboulder/archibald/compare/v1.2.3...v1.2.4

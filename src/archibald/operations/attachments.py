@@ -8,7 +8,8 @@ from typing import TYPE_CHECKING, BinaryIO, Iterable
 
 import anyio
 
-from archibald.exceptions import ArcGISError, InvalidParameterError
+from archibald.errors import failed_items, is_outcome_unknown
+from archibald.exceptions import InvalidParameterError
 from archibald.models.attachments_result import AttachmentsResult
 from archibald.models.edit_result_item import EditResultItem
 
@@ -26,10 +27,20 @@ class BaseAttachmentUploadOperation:
     reference to its owning FeatureLayer to access the client and layer path.
     Instantiated once at FeatureLayer.__init__ time.
 
-    ESRI rejects some uploads outright (e.g. unsupported file types, see
-    https://developers.arcgis.com/documentation/glossary/attachment/). Such
-    rejections are captured per item as ``success=False`` results rather than
-    raised, so one bad file never aborts the other concurrent uploads.
+    Per-item problems never abort the batch. ESRI rejects some uploads outright
+    (e.g. unsupported file types, see
+    https://developers.arcgis.com/documentation/glossary/attachment/), and a
+    single file can also fail locally or in transit (unreadable file, transport
+    error, HTTP error status, malformed response). All of these are captured
+    per item as ``success=False`` results rather than raised, so one bad file
+    never aborts the other concurrent uploads. Failures that did not come from
+    an ESRI error dict carry ``error["exception"]`` (the exception class name)
+    and ``error["outcome_unknown"]``, which is True when the request may have
+    reached the server and the file could have been attached anyway.
+
+    Job-level problems (authentication, a missing layer, an unsupported layer
+    capability, invalid arguments) are not handled here; FeatureLayer and input
+    validation raise them before any upload starts.
     """
 
     _endpoint: str
@@ -70,7 +81,9 @@ class BaseAttachmentUploadOperation:
         Returns:
             AttachmentsResult with one result per input item, in input order.
             Items ESRI rejected (e.g. unsupported file types) appear as
-            ``success=False`` results carrying the server's error dict.
+            ``success=False`` results carrying the server's error dict. Any
+            other per-item failure also appears as a ``success=False`` result
+            (see the class docstring).
 
         Raises:
             InvalidParameterError: If any iterables differ in length, or if a
@@ -209,12 +222,19 @@ class BaseAttachmentUploadOperation:
             EditResultItem parsed from the ``f"{self._endpoint}Result"`` response.
             If ESRI rejects the request with an error envelope (e.g. an
             unsupported file type), a ``success=False`` item carrying the raw
-            server error dict is returned instead of raising. Its ``object_id``
-            is ``-1``.
+            server error dict is returned instead of raising. Any other
+            exception (file read, transport, HTTP status, malformed response)
+            is likewise returned as a ``success=False`` item built by
+            ``EditResultItem._from_exception``, with ``error["outcome_unknown"]``
+            set when the server may have applied the request anyway (see
+            ``is_outcome_unknown``). In both cases ``object_id`` is ``-1``.
         """
         endpoint = f"{self._layer._layer_path}/{object_id}/{self._endpoint}"
         data = {} if attachment_id is None else {"attachmentId": attachment_id}
-        body = await self._read_file(file)
+        try:
+            body = await self._read_file(file)
+        except Exception as exc:
+            return EditResultItem._from_exception(exc)
         try:
             response = await self._layer._client.post(
                 endpoint=endpoint,
@@ -222,9 +242,9 @@ class BaseAttachmentUploadOperation:
                 files={"attachment": (filename, body, content_type)},
             )
             item = response.json()[f"{self._endpoint}Result"]
-        except ArcGISError as exc:
-            item = exc.raw_response
-        return EditResultItem._from_esri(item)  # type: ignore[arg-type]
+        except Exception as exc:
+            return failed_items(exc, [-1], outcome_unknown=is_outcome_unknown(exc))[0]
+        return EditResultItem._from_esri(item)
 
     @staticmethod
     async def _read_file(file: Path | BinaryIO | bytes) -> bytes:
@@ -261,6 +281,12 @@ class DeleteAttachmentsOperation:
     Accepts flat parallel iterables of feature OBJECTIDs and attachment IDs, groups
     them by OBJECTID internally, and fires one batched DELETE request per unique
     feature concurrently. Instantiated once at FeatureLayer.__init__ time.
+
+    A failed request is captured as ``success=False`` results, one per attachment
+    in that feature's request, rather than raised, so one failing feature never
+    aborts the other deletes. Failures that did not come from an ESRI error dict
+    carry ``error["exception"]`` and ``error["outcome_unknown"]``, which is True
+    when the attachments may have been deleted anyway.
     """
 
     def __init__(self, layer: FeatureLayer) -> None:
@@ -284,6 +310,9 @@ class DeleteAttachmentsOperation:
 
         Returns:
             AttachmentsResult with one result per input pair, in input order.
+            Pairs whose request failed, or that the server omitted from its
+            response, appear as ``success=False`` results whose ``object_id`` is
+            the attachment ID.
 
         Raises:
             InvalidParameterError: If object_ids and attachment_ids differ in length.
@@ -308,7 +337,13 @@ class DeleteAttachmentsOperation:
             group_results = await self._delete_for_object(oid, group_att_ids)
             result_by_att_id = {r.object_id: r for r in group_results}
             for orig_idx, att_id in pairs:
-                results[orig_idx] = result_by_att_id[att_id]
+                results[orig_idx] = result_by_att_id.get(att_id) or (
+                    EditResultItem._from_exception(
+                        LookupError(f"No result returned for attachment {att_id}."),
+                        object_id=att_id,
+                        outcome_unknown=True,
+                    )
+                )
 
         async with anyio.create_task_group() as tg:
             for oid, pairs in groups.items():
@@ -329,14 +364,22 @@ class DeleteAttachmentsOperation:
 
         Returns:
             List of EditResultItem parsed from the deleteAttachmentResults response,
-            in the order the server returns them.
+            in the order the server returns them. If the request fails (ESRI error
+            envelope, transport error, HTTP status, malformed response), one
+            ``success=False`` item per attachment ID is returned instead of
+            raising, each with ``object_id`` set to its attachment ID. Items
+            built from an exception carry ``error["outcome_unknown"]`` (see
+            ``is_outcome_unknown``).
         """
         endpoint = f"{self._layer._layer_path}/{object_id}/deleteAttachments"
-        response = await self._layer._client.post(
-            endpoint=endpoint,
-            data={"attachmentIds": ",".join(str(i) for i in attachment_ids)},
-        )
-        return [
-            EditResultItem._from_esri(r)
-            for r in response.json()["deleteAttachmentResults"]
-        ]
+        try:
+            response = await self._layer._client.post(
+                endpoint=endpoint,
+                data={"attachmentIds": ",".join(str(i) for i in attachment_ids)},
+            )
+            items = response.json()["deleteAttachmentResults"]
+        except Exception as exc:
+            return failed_items(
+                exc, attachment_ids, outcome_unknown=is_outcome_unknown(exc)
+            )
+        return [EditResultItem._from_esri(r) for r in items]

@@ -5,7 +5,13 @@ import httpx
 
 from archibald.auth import ArcGISAuth
 from archibald.errors import handle_esri_errors
-from archibald.exceptions import InvalidServiceURL, TokenExpiredError, TokenMissingError
+from archibald.exceptions import (
+    ConfigurationError,
+    InvalidServiceURL,
+    TokenExpiredError,
+    TokenMissingError,
+)
+from archibald.serializers._features import DEFAULT_MAX_BATCH_BYTES, MAX_BATCH_BYTES
 
 
 class ArchieClient:
@@ -16,7 +22,9 @@ class ArchieClient:
     token refresh on 498/499 responses, and raises for HTTP-level errors before
     ESRI envelope errors are inspected. Bounds the number of concurrent
     in-flight requests so fan-out callers (batched applyEdits, paged query,
-    bulk attachment operations) can't overrun the connection pool.
+    bulk attachment operations) can't overrun the connection pool, and
+    separately bounds concurrent server-side async jobs so a large applyEdits
+    can't queue every batch on the server at once.
 
     Can be used as an async context manager or instantiated directly; in the
     latter case call aclose() manually when done.
@@ -28,6 +36,10 @@ class ArchieClient:
         auth: ArcGISAuth,
         timeout: float | httpx.Timeout | None = 60.0,
         max_concurrent_requests: int = 20,
+        max_concurrent_jobs: int = 4,
+        job_timeout: float = 300.0,
+        use_server_async: bool | None = None,
+        max_batch_bytes: int = DEFAULT_MAX_BATCH_BYTES,
     ) -> None:
         """Construct an ArchieClient.
 
@@ -46,11 +58,49 @@ class ArchieClient:
                 attachments a caller fans out. Raise or lower it based on what
                 the target ArcGIS Server instance's own service concurrency
                 is known to tolerate.
+            max_concurrent_jobs: Maximum number of async server-side jobs
+                (e.g. async applyEdits batches) alive at once, shared across
+                all callers and layers using this client. A job permit is held
+                from the POST until the result is fetched, so this bounds the
+                server's job queue rather than HTTP requests. Set it slightly
+                above the number of jobs the target service runs in parallel;
+                too high reintroduces queueing (and job_timeout expirations),
+                too low leaves the server idle between jobs. Has no effect on
+                batches sent synchronously (see use_server_async).
+            job_timeout: Default maximum seconds to wait for one async job to
+                complete once it holds a job permit. Queue time behind other
+                jobs from this client is not counted. Individual operations
+                may override it per call. Has no effect on batches sent
+                synchronously.
+            use_server_async: Default for whether applyEdits batches use
+                server-side async processing. None (the default) auto-detects:
+                async only when an edit spans more than one batch and the layer
+                advertises supportsAsyncApplyEdits. True sends every batch
+                async; False always sends synchronously, which trades async's
+                resilience on slow commits for definite per-batch outcomes.
+                Individual calls may override it.
+            max_batch_bytes: Default soft upper bound, in bytes, for each
+                applyEdits POST body. Smaller batches commit faster and put
+                fewer edits at stake when one fails. Individual calls may
+                override it.
+
+        Raises:
+            ConfigurationError: If max_batch_bytes is not positive or exceeds
+                MAX_BATCH_BYTES.
         """
+        if not 0 < max_batch_bytes <= MAX_BATCH_BYTES:
+            raise ConfigurationError(
+                f"max_batch_bytes must be between 1 and {MAX_BATCH_BYTES}; "
+                f"got {max_batch_bytes}."
+            )
         self._base_url = self._validate_base_url(base_url.rstrip("/"))
         self._auth = auth
-        self._timeout = timeout
-        self._limiter = anyio.CapacityLimiter(max_concurrent_requests)
+        self._request_timeout = timeout
+        self._request_limiter = anyio.CapacityLimiter(max_concurrent_requests)
+        self._job_timeout = job_timeout
+        self._job_limiter = anyio.CapacityLimiter(max_concurrent_jobs)
+        self._use_server_async = use_server_async
+        self._max_batch_bytes = max_batch_bytes
         self._client: httpx.AsyncClient | None = None
 
     def _validate_base_url(self, url: str) -> str:
@@ -68,7 +118,9 @@ class ArchieClient:
     async def _get_client(self) -> httpx.AsyncClient:
         """Return the shared httpx.AsyncClient, creating it lazily on first call."""
         if self._client is None:
-            self._client = httpx.AsyncClient(auth=self._auth, timeout=self._timeout)
+            self._client = httpx.AsyncClient(
+                auth=self._auth, timeout=self._request_timeout
+            )
         return self._client
 
     def _build_url(self, url: str | None, endpoint: str | None) -> str:
@@ -97,14 +149,14 @@ class ArchieClient:
         """Execute an HTTP request and return the response.
 
         URL construction and format enforcement are the caller's responsibility.
-        The network call is gated by self._limiter so no more than
+        The network call is gated by self._request_limiter so no more than
         max_concurrent_requests are in flight at once, regardless of how many
         callers fan out concurrently. Raises for HTTP-level errors before
         returning; @handle_esri_errors then inspects the body for ESRI
         envelope errors.
         """
         client = await self._get_client()
-        async with self._limiter:
+        async with self._request_limiter:
             response = await client.request(method, url, **kwargs)
         response.raise_for_status()
         return response

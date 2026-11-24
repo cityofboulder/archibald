@@ -2,17 +2,29 @@
 
 from __future__ import annotations
 
+import geopandas as gpd
+import pandas as pd
 import pytest
 
+from archibald.exceptions import InvalidParameterError
 from archibald.models.apply_edits_result import ApplyEditsResult
-from tests.helpers import make_apply_edits_result, make_edit_result_item
+from tests.helpers import (
+    CORE_FRAME_DTYPES,
+    DEPRECATED_METHOD_CASES,
+    ESRI_ROLLBACK_ERROR,
+    make_apply_edits_result,
+    make_edit_result_item,
+    make_geo_frame,
+    make_single_kind_result,
+    positions_by_kind,
+)
 
 
 class TestApplyEditsResultFromEsriResponse:
     def test_returns_correct_type(self):
         body: dict = {}
 
-        result = ApplyEditsResult.from_esri_response(body)
+        result = ApplyEditsResult._from_esri_response(body)
 
         assert isinstance(result, ApplyEditsResult)
 
@@ -28,7 +40,7 @@ class TestApplyEditsResultFromEsriResponse:
     def test_parses_result_list(self, esri_key, attr):
         body = {esri_key: [{"objectId": 1, "success": True}]}
 
-        result = ApplyEditsResult.from_esri_response(body)
+        result = ApplyEditsResult._from_esri_response(body)
 
         items = getattr(result, attr)
         assert len(items) == 1
@@ -37,7 +49,7 @@ class TestApplyEditsResultFromEsriResponse:
     def test_defaults_empty_when_key_absent(self):
         body: dict = {}
 
-        result = ApplyEditsResult.from_esri_response(body)
+        result = ApplyEditsResult._from_esri_response(body)
 
         assert result.add_results == []
         assert result.update_results == []
@@ -52,7 +64,7 @@ class TestApplyEditsResultFromEsriResponse:
             ]
         }
 
-        result = ApplyEditsResult.from_esri_response(body)
+        result = ApplyEditsResult._from_esri_response(body)
 
         assert [r.object_id for r in result.add_results] == [10, 20, 30]
 
@@ -73,8 +85,8 @@ class TestApplyEditsResultHasFailures:
         ids=["add-fails", "update-fails", "delete-fails"],
     )
     def test_has_failures_true_when_any_item_fails(self, kwarg):
-        result = make_apply_edits_result(
-            **{kwarg: [make_edit_result_item(1, success=False)]}
+        result = make_single_kind_result(
+            kwarg, [make_edit_result_item(1, success=False)]
         )
 
         assert result.has_failures is True
@@ -105,7 +117,7 @@ class TestApplyEditsResultFailedProperties:
             make_edit_result_item(1, success=True),
             make_edit_result_item(2, success=False, error={"code": 1001}),
         ]
-        result = make_apply_edits_result(**{kwarg: items})
+        result = make_single_kind_result(kwarg, items)
 
         failures = getattr(result, prop)
 
@@ -132,8 +144,8 @@ class TestApplyEditsResultFailedProperties:
         ],
     )
     def test_failed_property_does_not_cross_contaminate(self, prop, failure_kwarg):
-        result = make_apply_edits_result(
-            **{failure_kwarg: [make_edit_result_item(1, success=False)]}
+        result = make_single_kind_result(
+            failure_kwarg, [make_edit_result_item(1, success=False)]
         )
 
         assert getattr(result, prop) == []
@@ -148,8 +160,8 @@ class TestApplyEditsResultFailedProperties:
         ids=["adds", "updates", "deletes"],
     )
     def test_failed_property_empty_when_no_failures(self, prop, kwarg):
-        result = make_apply_edits_result(
-            **{kwarg: [make_edit_result_item(1), make_edit_result_item(2)]}
+        result = make_single_kind_result(
+            kwarg, [make_edit_result_item(1), make_edit_result_item(2)]
         )
 
         assert getattr(result, prop) == []
@@ -166,15 +178,15 @@ class TestApplyEditsResultMerge:
         ids=["adds", "updates", "deletes"],
     )
     def test_merge_concatenates_results_in_order(self, kwarg, attr):
-        r1 = make_apply_edits_result(**{kwarg: [make_edit_result_item(1)]})
-        r2 = make_apply_edits_result(**{kwarg: [make_edit_result_item(2)]})
+        r1 = make_single_kind_result(kwarg, [make_edit_result_item(1)])
+        r2 = make_single_kind_result(kwarg, [make_edit_result_item(2)])
 
-        merged = ApplyEditsResult.merge([r1, r2])
+        merged = ApplyEditsResult._merge([r1, r2])
 
         assert [r.object_id for r in getattr(merged, attr)] == [1, 2]
 
     def test_merge_empty_list_returns_empty_result(self):
-        merged = ApplyEditsResult.merge([])
+        merged = ApplyEditsResult._merge([])
 
         assert merged.add_results == []
         assert merged.update_results == []
@@ -187,7 +199,7 @@ class TestApplyEditsResultMerge:
             deletes=[make_edit_result_item(3)],
         )
 
-        merged = ApplyEditsResult.merge([r])
+        merged = ApplyEditsResult._merge([r])
 
         assert len(merged.add_results) == 1
         assert len(merged.update_results) == 1
@@ -198,7 +210,7 @@ class TestApplyEditsResultMerge:
             make_apply_edits_result(adds=[make_edit_result_item(i)]) for i in range(5)
         ]
 
-        merged = ApplyEditsResult.merge(results)
+        merged = ApplyEditsResult._merge(results)
 
         assert len(merged.add_results) == 5
 
@@ -207,16 +219,398 @@ class TestApplyEditsResultMerge:
         r2 = make_apply_edits_result(adds=[make_edit_result_item(2)])
         original_r1_adds = list(r1.add_results)
 
-        ApplyEditsResult.merge([r1, r2])
+        ApplyEditsResult._merge([r1, r2])
 
         assert r1.add_results == original_r1_adds
+        assert [i.position for i in r1.add_results + r2.add_results] == [None, None]
+
+    def test_merge_numbers_items_per_kind_when_batches_are_merged(self):
+        batches = [
+            ApplyEditsResult(
+                add_results=[make_edit_result_item(1), make_edit_result_item(2)],
+                update_results=[make_edit_result_item(9)],
+                delete_results=[],
+            ),
+            ApplyEditsResult(
+                add_results=[make_edit_result_item(3)],
+                update_results=[],
+                delete_results=[make_edit_result_item(7)],
+            ),
+        ]
+
+        merged = ApplyEditsResult._merge(batches)
+
+        assert [(i.kind, i.position, i.object_id) for i in merged._items] == [
+            ("adds", 0, 1),
+            ("adds", 1, 2),
+            ("adds", 2, 3),
+            ("updates", 0, 9),
+            ("deletes", 0, 7),
+        ]
 
     def test_merge_batch_with_empty_sublists_does_not_inflate_result(self):
         r1 = make_apply_edits_result(adds=[make_edit_result_item(1)])
         r2 = make_apply_edits_result()
 
-        merged = ApplyEditsResult.merge([r1, r2])
+        merged = ApplyEditsResult._merge([r1, r2])
 
         assert len(merged.add_results) == 1
         assert len(merged.update_results) == 0
         assert len(merged.delete_results) == 0
+
+
+class TestApplyEditsResultDeprecatedMethods:
+    @pytest.mark.parametrize("name, arg", DEPRECATED_METHOD_CASES)
+    def test_public_method_warns_when_called(self, name, arg):
+        method = getattr(ApplyEditsResult, name)
+
+        with pytest.warns(DeprecationWarning, match=f"{name} is deprecated"):
+            method(arg)
+
+    @pytest.mark.parametrize("name, arg", DEPRECATED_METHOD_CASES)
+    def test_public_method_matches_private_method_when_called(self, name, arg):
+        expected = getattr(ApplyEditsResult, f"_{name}")(arg)
+
+        with pytest.warns(DeprecationWarning):
+            result = getattr(ApplyEditsResult, name)(arg)
+
+        assert result == expected
+
+
+class TestApplyEditsResultEquality:
+    def test_results_are_equal_when_only_inputs_differ(self):
+        item = make_edit_result_item(1)
+        with_inputs = make_apply_edits_result(
+            adds=[item], inputs={"adds": pd.DataFrame({"a": [1]})}
+        )
+
+        result = with_inputs == make_apply_edits_result(adds=[item])
+
+        assert result is True
+
+
+class TestApplyEditsResultFilter:
+    @pytest.mark.parametrize(
+        "kwargs, expected",
+        [
+            ({}, ([0, 1, 2], [0, 1], [0])),
+            ({"kinds": "adds"}, ([0, 1, 2], [], [])),
+            ({"kinds": ["updates", "deletes"]}, ([], [0, 1], [0])),
+            ({"statuses": "failed"}, ([1], [1], [])),
+            ({"statuses": ["succeeded", "unknown"]}, ([0, 2], [0], [0])),
+            ({"kinds": "updates", "statuses": "failed"}, ([], [1], [])),
+        ],
+        ids=[
+            "no-filter",
+            "one-kind",
+            "kind-list",
+            "one-status",
+            "status-list",
+            "kind-and-status",
+        ],
+    )
+    def test_filter_keeps_matching_items_when_criteria_given(
+        self, mixed_status_result, kwargs, expected
+    ):
+        result = mixed_status_result.filter(**kwargs)
+
+        assert positions_by_kind(result) == expected
+
+    def test_filter_carries_inputs_when_filtering(self, mixed_status_result):
+        result = mixed_status_result.filter(statuses="failed")
+
+        assert result._inputs is mixed_status_result._inputs
+
+    def test_filter_leaves_original_unchanged_when_filtering(self, mixed_status_result):
+        mixed_status_result.filter(kinds="adds", statuses="failed")
+
+        assert positions_by_kind(mixed_status_result) == ([0, 1, 2], [0, 1], [0])
+
+    @pytest.mark.parametrize(
+        "kwargs, match",
+        [
+            ({"kinds": "add"}, r"Invalid kinds: add\. Expected one of: adds, updates"),
+            (
+                {"statuses": ["failed", "error", "bad"]},
+                r"Invalid statuses: bad, error\. Expected one of: succeeded",
+            ),
+        ],
+        ids=["invalid-kind", "invalid-statuses"],
+    )
+    def test_filter_raises_when_value_is_invalid(
+        self, mixed_status_result, kwargs, match
+    ):
+        with pytest.raises(InvalidParameterError, match=match):
+            mixed_status_result.filter(**kwargs)
+
+
+class TestApplyEditsResultMetadataFrame:
+    @pytest.mark.parametrize(
+        "result_fixture",
+        ["mixed_status_result", "empty_apply_edits_result"],
+        ids=["mixed", "empty"],
+    )
+    def test_core_columns_have_fixed_dtypes_when_built(self, request, result_fixture):
+        result = request.getfixturevalue(result_fixture)
+
+        frame = result._metadata_frame()
+
+        core = frame.columns[: len(CORE_FRAME_DTYPES)]
+        assert {c: str(frame[c].dtype) for c in core} == CORE_FRAME_DTYPES
+
+    def test_rows_follow_adds_updates_deletes_order_when_built(
+        self, mixed_status_result
+    ):
+        frame = mixed_status_result._metadata_frame()
+
+        assert frame[["kind", "status", "object_id", "position"]].values.tolist() == [
+            ["adds", "succeeded", 10, 0],
+            ["adds", "failed", -1, 1],
+            ["adds", "unknown", -1, 2],
+            ["updates", "succeeded", 20, 0],
+            ["updates", "failed", 21, 1],
+            ["deletes", "succeeded", 30, 0],
+        ]
+
+    def test_position_is_null_when_item_has_none(self, rolled_back_result):
+        frame = rolled_back_result._metadata_frame()
+
+        assert frame["position"].isna().all()
+
+    def test_error_columns_are_null_when_item_succeeded(self, mixed_status_result):
+        frame = mixed_status_result._metadata_frame()
+
+        assert frame.loc[0, "error_code":].isna().all()
+
+    def test_error_values_are_flattened_when_outcome_unknown(self, mixed_status_result):
+        frame = mixed_status_result._metadata_frame()
+
+        assert frame.loc[2, "error_code":"error_outcome_unknown"].tolist() == [
+            -1,
+            "timed out",
+            "ReadTimeout",
+            True,
+        ]
+
+
+class TestApplyEditsResultErrorFrame:
+    def test_extra_keys_become_snake_case_columns_when_present(
+        self, rolled_back_result
+    ):
+        frame = rolled_back_result._metadata_frame()
+
+        assert frame.loc[0, ["error_extended_code", "error_message"]].tolist() == [
+            -2146,
+            "Unable to complete operation.",
+        ]
+        assert frame.loc[0, "error_details"] == ESRI_ROLLBACK_ERROR["details"]
+
+    @pytest.mark.parametrize(
+        "error, expected",
+        [
+            (
+                ESRI_ROLLBACK_ERROR,
+                "Unable to complete operation. Operation rolled back. "
+                "Setting of value for SITEGUID failed.",
+            ),
+            ({"code": 400, "message": "Only a message."}, "Only a message."),
+            ({"code": 400, "details": ["First.", "Second."]}, "First. Second."),
+            ({"code": 400, "description": "", "message": "Empty."}, "Empty."),
+            ({"code": 400, "description": "Only desc."}, "Only desc."),
+        ],
+        ids=[
+            "message-and-details",
+            "message-only",
+            "details-only",
+            "empty-description",
+            "description-only",
+        ],
+    )
+    def test_description_is_filled_when_esri_sent_none(self, error, expected):
+        items = [make_edit_result_item(-1, success=False, error=error)]
+
+        frame = ApplyEditsResult._error_frame(items)
+
+        assert frame.loc[0, "error_description"] == expected
+
+    def test_description_is_null_when_no_text_is_available(self):
+        items = [make_edit_result_item(-1, success=False, error={"code": 400})]
+
+        frame = ApplyEditsResult._error_frame(items)
+
+        assert pd.isna(frame.loc[0, "error_description"])
+
+    def test_item_error_is_unchanged_when_frame_is_built(self, rolled_back_result):
+        rolled_back_result._metadata_frame()
+
+        assert rolled_back_result.add_results[0].error == ESRI_ROLLBACK_ERROR
+
+
+class TestApplyEditsResultToFrame:
+    def test_returns_metadata_table_when_input_excluded(self, mixed_status_result):
+        result = mixed_status_result.to_frame(include_input=False)
+
+        pd.testing.assert_frame_equal(result, mixed_status_result._metadata_frame())
+
+    def test_rows_come_from_inputs_in_kind_order_when_input_included(
+        self, mixed_status_result
+    ):
+        result = mixed_status_result.to_frame()
+
+        assert result["name"].iloc[:5].tolist() == ["a", "b", "c", "d", "e"]
+        assert pd.isna(result["name"].iloc[5])
+        assert result.index.tolist() == [7, 7, 9, 0, 1, 0]
+
+    @pytest.mark.parametrize(
+        "kwargs, prefix",
+        [({}, "_edit_"), ({"metadata_prefix": "meta_"}, "meta_")],
+        ids=["default-prefix", "custom-prefix"],
+    )
+    def test_metadata_columns_are_prefixed_when_input_included(
+        self, mixed_status_result, kwargs, prefix
+    ):
+        result = mixed_status_result.to_frame(**kwargs)
+
+        expected = [prefix + c for c in CORE_FRAME_DTYPES if c != "position"]
+        assert list(result.columns) == ["name", "OBJECTID", *expected]
+
+    def test_only_input_columns_remain_when_metadata_excluded(
+        self, mixed_status_result
+    ):
+        result = mixed_status_result.to_frame(include_metadata=False)
+
+        assert list(result.columns) == ["name", "OBJECTID"]
+
+    def test_returns_failed_input_rows_when_filtered(self, mixed_status_result):
+        failed = mixed_status_result.filter(statuses="failed")
+
+        result = failed.to_frame(include_metadata=False)
+
+        assert result["name"].tolist() == ["b", "e"]
+        assert result.index.tolist() == [7, 1]
+
+    def test_integer_column_stays_integer_when_missing_from_some_inputs(
+        self, mixed_status_result
+    ):
+        result = mixed_status_result.to_frame()
+
+        assert str(result["OBJECTID"].dtype) == "Int64"
+        assert result["OBJECTID"].tolist() == [pd.NA, pd.NA, pd.NA, 20, 21, 30]
+
+    def test_returns_empty_frame_when_result_has_no_inputs(
+        self, empty_apply_edits_result
+    ):
+        result = empty_apply_edits_result.to_frame()
+
+        assert result.empty
+
+    def test_returns_geodataframe_when_an_input_is_one(self, geo_edit_result):
+        result = geo_edit_result.to_frame()
+
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert result.crs == "EPSG:4326"
+        assert result.geometry.isna().tolist() == [False, False, True]
+
+    def test_returns_plain_frame_when_only_non_geo_rows_remain(self, geo_edit_result):
+        deletes = geo_edit_result.filter(kinds="deletes")
+
+        result = deletes.to_frame(include_metadata=False)
+
+        assert type(result) is pd.DataFrame
+        assert result["OBJECTID"].tolist() == [30]
+
+    def test_returns_empty_frame_shaped_like_input_when_nothing_matches(
+        self, geo_edit_result
+    ):
+        nothing = geo_edit_result.filter(statuses="unknown")
+
+        result = nothing.to_frame(include_metadata=False)
+
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert result.empty
+        assert list(result.columns) == ["name", "geometry"]
+
+    @pytest.mark.parametrize(
+        "result_kwargs, to_frame_kwargs, match",
+        [
+            (
+                {"adds": [make_edit_result_item(1, position=0)]},
+                {"include_input": False, "include_metadata": False},
+                "cannot both be False",
+            ),
+            (
+                {
+                    "adds": [make_edit_result_item(1, position=0)],
+                    "inputs": {"adds": pd.DataFrame({"_edit_status": ["x"]})},
+                },
+                {},
+                r"Columns \['_edit_status'\] already exist in the input",
+            ),
+        ],
+        ids=["both-excluded", "column-clash"],
+    )
+    def test_raises_when_rows_cannot_be_built(
+        self, result_kwargs, to_frame_kwargs, match
+    ):
+        result_kwargs = {
+            "inputs": {"adds": pd.DataFrame({"name": ["a"]})},
+            **result_kwargs,
+        }
+        result = make_apply_edits_result(**result_kwargs)
+
+        with pytest.raises(InvalidParameterError, match=match):
+            result.to_frame(**to_frame_kwargs)
+
+
+class TestApplyEditsResultConcatFrames:
+    def test_restores_integer_columns_when_missing_from_some_frames(self):
+        frames = [
+            pd.DataFrame({"oid": [1], "value": [1.5], "count": [3]}),
+            pd.DataFrame({"value": [2.5], "count": [4]}),
+        ]
+
+        result = ApplyEditsResult._concat_frames(frames)
+
+        assert result.dtypes.astype(str).to_dict() == {
+            "oid": "Int64",
+            "value": "float64",
+            "count": "int64",
+        }
+
+    def test_returns_geodataframe_when_a_later_frame_is_geo(self):
+        frames = [pd.DataFrame({"name": ["x"]}), make_geo_frame(1)]
+
+        result = ApplyEditsResult._concat_frames(frames)
+
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert result.geometry.isna().tolist() == [True, False]
+
+
+class TestApplyEditsResultGeometrySpec:
+    def test_returns_none_when_no_frame_is_geo(self):
+        frames = [pd.DataFrame({"a": [1]})]
+
+        result = ApplyEditsResult._geometry_spec(frames)
+
+        assert result is None
+
+    def test_returns_name_and_crs_when_geo_frames_agree(self):
+        frames = [make_geo_frame(1, geometry_name="shape"), pd.DataFrame()]
+
+        result = ApplyEditsResult._geometry_spec(frames)
+
+        assert result == ("shape", "EPSG:4326")
+
+    @pytest.mark.parametrize(
+        "other, match",
+        [
+            (make_geo_frame(1, crs="EPSG:3857"), "different CRS"),
+            (make_geo_frame(1, geometry_name="shape"), "different geometry columns"),
+        ],
+        ids=["crs-mismatch", "geometry-name-mismatch"],
+    )
+    def test_raises_when_geo_frames_disagree(self, other, match):
+        frames = [make_geo_frame(1), other]
+
+        with pytest.raises(InvalidParameterError, match=match):
+            ApplyEditsResult._geometry_spec(frames)

@@ -332,7 +332,7 @@ class TestFetchRemainingPages:
         result = await query_op._fetch_remaining_pages(params, first_data)
 
         assert result == []
-        mock_layer._client.get.assert_not_called()
+        mock_layer._client.post.assert_not_called()
 
     @pytest.mark.anyio
     @pytest.mark.parametrize(
@@ -376,7 +376,7 @@ class TestFetchRemainingPages:
     async def test_fetches_exactly_the_rest_of_the_window(
         self, query_op, mock_layer, window, first_data, total, expected_oids
     ):
-        mock_layer._client.get.side_effect = make_paging_side_effect(total)
+        mock_layer._client.post.side_effect = make_paging_side_effect(total)
         params = {"where": "1=1", **window}
 
         result = await query_op._fetch_remaining_pages(params, first_data)
@@ -410,12 +410,12 @@ class TestFetchRemainingPages:
     async def test_count_request_keeps_param_when_it_affects_matching(
         self, query_op, mock_layer, key, value
     ):
-        mock_layer._client.get.side_effect = make_paging_side_effect(1500)
+        mock_layer._client.post.side_effect = make_paging_side_effect(1500)
         params = {"where": "1=1", key: value}
 
         await query_op._fetch_remaining_pages(params, make_first_page(0, 1000))
 
-        assert get_count_request_params(mock_layer._client.get)[key] == value
+        assert get_count_request_params(mock_layer._client.post)[key] == value
 
     @pytest.mark.anyio
     @pytest.mark.parametrize(
@@ -450,23 +450,23 @@ class TestFetchRemainingPages:
     async def test_count_request_drops_param_when_it_only_shapes_output(
         self, query_op, mock_layer, key
     ):
-        mock_layer._client.get.side_effect = make_paging_side_effect(1500)
+        mock_layer._client.post.side_effect = make_paging_side_effect(1500)
         params = {"where": "1=1", key: 1500}
 
         await query_op._fetch_remaining_pages(params, make_first_page(0, 1000))
 
-        assert key not in get_count_request_params(mock_layer._client.get)
+        assert key not in get_count_request_params(mock_layer._client.post)
 
     @pytest.mark.anyio
     async def test_count_request_uses_json_format_when_pages_use_geojson(
         self, query_op, mock_layer
     ):
-        mock_layer._client.get.side_effect = make_paging_side_effect(1500)
+        mock_layer._client.post.side_effect = make_paging_side_effect(1500)
         params = {"where": "1=1", "f": "geojson"}
 
         await query_op._fetch_remaining_pages(params, make_first_page(0, 1000))
 
-        count_params = get_count_request_params(mock_layer._client.get)
+        count_params = get_count_request_params(mock_layer._client.post)
         assert count_params["f"] == "json"
         assert count_params["returnCountOnly"] == "true"
 
@@ -475,7 +475,7 @@ class TestExecute:
     @pytest.mark.anyio
     async def test_returns_query_result_for_single_page(self, query_op, mock_layer):
         features = [make_feature(1), make_feature(2)]
-        mock_layer._client.get.return_value = make_response({"features": features})
+        mock_layer._client.post.return_value = make_response({"features": features})
 
         result = await query_op.execute(where="1=1", out_fields=["OBJECTID", "Name"])
 
@@ -486,7 +486,7 @@ class TestExecute:
     async def test_result_geojson_true_when_geometry_returned(
         self, query_op, mock_layer
     ):
-        mock_layer._client.get.return_value = make_response({"features": []})
+        mock_layer._client.post.return_value = make_response({"features": []})
 
         result = await query_op.execute(return_geometry=True)
 
@@ -496,7 +496,7 @@ class TestExecute:
     async def test_result_geojson_false_and_crs_none_when_no_geometry(
         self, query_op, mock_layer
     ):
-        mock_layer._client.get.return_value = make_response({"features": []})
+        mock_layer._client.post.return_value = make_response({"features": []})
 
         result = await query_op.execute(return_geometry=False)
 
@@ -505,7 +505,7 @@ class TestExecute:
 
     @pytest.mark.anyio
     async def test_result_crs_equals_explicit_out_sr(self, query_op, mock_layer):
-        mock_layer._client.get.return_value = make_response({"features": []})
+        mock_layer._client.post.return_value = make_response({"features": []})
 
         result = await query_op.execute(return_geometry=True, out_sr=4326)
 
@@ -515,7 +515,7 @@ class TestExecute:
     async def test_result_crs_defaults_to_layer_crs_when_out_sr_omitted(
         self, query_op, mock_layer
     ):
-        mock_layer._client.get.return_value = make_response({"features": []})
+        mock_layer._client.post.return_value = make_response({"features": []})
 
         result = await query_op.execute(return_geometry=True)
 
@@ -525,7 +525,7 @@ class TestExecute:
     async def test_result_crs_none_when_no_geometry_even_if_out_sr_provided(
         self, query_op, mock_layer
     ):
-        mock_layer._client.get.return_value = make_response({"features": []})
+        mock_layer._client.post.return_value = make_response({"features": []})
 
         result = await query_op.execute(return_geometry=False, out_sr=4326)
 
@@ -537,7 +537,7 @@ class TestExecute:
     ):
         first_page = [make_feature(1)]
         second_page = [make_feature(2)]
-        mock_layer._client.get.return_value = make_response(
+        mock_layer._client.post.return_value = make_response(
             {"features": first_page, "exceededTransferLimit": True}
         )
         mocker.patch.object(
@@ -555,4 +555,17 @@ class TestExecute:
         with pytest.raises(InvalidParameterError, match="bare string literal"):
             await query_op.execute(where="EventDate = '2020-01-01'")
 
+        mock_layer._client.post.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_sends_where_in_post_body_when_clause_exceeds_url_limits(
+        self, query_op, mock_layer
+    ):
+        long_where = f"OBJECTID IN ({','.join(str(i) for i in range(5000))})"
+        mock_layer._client.post.return_value = make_response({"features": []})
+
+        await query_op.execute(where=long_where, out_fields=["OBJECTID"])
+
+        call = mock_layer._client.post.call_args
+        assert call.kwargs["data"]["where"] == long_where
         mock_layer._client.get.assert_not_called()

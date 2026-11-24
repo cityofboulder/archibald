@@ -1,16 +1,28 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
+import geopandas as gpd
 import httpx
+import pandas as pd
+import pytest
 from pytest_mock import MockerFixture
+from shapely.geometry import Point
 from unittest.mock import AsyncMock
 
 from archibald.auth import ArcGISAuth, UserTokenAuth
 from archibald.client import ArchieClient
 from archibald.errors import handle_esri_errors
-from archibald.exceptions import ArcGISError, AuthorizationError
+from archibald.exceptions import (
+    ArcGISError,
+    AuthorizationError,
+    ServiceError,
+    TokenRefreshError,
+)
 from archibald.models import (
     AttachmentsResult,
     ApplyEditsResult,
+    EditKind,
     EditResultItem,
     FieldsResult,
     QueryResult,
@@ -20,6 +32,39 @@ from archibald.services import BaseService
 BASE_URL = "https://example.com/arcgis/rest/services/MyService/FeatureServer"
 SERVICE_PATH = "services/MyService/FeatureServer"
 MAP_LAYER_PATH = "services/MyService/MapServer"
+STATUS_URL = f"{BASE_URL}/0/applyEdits/jobs/abc123"
+ESRI_ITEM_ERROR = {"code": 1016, "description": "Setting of value for SITEGUID failed."}
+ESRI_ROLLBACK_ERROR = {
+    "code": 400,
+    "extendedCode": -2146,
+    "message": "Unable to complete operation.",
+    "details": ["Operation rolled back.", "Setting of value for SITEGUID failed."],
+}
+OUTCOME_UNKNOWN_ERROR = {
+    "code": -1,
+    "description": "timed out",
+    "exception": "ReadTimeout",
+    "outcome_unknown": True,
+}
+CORE_FRAME_DTYPES = {
+    "kind": "category",
+    "status": "category",
+    "object_id": "int64",
+    "global_id": "string",
+    "position": "Int64",
+    "error_code": "Int64",
+    "error_description": "string",
+    "error_exception": "string",
+    "error_outcome_unknown": "boolean",
+    "error_status_url": "string",
+}
+
+DEFAULT_BATCHING_KWARGS = {
+    "rollback_on_failure": True,
+    "use_server_async": None,
+    "max_batch_bytes": None,
+    "poll_timeout": None,
+}
 
 AnyClient = UserTokenAuth | ArchieClient
 
@@ -42,6 +87,10 @@ class StaticTokenAuth(ArcGISAuth):
 
     async def force_refresh(self) -> None:
         """No-op: static token never needs refreshing."""
+
+
+class NonRecoverableSignal(BaseException):
+    """BaseException stand-in for cancellation, which operations must not swallow."""
 
 
 def make_query_result(
@@ -93,18 +142,18 @@ def make_first_page(
 
 
 def make_paging_side_effect(total: int):
-    """Create a client.get side effect simulating a layer of ``total`` rows.
+    """Create a client.post side effect simulating a layer of ``total`` rows.
 
     Count requests return ``total``; page requests return features whose
     OBJECTID equals their row position, honouring resultOffset and
     resultRecordCount.
     """
 
-    def side_effect(endpoint, *, params=None, **kwargs):
-        if params.get("returnCountOnly") == "true":
+    def side_effect(endpoint, *, data=None, **kwargs):
+        if data.get("returnCountOnly") == "true":
             return make_response({"count": total})
-        offset = params["resultOffset"]
-        stop = min(offset + params["resultRecordCount"], total)
+        offset = data["resultOffset"]
+        stop = min(offset + data["resultRecordCount"], total)
         return make_response(
             {"features": [make_feature(oid) for oid in range(offset, stop)]}
         )
@@ -112,12 +161,12 @@ def make_paging_side_effect(total: int):
     return side_effect
 
 
-def get_count_request_params(get_mock) -> dict:
-    """Return the params of the single returnCountOnly request made on ``get_mock``."""
+def get_count_request_params(post_mock) -> dict:
+    """Return the body of the single returnCountOnly request made on ``post_mock``."""
     (count_params,) = [
-        call.kwargs["params"]
-        for call in get_mock.call_args_list
-        if call.kwargs["params"].get("returnCountOnly") == "true"
+        call.kwargs["data"]
+        for call in post_mock.call_args_list
+        if call.kwargs["data"].get("returnCountOnly") == "true"
     ]
     return count_params
 
@@ -128,6 +177,8 @@ def make_edit_result_item(
     success: bool = True,
     global_id: str | None = None,
     error: dict | None = None,
+    kind: EditKind | None = None,
+    position: int | None = None,
 ) -> EditResultItem:
     """Create an EditResultItem for use in tests."""
     return EditResultItem(
@@ -135,6 +186,8 @@ def make_edit_result_item(
         global_id=global_id,
         success=success,
         error=error,
+        kind=kind,
+        position=position,
     )
 
 
@@ -142,12 +195,56 @@ def make_apply_edits_result(
     adds: list[EditResultItem] | None = None,
     updates: list[EditResultItem] | None = None,
     deletes: list[EditResultItem] | None = None,
+    *,
+    inputs: dict[EditKind, pd.DataFrame] | None = None,
 ) -> ApplyEditsResult:
-    """Create an ApplyEditsResult for use in tests."""
+    """Create an ApplyEditsResult the way applyEdits builds one.
+
+    Each item is copied with ``kind`` set from the list it is passed in, as
+    ``ApplyEditsOperation.execute`` does; the passed items are not modified.
+    """
+
+    def tagged(items: list[EditResultItem] | None, kind: EditKind) -> list:
+        """Copies of ``items`` with ``kind`` set."""
+        return [replace(item, kind=kind) for item in items or []]
+
     return ApplyEditsResult(
-        add_results=adds or [],
-        update_results=updates or [],
-        delete_results=deletes or [],
+        add_results=tagged(adds, "adds"),
+        update_results=tagged(updates, "updates"),
+        delete_results=tagged(deletes, "deletes"),
+        _inputs=inputs or {},
+    )
+
+
+def make_single_kind_result(
+    kind: EditKind, items: list[EditResultItem]
+) -> ApplyEditsResult:
+    """Create an ApplyEditsResult whose only items are ``items``, all of ``kind``."""
+    return make_apply_edits_result(
+        adds=items if kind == "adds" else None,
+        updates=items if kind == "updates" else None,
+        deletes=items if kind == "deletes" else None,
+    )
+
+
+def make_geo_frame(
+    n: int, *, crs: str = "EPSG:4326", geometry_name: str = "geometry"
+) -> gpd.GeoDataFrame:
+    """Create an ``n``-row point GeoDataFrame with a ``name`` column (f0, f1, ...)."""
+    gdf = gpd.GeoDataFrame(
+        {"name": [f"f{i}" for i in range(n)]},
+        geometry=[Point(i, i) for i in range(n)],
+        crs=crs,
+    )
+    return gdf.rename_geometry(geometry_name) if geometry_name != "geometry" else gdf
+
+
+def positions_by_kind(result: ApplyEditsResult) -> tuple[list, list, list]:
+    """Item positions in each of the result's add, update, and delete lists."""
+    return (
+        [i.position for i in result.add_results],
+        [i.position for i in result.update_results],
+        [i.position for i in result.delete_results],
     )
 
 
@@ -159,7 +256,7 @@ def make_esri_apply_edits_response(
     """Build a raw ESRI applyEdits response dict for use in tests.
 
     Each ID list is expanded into success=True result dicts in the format
-    expected by ApplyEditsResult.from_esri_response.
+    expected by ApplyEditsResult._from_esri_response.
 
     Args:
         add_ids: OBJECTIDs for simulated add results.
@@ -281,6 +378,22 @@ def make_arcgis_error(
     )
 
 
+def make_http_status_error(status_code: int) -> httpx.HTTPStatusError:
+    """Build an httpx.HTTPStatusError the way ``raise_for_status`` does.
+
+    Args:
+        status_code: HTTP status code carried by the error's response.
+
+    Returns:
+        HTTPStatusError with a matching request and response attached.
+    """
+    request = httpx.Request("POST", "https://example.com")
+    response = httpx.Response(status_code, request=request)
+    return httpx.HTTPStatusError(
+        f"HTTP {status_code}", request=request, response=response
+    )
+
+
 def make_rejecting_post(
     rejected_filenames: set[str],
     exc: Exception,
@@ -302,6 +415,28 @@ def make_rejecting_post(
         if files["attachment"][0] in rejected_filenames:
             raise exc
         return make_response(success_body)
+
+    return post
+
+
+def make_delete_post_failing_for(failing_oids: set[int], exc: Exception):
+    """Build an async ``client.post`` side effect for deleteAttachments calls.
+
+    Args:
+        failing_oids: Feature OBJECTIDs whose request should raise.
+        exc: Exception raised for a failing OBJECTID.
+
+    Returns:
+        Async callable usable as ``client.post.side_effect``. Requests for other
+        OBJECTIDs succeed for every attachment ID in the request.
+    """
+
+    async def post(*, endpoint: str, data: dict, **kwargs) -> httpx.Response:
+        """Raise exc for failing OBJECTIDs, otherwise report every ID deleted."""
+        if int(endpoint.split("/")[-2]) in failing_oids:
+            raise exc
+        att_ids = [int(i) for i in data["attachmentIds"].split(",")]
+        return make_response(make_esri_delete_attachments_response(att_ids))
 
     return post
 
@@ -405,3 +540,70 @@ def inject_mock_client(
     mock_client.post.return_value = response
     target._client = mock_client
     return mock_client
+
+
+OUTCOME_UNKNOWN_CASES = [
+    pytest.param(make_http_status_error(500), True, id="http-500"),
+    pytest.param(make_http_status_error(502), True, id="http-502"),
+    pytest.param(make_http_status_error(400), False, id="http-400"),
+    pytest.param(make_http_status_error(413), False, id="http-413"),
+    pytest.param(httpx.ConnectError("refused"), False, id="connect-error"),
+    pytest.param(httpx.ConnectTimeout("slow"), False, id="connect-timeout"),
+    pytest.param(httpx.PoolTimeout("busy"), False, id="pool-timeout"),
+    pytest.param(httpx.ReadTimeout("slow"), True, id="read-timeout"),
+    pytest.param(httpx.WriteTimeout("slow"), True, id="write-timeout"),
+    pytest.param(httpx.ReadError("reset"), True, id="read-error"),
+    pytest.param(httpx.RemoteProtocolError("bad"), True, id="remote-protocol-error"),
+    pytest.param(ValueError("not json"), True, id="value-error"),
+    pytest.param(KeyError("addAttachmentResult"), True, id="key-error"),
+    pytest.param(make_arcgis_error(), False, id="arcgis-error"),
+    pytest.param(TokenRefreshError("refresh failed"), False, id="token-refresh"),
+    pytest.param(OSError("boom"), False, id="os-error"),
+    pytest.param(TimeoutError(), True, id="timeout-error"),
+]
+
+NON_ENVELOPE_FAILURE_CASES = [
+    pytest.param(
+        ServiceError(code=-1, message="No response."), id="arcgis-error-no-response"
+    ),
+    pytest.param(
+        ServiceError(
+            code=-1,
+            message="Async applyEdits job failed.",
+            raw_response={"status": "Failed"},
+        ),
+        id="service-error-status-body",
+    ),
+    pytest.param(httpx.ReadTimeout("slow"), id="read-timeout"),
+]
+
+TRANSIENT_POLL_ERROR_CASES = [
+    pytest.param(httpx.ReadTimeout("slow"), id="read-timeout"),
+    pytest.param(httpx.ConnectError("refused"), id="connect-error"),
+    pytest.param(make_http_status_error(503), id="http-503"),
+]
+
+REJECTED_POLL_ERROR_CASES = [
+    pytest.param(make_http_status_error(404), "HTTP 404", id="http-404"),
+    pytest.param(
+        make_arcgis_error(ServiceError, 400, "Invalid job id."),
+        "Invalid job id.",
+        id="esri-envelope",
+    ),
+]
+
+DEPRECATED_METHOD_CASES = [
+    pytest.param(
+        "from_esri_response",
+        make_esri_apply_edits_response(add_ids=[1], update_ids=[2], delete_ids=[3]),
+        id="from_esri_response",
+    ),
+    pytest.param(
+        "merge",
+        [
+            make_apply_edits_result(adds=[make_edit_result_item(1)]),
+            make_apply_edits_result(updates=[make_edit_result_item(2)]),
+        ],
+        id="merge",
+    ),
+]

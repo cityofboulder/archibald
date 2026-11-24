@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 from dataclasses import dataclass
 
 import pandas as pd
@@ -43,6 +42,12 @@ class AttachmentsResult:
             and any ``error_*`` columns present across the result set.
         """
         records = [
-            {**dataclasses.asdict(r), "error": r.error or {}} for r in self.results
+            {
+                "object_id": r.object_id,
+                "global_id": r.global_id,
+                "success": r.success,
+                "error": r.error or {},
+            }
+            for r in self.results
         ]
         return pd.json_normalize(records, sep="_")
