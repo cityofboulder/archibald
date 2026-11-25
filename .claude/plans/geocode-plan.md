@@ -331,20 +331,25 @@ Screening rules are pure functions `(text, ctx) -> Rejection | None`, keyed by n
       addresses and contain no secrets.
 
 ### Phase 1: Foundations (`feat/geocode-foundations`)
-- [ ] 1.1 Exceptions per D2/D5/D8 in `exceptions.py`, exported from `archibald/__init__.py`:
+- [x] 1.1 Exceptions per D2/D5/D8 in `exceptions.py`, exported from `archibald/__init__.py`:
       - `AddressNotFoundError(ServiceError)` (ESRI section; class only, classification is 6.1);
       - `CapabilityError(ArchieClientError)`; `LayerCapabilityError` re-parented under it;
         `ServiceCapabilityError(CapabilityError)`;
       - `RejectedAddressError(InvalidParameterError)`, `__init__(rule, reason)` stores `.rule` /
         `.reason`, message `"Address rejected by '<rule>' rule: <reason>"`.
-      - Tests: hierarchy/catchability in `tests/test_exceptions.py`, parametrized with `ids=`.
-- [ ] 1.2 Refactor: `errors.failure_error()` (D10a).
+      - Tests: the existing `TestHierarchy` gained the new classes and `ids=`; plus
+        catchability and `RejectedAddressError` attribute/message tests.
+- [x] 1.2 Refactor: `errors.failure_error()` (D10a).
       - Envelope `ArcGISError` → its error dict (`{**error, "status_url": ...}` only when given);
-        otherwise the dict `_from_exception` builds today.
-      - `failed_items` and `EditResultItem._from_exception` become thin callers. Current
-        `_from_exception` callers never pass an envelope, so behavior is unchanged.
-      - Import cycle: `errors.py`'s `EditResultItem` import moves inside `failed_items` (its only use).
-      - No new tests; `failure_error` gets direct tests at its first geocode use (Phase 5).
+        otherwise the dict `_from_exception` used to build.
+      - `EditResultItem._from_exception` builds its error with `failure_error`. `failed_items` was
+        **deleted**: it was a model factory living in `errors.py` (the cause of the import cycle).
+        Its callers (`apply_edits.py`, `attachments.py` ×2) call `_from_exception` directly, and
+        `errors.py` no longer imports models.
+      - No shared item superclass: edit and geocode items share only `error`. Revisit a base
+        class for the located items (`crs` + `to_shapely()`) in Phases 4–6.
+      - Tests: `TestFailedItems` became `TestFailureError` (same cases; the per-ID ordering test
+        was dropped as covered by `_from_exception`'s tests).
 - [ ] 1.3 Refactor: `_literals.validate_literal_values(values, literal_type, name) -> set | None`
       (D10c): body of `ApplyEditsResult._filter_values`, calling `get_args` itself. `filter()`
       uses it; `_filter_values` is deleted. No new tests.
@@ -474,7 +479,8 @@ Screening rules are pure functions `(text, ctx) -> Rejection | None`, keyed by n
 ## 8. Testing strategy
 
 - Mirrored test files for every new module. Refactor bullets (1.2–1.4) add no tests and must leave
-  the existing suite green and unchanged (except the 1.4 test move to `tests/serializers/test_frames.py`).
+  the existing suite green and unchanged (except the 1.2 `failed_items` → `failure_error` test
+  rework and the 1.4 test move to `tests/serializers/test_frames.py`).
 - Fixtures cover these metadata variants, modeled on the real captures:
   - modern (City) vs classic (`TRANSPORTATION_…`): `SingleLine` vs `Single Line Input`, World-style
     vs `Street/City/ZIP` fields, int vs string `locatorProperties`, and present vs absent
@@ -525,6 +531,8 @@ Screening rules are pure functions `(text, ctx) -> Rejection | None`, keyed by n
 | 2026-11-24 | D4 defaults | none (no code) | Per CLAUDE.md's no-assumptions rule, only `empty` is on by default; `po_box`/`numeric_only`/`alpha_only` are opt-in. `screen=None` or `()` disables screening; `SCREEN_RULES` enables all. D5 note updated. |
 | 2026-11-24 | D15 approved | none (no code) | `is_classic_locator()` plus two-way reverse_geocode warnings approved. |
 | 2026-11-25 | Phase 1 detailed | none (no code) | Phase 1 bullets expanded. Frame helpers go to `serializers/_frames.py`, not `models/` (models are one class per module; serializers already holds module-level pandas helpers). Their direct tests move to `tests/serializers/test_frames.py` instead of keeping delegate methods. |
+| 2026-11-25 | 1.1 | `feat/geocode-foundations` c707441, e240954 | Exceptions added and exported; `TestHierarchy` reworked with ids. `RejectedAddressError` stays under `InvalidParameterError`. |
+| 2026-11-25 | 1.2 | `feat/geocode-foundations` bc10489, 28e1d72 | `failure_error` added; `failed_items` deleted (callers use `_from_exception`), so `errors.py` imports no models. Superclass for items rejected for now. |
 
 ## 11. Discovery tooling
 
