@@ -14,7 +14,9 @@
 - **Tests:** `uv run pytest`. Fixtures go in `tests/conftest.py`, builders in `tests/helpers.py`,
   parametrized with `ids=`.
 - **Class layout:** `Properties` / `Public methods` / `Private methods` banners, each alphabetical.
-- **Models:** `@dataclass`. Closed value sets are `Literal`s, never enums.
+- **Models:** `@dataclass`. Closed value sets are `Literal`s, never enums. Named `Literal`s used or
+  exported in more than one place live in `models/_literals.py` (with `validate_literal_values`)
+  and are re-exported publicly; one-off parameter `Literal`s stay inline.
 - **Operations:** one class per endpoint, constructed with the owning service, `execute()` entry
   point, parameter validation inside the operation (as in `QueryOperation`).
 - **All requests are POST** via `client.post(endpoint=..., data=...)` (like `/query` since 1.3.0),
@@ -235,7 +237,6 @@ changelog, exports, smoke script, integration test.
 
 ```
 src/archibald/
-  _literals.py                         validate_literal_values() (generalized from ApplyEditsResult._filter_values)
   errors.py                            + failure_error(); + AddressNotFoundError classification in parse_esri_error
   exceptions.py                        + CapabilityError, ServiceCapabilityError, RejectedAddressError, AddressNotFoundError
   services/geocode_service.py          GeocodeService
@@ -245,6 +246,7 @@ src/archibald/
   serializers/_addresses.py            normalize, single/multiline formatting, screening rules, records, dedupe, chunking
   serializers/_geometry.py             + esri_geometry_type()
   serializers/_frames.py               shared frame helpers extracted from ApplyEditsResult
+  models/_literals.py                  shared named Literals (EditKind, EditStatus, then the geocode ones) + validate_literal_values()
   models/{suggest_result,candidates_result,geocode_result,reverse_geocode_result}.py
 ```
 
@@ -282,7 +284,7 @@ ReverseGeocodeStatus = Literal["matched", "unmatched", "failed"]
 | D7 | `dedupe=True` by default. The key is the casefolded normalized single line, or a tuple of normalized multiline values. Only the first occurrence is sent (its position is the OBJECTID); its result is copied to every duplicate position. `dedupe=False` sends every row. |
 | D8 | `AddressNotFoundError(ServiceError)` lives in `exceptions.py` (ESRI-originated section). `errors.parse_esri_error` picks the class through a new private `_error_class(code, message, details)`: first `_ESRI_CODE_MAP`, then code 400 with any detail or message matching the module constant `_ADDRESS_NOT_FOUND = re.compile(r"unable to find address", re.I)` → `AddressNotFoundError`, else `ServiceError`. Because `handle_esri_errors` already calls `parse_esri_error` at `_request`, the classification applies automatically with no new decorator. It stays backwards compatible: it subclasses `ServiceError`, which is what those envelopes raise today. `ReverseGeocodeOperation` catches `AddressNotFoundError` → `unmatched` item; any other exception → `failed`. Trade-off: one regex runs per error envelope (negligible), and if the text varies across server versions, only the constant changes. Verified in Phase 0: the miss is a code-400 envelope with details `["Unable to find address for the specified location."]` on both locators, and other 400s ("Unable to complete operation.") don't match. |
 | D9 | `min_score: float \| None` (0–100, validated). In `geocode()`, an M/T result scoring below it becomes status `low_score` and keeps score, match address and location. In `find_candidates()`, candidates below it are dropped. `score` is always a column. |
-| D10 | Generalize, don't duplicate. (a) `errors.failure_error(exc, *, outcome_unknown, status_url=None) -> dict` holds the envelope-vs-exception logic now inside `failed_items`/`EditResultItem._from_exception`; both become thin callers. Geocode failures use it with `outcome_unknown=is_outcome_unknown(exc)`. (b) `ApplyEditsResult`'s `_attach_metadata`, `_concat_frames`, `_geometry_spec`, `_restore_int_columns`, `_error_frame`, `_fallback_description` move to `serializers/_frames.py` as functions (revised 2026-11-25: serializers already holds module-level pandas helpers; models are one class per module), and `ApplyEditsResult` delegates to them. (c) `_filter_values` → `_literals.validate_literal_values(values, literal_type, name)`, reused by `filter()` and the tuning-option `Literal`s. All three are behavior-preserving refactors: the existing tests must pass unchanged. |
+| D10 | Generalize, don't duplicate. (a) `errors.failure_error(exc, *, outcome_unknown, status_url=None) -> dict` holds the envelope-vs-exception logic now inside `failed_items`/`EditResultItem._from_exception`; both become thin callers. Geocode failures use it with `outcome_unknown=is_outcome_unknown(exc)`. (b) `ApplyEditsResult`'s `_attach_metadata`, `_concat_frames`, `_geometry_spec`, `_restore_int_columns`, `_error_frame`, `_fallback_description` move to `serializers/_frames.py` as functions (revised 2026-11-25: serializers already holds module-level pandas helpers; models are one class per module), and `ApplyEditsResult` delegates to them. (c) `_filter_values` → `models._literals.validate_literal_values(values, literal_type, name)`, reused by `filter()` and the tuning-option `Literal`s. All three are behavior-preserving refactors: the existing tests must pass unchanged. |
 | D11 | World Geocoder is out of scope beyond `**kwargs`/`for_storage`; the City locators are the target. |
 | D12 | Batch concurrency is bounded by the client's `max_concurrent_requests`. |
 | D13 | Query geometry: `BaseLayer.query(..., geometry=None, in_sr=None, spatial_rel="esriSpatialRelIntersects")`. A shapely geometry is serialized with `geometry_to_esri`, `geometryType` comes from `esri_geometry_type`, and `inSR` is required (SR rule). A `str` or `dict` geometry passes through unchanged (a dict is `json.dumps`'d) so existing `**kwargs` callers keep working. `SpatialRel` is a `Literal` of the ESRI `esriSpatialRel*` names. Buffering (`distance`/`units`) stays `**kwargs`. |
@@ -351,9 +353,17 @@ Screening rules are pure functions `(text, ctx) -> Rejection | None`, keyed by n
         class for the located items (`crs` + `to_shapely()`) in Phases 4–6.
       - Tests: `TestFailedItems` became `TestFailureError` (same cases; the per-ID ordering test
         was dropped as covered by `_from_exception`'s tests).
-- [ ] 1.3 Refactor: `_literals.validate_literal_values(values, literal_type, name) -> set | None`
-      (D10c): body of `ApplyEditsResult._filter_values`, calling `get_args` itself. `filter()`
-      uses it; `_filter_values` is deleted. No new tests.
+- [x] 1.3 Refactor: `models/_literals.py` (D10c), decided 2026-11-25 over `archibald/` and
+      `serializers/` (keeps the aliases next to their validator; avoids the `_date_literals` name clash).
+      - `validate_literal_values(values, literal_type, name) -> set | None`: body of
+        `ApplyEditsResult._filter_values`, calling `get_args` itself. `filter()` uses it;
+        `_filter_values` is deleted.
+      - `EditKind` / `EditStatus` move here; `edit_result_item.py` re-imports them (in its
+        `__all__`), so every existing import path still works. Same objects, so no deprecation.
+      - Later `Literal`s (`GeocodeStatus`, `ReverseGeocodeStatus`, `ScreenRule`, `LocationType`,
+        `PreferredLabelValue`, `FeatureType`, `SpatialRel`) are defined here too. Private module so
+        the validator isn't public API; aliases are public via `models/__init__` / `archibald`.
+      - No new tests.
 - [ ] 1.4 Refactor: `serializers/_frames.py` extraction (D10b).
       - Public: `attach_metadata`, `concat_frames`, `error_frame(errors: list[dict | None])`
         (generalized from items to raw error dicts), `geometry_spec`; private:
@@ -464,7 +474,9 @@ Screening rules are pure functions `(text, ctx) -> Rejection | None`, keyed by n
 ### Phase 7: Release polish (`feat/geocode-docs`)
 - [ ] 7.1 Top-level and `models/__init__` exports: the service, results, items, and the status /
       tuning Literals.
-- [ ] 7.2 Docs: `docs/api/services.md`, `docs/api/models.md`, and a `docs/usage.md` geocoding
+- [ ] 7.2 Docs: `docs/api/services.md`, `docs/api/models.md`, `docs/api/exceptions.md` (lists each
+      exception explicitly and lacks the four from 1.1: `CapabilityError`,
+      `ServiceCapabilityError`, `RejectedAddressError`, `AddressNotFoundError`), and a `docs/usage.md` geocoding
       section covering:
       - the suggest → magic_key → find_candidates flow;
       - screening;
@@ -536,6 +548,7 @@ Screening rules are pure functions `(text, ctx) -> Rejection | None`, keyed by n
 | 2026-11-25 | 1.1 | `feat/geocode-foundations` c707441, e240954 | Exceptions added and exported; `TestHierarchy` reworked with ids. `RejectedAddressError` stays under `InvalidParameterError`. |
 | 2026-11-25 | 1.2 | `feat/geocode-foundations` bc10489, 28e1d72 | `failure_error` added; `failed_items` deleted (callers use `_from_exception`), so `errors.py` imports no models. Superclass for items rejected for now. |
 | 2026-11-25 | 1.2 follow-up | `feat/geocode-foundations` cd60130, 11b4c20 | `failed_items` restored as a deprecated wrapper instead of removed (shipped in 1.3.0; mirrors the `merge`/`from_esri_response` precedent). CHANGELOG entry queued in 7.3. |
+| 2026-11-25 | 1.3 | `feat/geocode-foundations` (see git log) | `models/_literals.py` holds shared named Literals + `validate_literal_values`; `EditKind`/`EditStatus` moved there and re-exported (no deprecation needed). Frame helpers (1.4) confirmed for `serializers/_frames.py`. |
 
 ## 11. Discovery tooling
 
