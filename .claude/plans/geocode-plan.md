@@ -9,7 +9,8 @@
 - **Bullet lifecycle:** code → user review → tests → user review → commit only when told. One
   bullet at a time.
 - **Commits:** atomic (`feat(...)`, `refactor(...)`, `test(...)`, `docs(changelog)`), never combined.
-- **Branching:** one `feat/geocode-<phase>` branch per phase → PR into `next-minor`. Don't cut a
+- **Branching:** one `feat/geocode-<phase>` branch per phase, merged into `next-minor` directly
+  (no PR; PRs are only for `next-minor` → `main`). Don't cut a
   minor release from `next-minor` mid-feature; top-level exports wait until Phase 7.
 - **Tests:** `uv run pytest`. Fixtures go in `tests/conftest.py`, builders in `tests/helpers.py`,
   parametrized with `ids=`.
@@ -275,7 +276,7 @@ ReverseGeocodeStatus = Literal["matched", "unmatched", "failed"]
 
 | ID | Decision |
 |----|----------|
-| D1 | `feat/geocode-<phase>` branch per phase → PR into `next-minor`. |
+| D1 | `feat/geocode-<phase>` branch per phase, merged directly into `next-minor` (revised 2026-11-25: no PRs into `next-minor`; PRs only for `next-minor` → `main`). |
 | D2 | Add `CapabilityError(ArchieClientError)`. Re-parent `LayerCapabilityError` under it (non-breaking) and add `ServiceCapabilityError(CapabilityError)`. |
 | D3 | `geocode()` → `geocodeAddresses` (batch best match); `find_candidates()` → `findAddressCandidates` (single, N candidates, `magic_key`). |
 | D4 | Screening: **only `empty` is on by default**; `screen=None` or `screen=()` disables screening completely; `po_box`, `numeric_only` and `alpha_only` are opt-in (`screen=SCREEN_RULES` for all). See **D4 detail** below the table. |
