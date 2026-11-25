@@ -1,6 +1,7 @@
 import pytest
 
 from archibald.errors import (
+    failed_items,
     failure_error,
     handle_esri_errors,
     is_outcome_unknown,
@@ -27,6 +28,35 @@ class TestIsOutcomeUnknown:
     @pytest.mark.parametrize("exc, expected", OUTCOME_UNKNOWN_CASES)
     def test_returns_expected_when_exception_given(self, exc, expected):
         assert is_outcome_unknown(exc) is expected
+
+
+class TestFailedItems:
+    def test_warns_when_called(self):
+        exc = make_arcgis_error(ServiceError, 400, "Rolled back.")
+
+        with pytest.warns(DeprecationWarning, match="failed_items is deprecated"):
+            failed_items(exc, [1], outcome_unknown=True)
+
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            pytest.param(
+                make_arcgis_error(ServiceError, 400, "Rolled back."), id="envelope"
+            ),
+            *NON_ENVELOPE_FAILURE_CASES,
+        ],
+    )
+    def test_returns_one_failure_error_item_per_id_when_called(self, exc):
+        expected = failure_error(exc, outcome_unknown=True, status_url=STATUS_URL)
+
+        with pytest.warns(DeprecationWarning):
+            items = failed_items(
+                exc, [3, 1, 2], outcome_unknown=True, status_url=STATUS_URL
+            )
+
+        assert [item.object_id for item in items] == [3, 1, 2]
+        assert all(item.success is False for item in items)
+        assert [item.error for item in items] == [expected] * 3
 
 
 class TestFailureError:
