@@ -373,12 +373,14 @@ Screening rules are pure functions `(text, ctx) -> Rejection | None`, keyed by n
         `tests/models/test_apply_edits_result.py` to `tests/serializers/test_frames.py`
         (`TestConcatFrames` / `TestGeometrySpec` / `TestErrorFrame`), assertions unchanged, in their
         own `test(...)` commit. Decided 2026-11-25 over keeping delegate methods.
-- [ ] 1.5 `GeocodeService(BaseService)`, `expected_type = "GeocodeServer"`, with the private
+- [x] 1.5 `GeocodeService(BaseService)`, `expected_type = "GeocodeServer"`, with the private
       `_capabilities() -> set[str]` and `supports_{geocode,batch_geocode,reverse_geocode,suggest}()`.
       Export from `services/__init__.py`. Docstrings say these report *advertised* support:
       `AddrParcels_…` advertises Suggest and still returns 400.
       - `_capabilities`: comma-split, strip, lowercase, drop empties.
-      - `supports_batch_geocode`: `supports_geocode()` and `MaxBatchSize` present and `> 0`.
+      - `max_batch_size() -> int | None` (Properties banner; async like `crs()`), `int()`-coerced,
+        None when absent. Pulled forward from 5.3.
+      - `supports_batch_geocode`: `supports_geocode()` and `max_batch_size()` `> 0`.
       - Tests: `geocode_service` fixture (conftest), `make_geocode_metadata(capabilities=...,
         locator_properties=...)` builder and `GEOCODE_SERVICE_PATH` (helpers), modeled on
         `city/01_metadata.json`. Cases: path validation; each `supports_*` across full caps,
@@ -439,7 +441,7 @@ Screening rules are pure functions `(text, ctx) -> Rejection | None`, keyed by n
       - set `OBJECTID = position`;
       - screened-out rows become `rejected` and are set aside;
       - dedupe (D7) builds the representative → duplicates map.
-- [ ] 5.3 `suggested_batch_size()` / `max_batch_size()`, batch-size resolution
+- [ ] 5.3 `suggested_batch_size()` (`max_batch_size()` landed in 1.5), batch-size resolution
       (`1 ≤ n ≤ MaxBatchSize`), and count-based chunking.
 - [ ] 5.4 `GeocodeResultItem` + `GeocodeResult` + `GeocodeStatus`, built on `serializers/_frames.py`.
 - [ ] 5.5 `GeocodeAddressesOperation`:
@@ -550,6 +552,7 @@ Screening rules are pure functions `(text, ctx) -> Rejection | None`, keyed by n
 | 2026-11-25 | 1.2 follow-up | `feat/geocode-foundations` cd60130, 11b4c20 | `failed_items` restored as a deprecated wrapper instead of removed (shipped in 1.3.0; mirrors the `merge`/`from_esri_response` precedent). CHANGELOG entry queued in 7.3. |
 | 2026-11-25 | 1.3 | `feat/geocode-foundations` (see git log) | `models/_literals.py` holds shared named Literals + `validate_literal_values`; `EditKind`/`EditStatus` moved there and re-exported (no deprecation needed). Frame helpers (1.4) confirmed for `serializers/_frames.py`. |
 | 2026-11-25 | 1.4 | `feat/geocode-foundations` (see git log) | Frame helpers moved to `serializers/_frames.py`; `error_frame` takes error dicts. Direct helper tests moved to `tests/serializers/test_frames.py`; the two `_metadata_frame`-based error tests stayed with `ApplyEditsResult`. |
+| 2026-11-25 | 1.5 | `feat/geocode-foundations` (see git log) | `GeocodeService` with comma-split capability checks and `max_batch_size()`; verified against all 7 captured locators. `make_geocode_metadata` builder + `geocode_service` fixture added. Phase 1 complete → PR into `next-minor`. |
 
 ## 11. Discovery tooling
 
