@@ -47,6 +47,10 @@ class ServiceError(ArcGISError):
     """Catch-all for unrecognised ESRI error codes."""
 
 
+class AddressNotFoundError(ServiceError):
+    """The locator found no address at the given location (reverseGeocode miss)."""
+
+
 # ---------------------------------------------------------------------------
 # archibald-originated errors
 # ---------------------------------------------------------------------------
@@ -68,12 +72,34 @@ class InvalidServiceURL(ArchieClientError):
     """The provided URL does not match the expected service type."""
 
 
-class LayerCapabilityError(ArchieClientError):
+class CapabilityError(ArchieClientError):
+    """The service or layer does not support the requested operation."""
+
+
+class LayerCapabilityError(CapabilityError):
     """The layer does not support the requested operation."""
+
+
+class ServiceCapabilityError(CapabilityError):
+    """The service does not support the requested operation."""
 
 
 class InvalidParameterError(ArchieClientError):
     """A parameter supplied by the caller is invalid."""
+
+
+class RejectedAddressError(InvalidParameterError):
+    """An address was rejected by a screening rule before being sent.
+
+    Attributes:
+        rule: Name of the screening rule that rejected the address.
+        reason: Why the rule rejected it.
+    """
+
+    def __init__(self, rule: str, reason: str) -> None:
+        self.rule = rule
+        self.reason = reason
+        super().__init__(f"Address rejected by '{rule}' rule: {reason}")
 
 
 class MissingGeometryError(ArchieClientError):
