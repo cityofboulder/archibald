@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+from archibald.errors import failure_error
+
 EditKind = Literal["adds", "updates", "deletes"]
 """Kind of edit an applyEdits result item belongs to."""
 
@@ -78,10 +80,9 @@ class EditResultItem:
     ) -> EditResultItem:
         """Build a failed item from an exception that produced no ESRI result.
 
-        The error dict mirrors ESRI's per-item ``code``/``description`` shape and
-        adds ``exception`` (the exception class name) and ``outcome_unknown``
-        (True when the request may have reached the server, so it may have been
-        applied despite the failure). ``status_url`` is added only when given.
+        The item's error dict comes from ``errors.failure_error``: the ESRI
+        envelope's error when ``exc`` carries one, otherwise a dict built from
+        the exception with ``outcome_unknown`` set.
 
         Args:
             exc: The exception that prevented a result from being obtained.
@@ -89,12 +90,7 @@ class EditResultItem:
             outcome_unknown: Whether the server may have processed the request.
             status_url: Async job status URL to report, if the request had one.
         """
-        error = {
-            "code": getattr(exc, "code", -1),
-            "description": str(exc) or type(exc).__name__,
-            "exception": type(exc).__name__,
-            "outcome_unknown": outcome_unknown,
-        }
-        if status_url is not None:
-            error["status_url"] = status_url
+        error = failure_error(
+            exc, outcome_unknown=outcome_unknown, status_url=status_url
+        )
         return cls(object_id=object_id, global_id=None, success=False, error=error)

@@ -13,7 +13,6 @@ from archibald.exceptions import (
     TokenExpiredError,
     TokenMissingError,
 )
-from archibald.models.edit_result_item import EditResultItem
 
 _ESRI_CODE_MAP: dict[int, type[ArcGISError]] = {
     498: TokenExpiredError,
@@ -65,48 +64,47 @@ def is_outcome_unknown(exc: Exception) -> bool:
     return isinstance(exc, (httpx.TransportError, ValueError, KeyError, TimeoutError))
 
 
-def failed_items(
-    exc: Exception,
-    object_ids: list[int],
+def failure_error(
+    exc: BaseException,
     *,
     outcome_unknown: bool,
     status_url: str | None = None,
-) -> list[EditResultItem]:
-    """Build one failed EditResultItem per ID from a single request failure.
+) -> dict:
+    """Build the error dict reported for a request that failed.
 
     An ArcGISError carrying an ESRI error envelope (``raw_response`` with an
-    ``"error"`` key) means the server rejected the request, so each item
-    carries that error dict. Anything else, including an ArcGISError whose
+    ``"error"`` key) means the server rejected the request, so its error dict
+    is returned. Anything else, including an ArcGISError whose
     ``raw_response`` is missing or is not an envelope (e.g. an async job's
-    status body), becomes an item built from the exception, flagged with
-    ``outcome_unknown``. ``status_url``, when given, is added to every
-    item's error dict.
+    status body), gets a dict mirroring ESRI's ``code``/``description`` shape
+    plus ``exception`` (the exception class name) and ``outcome_unknown``.
+    ``status_url``, when given, is added in both cases; the envelope itself is
+    never modified.
 
     Args:
         exc: Exception raised by the request.
-        object_ids: ID to report on each item, one item per ID.
         outcome_unknown: Whether the server may have applied the request
             anyway; ignored for ESRI error envelopes.
-        status_url: Async job status URL to report on each item, if any.
+        status_url: Async job status URL to report, if any.
 
     Returns:
-        List of ``success=False`` items in ``object_ids`` order.
+        The error dict.
     """
     envelope = exc.raw_response if isinstance(exc, ArcGISError) else None
     if envelope is not None and "error" in envelope:
         error = envelope["error"]
         if status_url is not None:
             error = {**error, "status_url": status_url}
-        return [
-            EditResultItem._from_esri({"error": error, "objectId": oid})
-            for oid in object_ids
-        ]
-    return [
-        EditResultItem._from_exception(
-            exc, object_id=oid, outcome_unknown=outcome_unknown, status_url=status_url
-        )
-        for oid in object_ids
-    ]
+        return error
+    error = {
+        "code": getattr(exc, "code", -1),
+        "description": str(exc) or type(exc).__name__,
+        "exception": type(exc).__name__,
+        "outcome_unknown": outcome_unknown,
+    }
+    if status_url is not None:
+        error["status_url"] = status_url
+    return error
 
 
 def handle_esri_errors(func: Callable[..., Any]) -> Callable[..., Any]:
