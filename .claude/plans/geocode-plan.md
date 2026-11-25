@@ -244,7 +244,7 @@ src/archibald/
   operations/{suggest,find_address_candidates,geocode_addresses,reverse_geocode}.py
   serializers/_addresses.py            normalize, single/multiline formatting, screening rules, records, dedupe, chunking
   serializers/_geometry.py             + esri_geometry_type()
-  models/_frames.py                    shared frame helpers extracted from ApplyEditsResult
+  serializers/_frames.py               shared frame helpers extracted from ApplyEditsResult
   models/{suggest_result,candidates_result,geocode_result,reverse_geocode_result}.py
 ```
 
@@ -282,7 +282,7 @@ ReverseGeocodeStatus = Literal["matched", "unmatched", "failed"]
 | D7 | `dedupe=True` by default. The key is the casefolded normalized single line, or a tuple of normalized multiline values. Only the first occurrence is sent (its position is the OBJECTID); its result is copied to every duplicate position. `dedupe=False` sends every row. |
 | D8 | `AddressNotFoundError(ServiceError)` lives in `exceptions.py` (ESRI-originated section). `errors.parse_esri_error` picks the class through a new private `_error_class(code, message, details)`: first `_ESRI_CODE_MAP`, then code 400 with any detail or message matching the module constant `_ADDRESS_NOT_FOUND = re.compile(r"unable to find address", re.I)` → `AddressNotFoundError`, else `ServiceError`. Because `handle_esri_errors` already calls `parse_esri_error` at `_request`, the classification applies automatically with no new decorator. It stays backwards compatible: it subclasses `ServiceError`, which is what those envelopes raise today. `ReverseGeocodeOperation` catches `AddressNotFoundError` → `unmatched` item; any other exception → `failed`. Trade-off: one regex runs per error envelope (negligible), and if the text varies across server versions, only the constant changes. Verified in Phase 0: the miss is a code-400 envelope with details `["Unable to find address for the specified location."]` on both locators, and other 400s ("Unable to complete operation.") don't match. |
 | D9 | `min_score: float \| None` (0–100, validated). In `geocode()`, an M/T result scoring below it becomes status `low_score` and keeps score, match address and location. In `find_candidates()`, candidates below it are dropped. `score` is always a column. |
-| D10 | Generalize, don't duplicate. (a) `errors.failure_error(exc, *, outcome_unknown, status_url=None) -> dict` holds the envelope-vs-exception logic now inside `failed_items`/`EditResultItem._from_exception`; both become thin callers. Geocode failures use it with `outcome_unknown=is_outcome_unknown(exc)`. (b) `ApplyEditsResult`'s `_attach_metadata`, `_concat_frames`, `_geometry_spec`, `_restore_int_columns`, `_error_frame`, `_fallback_description` move to `models/_frames.py` as functions, and `ApplyEditsResult` delegates to them. (c) `_filter_values` → `_literals.validate_literal_values(values, literal_type, name)`, reused by `filter()` and the tuning-option `Literal`s. All three are behavior-preserving refactors: the existing tests must pass unchanged. |
+| D10 | Generalize, don't duplicate. (a) `errors.failure_error(exc, *, outcome_unknown, status_url=None) -> dict` holds the envelope-vs-exception logic now inside `failed_items`/`EditResultItem._from_exception`; both become thin callers. Geocode failures use it with `outcome_unknown=is_outcome_unknown(exc)`. (b) `ApplyEditsResult`'s `_attach_metadata`, `_concat_frames`, `_geometry_spec`, `_restore_int_columns`, `_error_frame`, `_fallback_description` move to `serializers/_frames.py` as functions (revised 2026-11-25: serializers already holds module-level pandas helpers; models are one class per module), and `ApplyEditsResult` delegates to them. (c) `_filter_values` → `_literals.validate_literal_values(values, literal_type, name)`, reused by `filter()` and the tuning-option `Literal`s. All three are behavior-preserving refactors: the existing tests must pass unchanged. |
 | D11 | World Geocoder is out of scope beyond `**kwargs`/`for_storage`; the City locators are the target. |
 | D12 | Batch concurrency is bounded by the client's `max_concurrent_requests`. |
 | D13 | Query geometry: `BaseLayer.query(..., geometry=None, in_sr=None, spatial_rel="esriSpatialRelIntersects")`. A shapely geometry is serialized with `geometry_to_esri`, `geometryType` comes from `esri_geometry_type`, and `inSR` is required (SR rule). A `str` or `dict` geometry passes through unchanged (a dict is `json.dumps`'d) so existing `**kwargs` callers keep working. `SpatialRel` is a `Literal` of the ESRI `esriSpatialRel*` names. Buffering (`distance`/`units`) stays `**kwargs`. |
@@ -331,14 +331,43 @@ Screening rules are pure functions `(text, ctx) -> Rejection | None`, keyed by n
       addresses and contain no secrets.
 
 ### Phase 1: Foundations (`feat/geocode-foundations`)
-- [ ] 1.1 Exceptions per D2/D5/D8 in `exceptions.py`, exported from `archibald/__init__.py`.
+- [ ] 1.1 Exceptions per D2/D5/D8 in `exceptions.py`, exported from `archibald/__init__.py`:
+      - `AddressNotFoundError(ServiceError)` (ESRI section; class only, classification is 6.1);
+      - `CapabilityError(ArchieClientError)`; `LayerCapabilityError` re-parented under it;
+        `ServiceCapabilityError(CapabilityError)`;
+      - `RejectedAddressError(InvalidParameterError)`, `__init__(rule, reason)` stores `.rule` /
+        `.reason`, message `"Address rejected by '<rule>' rule: <reason>"`.
+      - Tests: hierarchy/catchability in `tests/test_exceptions.py`, parametrized with `ids=`.
 - [ ] 1.2 Refactor: `errors.failure_error()` (D10a).
-- [ ] 1.3 Refactor: `_literals.validate_literal_values()` (D10c).
-- [ ] 1.4 Refactor: `models/_frames.py` extraction (D10b).
+      - Envelope `ArcGISError` → its error dict (`{**error, "status_url": ...}` only when given);
+        otherwise the dict `_from_exception` builds today.
+      - `failed_items` and `EditResultItem._from_exception` become thin callers. Current
+        `_from_exception` callers never pass an envelope, so behavior is unchanged.
+      - Import cycle: `errors.py`'s `EditResultItem` import moves inside `failed_items` (its only use).
+      - No new tests; `failure_error` gets direct tests at its first geocode use (Phase 5).
+- [ ] 1.3 Refactor: `_literals.validate_literal_values(values, literal_type, name) -> set | None`
+      (D10c): body of `ApplyEditsResult._filter_values`, calling `get_args` itself. `filter()`
+      uses it; `_filter_values` is deleted. No new tests.
+- [ ] 1.4 Refactor: `serializers/_frames.py` extraction (D10b).
+      - Public: `attach_metadata`, `concat_frames`, `error_frame(errors: list[dict | None])`
+        (generalized from items to raw error dicts), `geometry_spec`; private:
+        `_fallback_description`, `_restore_int_columns`. Bodies moved as-is.
+      - `ApplyEditsResult` drops the six methods and calls the functions.
+      - Tests: the `_concat_frames` / `_geometry_spec` / `_error_frame` test classes move from
+        `tests/models/test_apply_edits_result.py` to `tests/serializers/test_frames.py`
+        (`TestConcatFrames` / `TestGeometrySpec` / `TestErrorFrame`), assertions unchanged, in their
+        own `test(...)` commit. Decided 2026-11-25 over keeping delegate methods.
 - [ ] 1.5 `GeocodeService(BaseService)`, `expected_type = "GeocodeServer"`, with the private
       `_capabilities() -> set[str]` and `supports_{geocode,batch_geocode,reverse_geocode,suggest}()`.
       Export from `services/__init__.py`. Docstrings say these report *advertised* support:
       `AddrParcels_…` advertises Suggest and still returns 400.
+      - `_capabilities`: comma-split, strip, lowercase, drop empties.
+      - `supports_batch_geocode`: `supports_geocode()` and `MaxBatchSize` present and `> 0`.
+      - Tests: `geocode_service` fixture (conftest), `make_geocode_metadata(capabilities=...,
+        locator_properties=...)` builder and `GEOCODE_SERVICE_PATH` (helpers), modeled on
+        `city/01_metadata.json`. Cases: path validation; each `supports_*` across full caps,
+        classic `"Geocode,ReverseGeocode"`, `"ReverseGeocode"` only (substring trap), missing key;
+        batch across MaxBatchSize present / absent / `0` / Geocode not advertised.
 
 ### Phase 2: Query geometry (`feat/geocode-query-geometry`)
 - [ ] 2.1 In `serializers/_geometry.py`: `esri_geometry_type()`, plus `sr_to_esri()` /
@@ -396,7 +425,7 @@ Screening rules are pure functions `(text, ctx) -> Rejection | None`, keyed by n
       - dedupe (D7) builds the representative → duplicates map.
 - [ ] 5.3 `suggested_batch_size()` / `max_batch_size()`, batch-size resolution
       (`1 ≤ n ≤ MaxBatchSize`), and count-based chunking.
-- [ ] 5.4 `GeocodeResultItem` + `GeocodeResult` + `GeocodeStatus`, built on `models/_frames.py`.
+- [ ] 5.4 `GeocodeResultItem` + `GeocodeResult` + `GeocodeStatus`, built on `serializers/_frames.py`.
 - [ ] 5.5 `GeocodeAddressesOperation`:
       - fan out with a task group;
       - map `ResultID → position`, then fan results out to duplicates;
@@ -445,7 +474,7 @@ Screening rules are pure functions `(text, ctx) -> Rejection | None`, keyed by n
 ## 8. Testing strategy
 
 - Mirrored test files for every new module. Refactor bullets (1.2–1.4) add no tests and must leave
-  the existing suite green and unchanged.
+  the existing suite green and unchanged (except the 1.4 test move to `tests/serializers/test_frames.py`).
 - Fixtures cover these metadata variants, modeled on the real captures:
   - modern (City) vs classic (`TRANSPORTATION_…`): `SingleLine` vs `Single Line Input`, World-style
     vs `Street/City/ZIP` fields, int vs string `locatorProperties`, and present vs absent
@@ -495,6 +524,7 @@ Screening rules are pure functions `(text, ctx) -> Rejection | None`, keyed by n
 | 2026-11-24 | Locator family naming | none (no code) | Family is the locator format (classic = Create Address Locator, modern = Create Locator), not Pro vs ArcMap: Pro-2.6.3-built `AddrParcels` is classic. Classic locators also ignore `featureTypes` entirely. `is_pro_locator()` → `is_classic_locator()`; D15 now warns in both directions. |
 | 2026-11-24 | D4 defaults | none (no code) | Per CLAUDE.md's no-assumptions rule, only `empty` is on by default; `po_box`/`numeric_only`/`alpha_only` are opt-in. `screen=None` or `()` disables screening; `SCREEN_RULES` enables all. D5 note updated. |
 | 2026-11-24 | D15 approved | none (no code) | `is_classic_locator()` plus two-way reverse_geocode warnings approved. |
+| 2026-11-25 | Phase 1 detailed | none (no code) | Phase 1 bullets expanded. Frame helpers go to `serializers/_frames.py`, not `models/` (models are one class per module; serializers already holds module-level pandas helpers). Their direct tests move to `tests/serializers/test_frames.py` instead of keeping delegate methods. |
 
 ## 11. Discovery tooling
 
