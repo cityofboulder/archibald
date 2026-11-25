@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import re
 import warnings
 from dataclasses import dataclass, field, replace
-from typing import Any, get_args
+from typing import get_args
 
 import geopandas as gpd
 import pandas as pd
@@ -13,6 +12,7 @@ import pandas as pd
 from archibald.exceptions import InvalidParameterError
 from archibald.models._literals import validate_literal_values
 from archibald.models.edit_result_item import EditKind, EditResultItem, EditStatus
+from archibald.serializers._frames import attach_metadata, concat_frames, error_frame
 
 __all__ = ["ApplyEditsResult", "EditKind", "EditResultItem", "EditStatus"]
 
@@ -211,7 +211,7 @@ class ApplyEditsResult:
         if not self._inputs:
             return pd.DataFrame()
         positions = meta["position"].astype(int)
-        rows = self._concat_frames(
+        rows = concat_frames(
             [
                 frame.iloc[positions[meta["kind"] == kind].to_numpy()]
                 for kind, frame in self._inputs.items()
@@ -220,106 +220,11 @@ class ApplyEditsResult:
         if not include_metadata:
             return rows
         metadata = meta.drop(columns="position").add_prefix(metadata_prefix)
-        return self._attach_metadata(rows, metadata)
+        return attach_metadata(rows, metadata)
 
     # ------------------------------------------------------------------
     # Private methods
     # ------------------------------------------------------------------
-
-    @staticmethod
-    def _attach_metadata(
-        rows: pd.DataFrame | gpd.GeoDataFrame,
-        metadata: pd.DataFrame,
-    ) -> pd.DataFrame | gpd.GeoDataFrame:
-        """Append ``metadata`` columns to ``rows``, matching them by position.
-
-        Args:
-            rows: Input rows, one per item, with their original index.
-            metadata: Prefixed metadata for the same items, in the same order.
-
-        Raises:
-            InvalidParameterError: If a metadata column already exists in
-                ``rows``.
-        """
-        clash = sorted(set(metadata.columns) & set(rows.columns))
-        if clash:
-            raise InvalidParameterError(
-                f"Columns {clash} already exist in the input; "
-                "pass a different metadata_prefix."
-            )
-        return rows.assign(**{c: metadata[c].array for c in metadata.columns})
-
-    @classmethod
-    def _concat_frames(
-        cls, frames: list[pd.DataFrame | gpd.GeoDataFrame]
-    ) -> pd.DataFrame | gpd.GeoDataFrame:
-        """Stack frames row-wise, returning a GeoDataFrame if any stacked one is.
-
-        Empty frames are skipped (unless all are empty) so they don't affect
-        the result's columns, dtypes, or type. ``pd.concat`` returns the type
-        of the first frame, so the result is rebuilt as a GeoDataFrame per
-        ``_geometry_spec``, and integer columns are restored per
-        ``_restore_int_columns``.
-        """
-        frames = [f for f in frames if len(f)] or frames[:1]
-        geometry = cls._geometry_spec(frames)
-        out = pd.concat(frames) if len(frames) > 1 else frames[0]
-        out = cls._restore_int_columns(out, frames)
-        if geometry is None:
-            return out
-        name, crs = geometry
-        return gpd.GeoDataFrame(out, geometry=name, crs=crs)
-
-    @staticmethod
-    def _error_frame(items: list[EditResultItem]) -> pd.DataFrame:
-        """Return one row per item with its error dict flattened into columns.
-
-        Keys become ``error_<snake_case_key>`` columns (``extendedCode`` →
-        ``error_extended_code``). ``error_code``, ``error_description``,
-        ``error_exception``, ``error_outcome_unknown``, and
-        ``error_status_url`` are always present, with fixed dtypes; other keys
-        follow in the order they appear, with dtypes from ``convert_dtypes``.
-        Where ESRI sent no description (rolled-back batches carry ``message``
-        and ``details`` instead), ``error_description`` is filled from those.
-        """
-        core_dtypes = {
-            "code": "Int64",
-            "description": "string",
-            "exception": "string",
-            "outcome_unknown": "boolean",
-            "status_url": "string",
-        }
-        errors = pd.DataFrame(
-            [item.error or {} for item in items], index=range(len(items))
-        )
-        errors = errors.rename(
-            columns=lambda c: re.sub(r"(?<!^)(?=[A-Z])", "_", str(c)).lower()
-        )
-        extras = [c for c in errors.columns if c not in core_dtypes]
-        errors = errors.reindex(columns=[*core_dtypes, *extras])
-        described = errors["description"].fillna("") != ""
-        errors["description"] = errors["description"].where(
-            described, ApplyEditsResult._fallback_description(errors)
-        )
-        errors[extras] = errors[extras].convert_dtypes()
-        return errors.astype(core_dtypes).add_prefix("error_")
-
-    @staticmethod
-    def _fallback_description(errors: pd.DataFrame) -> pd.Series:
-        """Join each row's ``message`` and ``details`` into one string.
-
-        Rows with neither are null. ``details`` holds a list of strings.
-        """
-        text = pd.Series("", index=errors.index)
-        if "message" in errors:
-            text = errors["message"].fillna("").astype(str)
-        if "details" in errors:
-            details = errors["details"].map(
-                lambda d: " ".join(str(p) for p in d) if isinstance(d, list) else ""
-            )
-            text = text + " " + details
-        text = text.str.strip()
-        return text.where(text != "")
 
     @classmethod
     def _from_esri_response(cls, body: dict) -> ApplyEditsResult:
@@ -342,35 +247,6 @@ class ApplyEditsResult:
                 EditResultItem._from_esri(r) for r in body.get("deleteResults", [])
             ],
         )
-
-    @staticmethod
-    def _geometry_spec(
-        frames: list[pd.DataFrame | gpd.GeoDataFrame],
-    ) -> tuple[str, Any] | None:
-        """Return the shared geometry column name and CRS of the GeoDataFrames.
-
-        Returns:
-            ``(name, crs)`` of the GeoDataFrames in ``frames``, or None when
-            there are none.
-
-        Raises:
-            InvalidParameterError: If the GeoDataFrames disagree on geometry
-                column name or CRS.
-        """
-        geo = [f for f in frames if isinstance(f, gpd.GeoDataFrame)]
-        if not geo:
-            return None
-        names = {str(g.geometry.name) for g in geo}
-        if len(names) > 1:
-            raise InvalidParameterError(
-                f"GeoDataFrame inputs use different geometry columns: {sorted(names)}."
-            )
-        if any(g.crs != geo[0].crs for g in geo[1:]):
-            raise InvalidParameterError(
-                "GeoDataFrame inputs have different CRS: "
-                f"{sorted({str(g.crs) for g in geo})}."
-            )
-        return names.pop(), geo[0].crs
 
     @classmethod
     def _merge(cls, results: list[ApplyEditsResult]) -> ApplyEditsResult:
@@ -408,7 +284,7 @@ class ApplyEditsResult:
         Columns: ``kind`` and ``status`` (categoricals of the ``EditKind`` /
         ``EditStatus`` values), ``object_id`` (-1 when ESRI reports none),
         ``global_id``, ``position`` (null when unknown), then the error
-        columns from ``_error_frame``.
+        columns from ``error_frame``.
         """
         items = self._items
         dtypes = {
@@ -423,27 +299,4 @@ class ApplyEditsResult:
             for item in items
         ]
         core = pd.DataFrame.from_records(records, columns=list(dtypes)).astype(dtypes)
-        return pd.concat([core, self._error_frame(items)], axis=1)
-
-    @staticmethod
-    def _restore_int_columns(
-        out: pd.DataFrame | gpd.GeoDataFrame,
-        frames: list[pd.DataFrame | gpd.GeoDataFrame],
-    ) -> pd.DataFrame | gpd.GeoDataFrame:
-        """Cast columns that ``pd.concat`` turned from integer to float to ``Int64``.
-
-        A column missing from some frames (e.g. OBJECTID, absent from adds)
-        is filled with NaN, which turns integers into floats; nullable
-        ``Int64`` keeps them integers with ``<NA>`` for the missing rows.
-
-        Args:
-            out: The concatenated frame.
-            frames: The frames ``out`` was built from.
-        """
-        upcast = [
-            c
-            for c in out.columns
-            if not pd.api.types.is_integer_dtype(out[c])
-            and all(pd.api.types.is_integer_dtype(f[c]) for f in frames if c in f)
-        ]
-        return out.astype(dict.fromkeys(upcast, "Int64"))
+        return pd.concat([core, error_frame([item.error for item in items])], axis=1)
