@@ -24,12 +24,14 @@ from archibald.services import (
     BaseService,
     FeatureLayer,
     FeatureService,
+    GeocodeService,
     MapLayer,
     MapService,
 )
 from tests.helpers import (
     ESRI_ITEM_ERROR,
     ESRI_ROLLBACK_ERROR,
+    GEOCODE_SERVICE_PATH,
     MAP_LAYER_PATH,
     OUTCOME_UNKNOWN_ERROR,
     SERVICE_PATH,
@@ -83,6 +85,12 @@ def service(mock_client) -> BaseService:
 def feature_service(mock_client) -> FeatureService:
     """A default FeatureService instance backed by a mock client."""
     return FeatureService(client=mock_client, service_path=SERVICE_PATH)
+
+
+@pytest.fixture
+def geocode_service(mock_client) -> GeocodeService:
+    """A default GeocodeService instance backed by a mock client."""
+    return GeocodeService(client=mock_client, service_path=GEOCODE_SERVICE_PATH)
 
 
 @pytest.fixture

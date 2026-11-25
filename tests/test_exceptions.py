@@ -1,5 +1,6 @@
 import pytest
 from archibald.exceptions import (
+    AddressNotFoundError,
     ArchieError,
     ArcGISError,
     TokenExpiredError,
@@ -11,8 +12,11 @@ from archibald.exceptions import (
     TokenRefreshError,
     ConfigurationError,
     InvalidServiceURL,
+    CapabilityError,
     LayerCapabilityError,
+    ServiceCapabilityError,
     InvalidParameterError,
+    RejectedAddressError,
     MissingGeometryError,
 )
 
@@ -57,6 +61,15 @@ class TestHierarchy:
             AuthorizationError,
             NotFoundError,
             ServiceError,
+            AddressNotFoundError,
+        ],
+        ids=[
+            "token-expired",
+            "token-missing",
+            "authorization",
+            "not-found",
+            "service",
+            "address-not-found",
         ],
     )
     def test_arcgis_subclasses_inherit_from_arcgis_error(self, exc_class):
@@ -67,22 +80,52 @@ class TestHierarchy:
         assert isinstance(err, Exception)
 
     @pytest.mark.parametrize(
-        "exc_class",
+        "err",
         [
-            TokenRefreshError,
-            ConfigurationError,
-            InvalidServiceURL,
-            LayerCapabilityError,
-            InvalidParameterError,
-            MissingGeometryError,
+            TokenRefreshError("test"),
+            ConfigurationError("test"),
+            InvalidServiceURL("test"),
+            CapabilityError("test"),
+            LayerCapabilityError("test"),
+            ServiceCapabilityError("test"),
+            InvalidParameterError("test"),
+            RejectedAddressError("empty", "test"),
+            MissingGeometryError("test"),
+        ],
+        ids=[
+            "token-refresh",
+            "configuration",
+            "invalid-service-url",
+            "capability",
+            "layer-capability",
+            "service-capability",
+            "invalid-parameter",
+            "rejected-address",
+            "missing-geometry",
         ],
     )
-    def test_client_subclasses_inherit_from_archibald_client_error(self, exc_class):
-        err = exc_class("test")
-
+    def test_client_subclasses_inherit_from_archibald_client_error(self, err):
         assert isinstance(err, ArchieClientError)
         assert isinstance(err, ArchieError)
         assert isinstance(err, Exception)
+
+    @pytest.mark.parametrize(
+        "err, parent",
+        [
+            (AddressNotFoundError(code=400, message="test"), ServiceError),
+            (LayerCapabilityError("test"), CapabilityError),
+            (ServiceCapabilityError("test"), CapabilityError),
+            (RejectedAddressError("empty", "test"), InvalidParameterError),
+        ],
+        ids=[
+            "address-not-found-is-service",
+            "layer-capability-is-capability",
+            "service-capability-is-capability",
+            "rejected-address-is-invalid-parameter",
+        ],
+    )
+    def test_subclasses_inherit_from_intermediate_parent(self, err, parent):
+        assert isinstance(err, parent)
 
     def test_arcgis_error_is_not_archibald_client_error(self):
         err = ArcGISError(code=0, message="test")
@@ -123,3 +166,27 @@ class TestCatchability:
     def test_missing_geometry_error_caught_as_archibald_client_error(self):
         with pytest.raises(ArchieClientError):
             raise MissingGeometryError("No geometry present.")
+
+    @pytest.mark.parametrize(
+        "exc_class",
+        [LayerCapabilityError, ServiceCapabilityError],
+        ids=["layer", "service"],
+    )
+    def test_capability_errors_caught_as_capability_error(self, exc_class):
+        with pytest.raises(CapabilityError, match="does not support"):
+            raise exc_class("Service does not support batch geocoding.")
+
+
+class TestRejectedAddressError:
+    def test_carries_rule_and_reason_when_constructed(self):
+        err = RejectedAddressError("po_box", "PO Box addresses are not geocodable.")
+
+        assert err.rule == "po_box"
+        assert err.reason == "PO Box addresses are not geocodable."
+
+    def test_message_names_rule_and_reason_when_raised(self):
+        with pytest.raises(
+            RejectedAddressError,
+            match=r"^Address rejected by 'empty' rule: Address is blank\.$",
+        ):
+            raise RejectedAddressError("empty", "Address is blank.")

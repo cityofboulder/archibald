@@ -2,6 +2,7 @@
 
 from archibald.services.base import BaseService
 from archibald.services.feature_service import FeatureService
+from archibald.services.geocode_service import GeocodeService
 from archibald.services.map_service import MapService
 from archibald.services.layers.base import BaseLayer
 from archibald.services.layers.feature_layer import FeatureLayer
@@ -12,6 +13,7 @@ __all__ = [
     "BaseLayer",
     "FeatureService",
     "FeatureLayer",
+    "GeocodeService",
     "MapService",
     "MapLayer",
 ]

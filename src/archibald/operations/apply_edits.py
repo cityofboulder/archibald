@@ -11,7 +11,7 @@ import geopandas as gpd
 import httpx
 import pandas as pd
 
-from archibald.errors import failed_items, is_outcome_unknown
+from archibald.errors import is_outcome_unknown
 from archibald.exceptions import InvalidParameterError, ServiceError
 from archibald.models.apply_edits_result import ApplyEditsResult
 from archibald.models.edit_result_item import EditKind, EditResultItem
@@ -90,9 +90,10 @@ class ApplyEditsOperation:
             A batch that fails (ESRI error envelope, transport or HTTP error,
             failed or timed-out async job) does not raise or cancel the other
             batches; each of its edits is instead a ``success=False`` item
-            built by ``failed_items``, carrying ``error["outcome_unknown"]``
-            and, for async jobs, ``error["status_url"]``. Failed adds report
-            ``object_id`` -1 and line up with input rows only by position.
+            built by ``EditResultItem._from_exception``, carrying
+            ``error["outcome_unknown"]`` and, for async jobs,
+            ``error["status_url"]``. Failed adds report ``object_id`` -1 and
+            line up with input rows only by position.
             Retrying an add whose outcome is unknown can create a duplicate.
 
             Every item's ``kind`` and ``position`` (its row in that kind's
@@ -291,8 +292,8 @@ class ApplyEditsOperation:
 
         Adds report ``object_id`` -1 since no OBJECTID exists yet; updates
         report the OBJECTID from their attributes (-1 if absent); deletes
-        report the OBJECTID being deleted. See ``failed_items`` for the error
-        dict each item carries.
+        report the OBJECTID being deleted. See ``errors.failure_error`` for the
+        error dict each item carries.
 
         Args:
             batch: The batch dict from pack_batches that failed.
@@ -315,9 +316,15 @@ class ApplyEditsOperation:
 
         def items(ids: list[int]) -> list[EditResultItem]:
             """Failed items for ``ids`` sharing this batch's failure details."""
-            return failed_items(
-                exc, ids, outcome_unknown=outcome_unknown, status_url=status_url
-            )
+            return [
+                EditResultItem._from_exception(
+                    exc,
+                    object_id=oid,
+                    outcome_unknown=outcome_unknown,
+                    status_url=status_url,
+                )
+                for oid in ids
+            ]
 
         return ApplyEditsResult(
             add_results=items(add_ids),
