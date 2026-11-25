@@ -364,7 +364,7 @@ Screening rules are pure functions `(text, ctx) -> Rejection | None`, keyed by n
         `PreferredLabelValue`, `FeatureType`, `SpatialRel`) are defined here too. Private module so
         the validator isn't public API; aliases are public via `models/__init__` / `archibald`.
       - No new tests.
-- [ ] 1.4 Refactor: `serializers/_frames.py` extraction (D10b).
+- [x] 1.4 Refactor: `serializers/_frames.py` extraction (D10b).
       - Public: `attach_metadata`, `concat_frames`, `error_frame(errors: list[dict | None])`
         (generalized from items to raw error dicts), `geometry_spec`; private:
         `_fallback_description`, `_restore_int_columns`. Bodies moved as-is.
@@ -549,6 +549,7 @@ Screening rules are pure functions `(text, ctx) -> Rejection | None`, keyed by n
 | 2026-11-25 | 1.2 | `feat/geocode-foundations` bc10489, 28e1d72 | `failure_error` added; `failed_items` deleted (callers use `_from_exception`), so `errors.py` imports no models. Superclass for items rejected for now. |
 | 2026-11-25 | 1.2 follow-up | `feat/geocode-foundations` cd60130, 11b4c20 | `failed_items` restored as a deprecated wrapper instead of removed (shipped in 1.3.0; mirrors the `merge`/`from_esri_response` precedent). CHANGELOG entry queued in 7.3. |
 | 2026-11-25 | 1.3 | `feat/geocode-foundations` (see git log) | `models/_literals.py` holds shared named Literals + `validate_literal_values`; `EditKind`/`EditStatus` moved there and re-exported (no deprecation needed). Frame helpers (1.4) confirmed for `serializers/_frames.py`. |
+| 2026-11-25 | 1.4 | `feat/geocode-foundations` (see git log) | Frame helpers moved to `serializers/_frames.py`; `error_frame` takes error dicts. Direct helper tests moved to `tests/serializers/test_frames.py`; the two `_metadata_frame`-based error tests stayed with `ApplyEditsResult`. |
 
 ## 11. Discovery tooling
 
