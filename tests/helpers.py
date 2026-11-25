@@ -32,6 +32,15 @@ from archibald.services import BaseService
 BASE_URL = "https://example.com/arcgis/rest/services/MyService/FeatureServer"
 SERVICE_PATH = "services/MyService/FeatureServer"
 MAP_LAYER_PATH = "services/MyService/MapServer"
+GEOCODE_SERVICE_PATH = "locators/City_Of_Boulder_Address_Locator/GeocodeServer"
+CITY_LOCATOR_PROPERTIES = {
+    "MinimumCandidateScore": 70,
+    "MinimumMatchScore": 75,
+    "SuggestedBatchSize": 150,
+    "MaxBatchSize": 500,
+    "LocatorVersion": "11.0",
+    "supportsBatchOutFields": "True",
+}
 STATUS_URL = f"{BASE_URL}/0/applyEdits/jobs/abc123"
 ESRI_ITEM_ERROR = {"code": 1016, "description": "Setting of value for SITEGUID failed."}
 ESRI_ROLLBACK_ERROR = {
@@ -123,6 +132,25 @@ def make_response(body: dict, *, status_code: int = 200) -> httpx.Response:
     response = httpx.Response(status_code, json=body)
     response.request = httpx.Request("GET", "https://example.com")
     return response
+
+
+def make_geocode_metadata(
+    capabilities: str | None = "Geocode,ReverseGeocode,Suggest",
+    locator_properties: dict | None = CITY_LOCATOR_PROPERTIES,
+) -> dict:
+    """GeocodeServer metadata modeled on the City locator capture.
+
+    Pass None for either argument to leave that key out entirely.
+    """
+    metadata: dict = {
+        "singleLineAddressField": {"name": "SingleLine", "type": "esriFieldTypeString"},
+        "spatialReference": {"wkid": 2876, "latestWkid": 2876},
+    }
+    if capabilities is not None:
+        metadata["capabilities"] = capabilities
+    if locator_properties is not None:
+        metadata["locatorProperties"] = dict(locator_properties)
+    return metadata
 
 
 def make_first_page(
