@@ -3,15 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
 
 from archibald.errors import failure_error
+from archibald.models._literals import EditKind, EditStatus
 
-EditKind = Literal["adds", "updates", "deletes"]
-"""Kind of edit an applyEdits result item belongs to."""
-
-EditStatus = Literal["succeeded", "failed", "unknown"]
-"""Outcome of a single edit, derived from ``success`` and ``error``."""
+__all__ = ["EditKind", "EditResultItem", "EditStatus"]
 
 
 @dataclass

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 import warnings
-from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any, get_args
 
@@ -12,6 +11,7 @@ import geopandas as gpd
 import pandas as pd
 
 from archibald.exceptions import InvalidParameterError
+from archibald.models._literals import validate_literal_values
 from archibald.models.edit_result_item import EditKind, EditResultItem, EditStatus
 
 __all__ = ["ApplyEditsResult", "EditKind", "EditResultItem", "EditStatus"]
@@ -96,8 +96,8 @@ class ApplyEditsResult:
         Raises:
             InvalidParameterError: If any kind or status is not a valid value.
         """
-        kind_set = self._filter_values(kinds, get_args(EditKind), "kinds")
-        status_set = self._filter_values(statuses, get_args(EditStatus), "statuses")
+        kind_set = validate_literal_values(kinds, EditKind, "kinds")
+        status_set = validate_literal_values(statuses, EditStatus, "statuses")
         kept = [
             item
             for item in self._items
@@ -320,38 +320,6 @@ class ApplyEditsResult:
             text = text + " " + details
         text = text.str.strip()
         return text.where(text != "")
-
-    @staticmethod
-    def _filter_values(
-        values: str | Sequence[str] | None, allowed: tuple[str, ...], name: str
-    ) -> set[str] | None:
-        """Validate one ``filter`` argument and return its values as a set.
-
-        Type checkers already reject invalid literals; this catches them at
-        runtime for callers who pass untyped strings.
-
-        Args:
-            values: One value (e.g. ``"adds"``), a list of values, or None.
-            allowed: Every valid value, i.e. ``get_args`` of the Literal.
-            name: The argument name (e.g. ``"kinds"``), quoted in the error.
-
-        Returns:
-            The values as a set, or None when ``values`` is None (no filter).
-
-        Raises:
-            InvalidParameterError: If any value is not in ``allowed``. The
-                message lists every invalid value and every valid one.
-        """
-        if values is None:
-            return None
-        items = {values} if isinstance(values, str) else set(values)
-        invalid = sorted(str(v) for v in items - set(allowed))
-        if invalid:
-            raise InvalidParameterError(
-                f"Invalid {name}: {', '.join(invalid)}. "
-                f"Expected one of: {', '.join(allowed)}."
-            )
-        return items
 
     @classmethod
     def _from_esri_response(cls, body: dict) -> ApplyEditsResult:
