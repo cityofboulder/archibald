@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import functools
-from typing import Any, Callable
+import warnings
+from typing import TYPE_CHECKING, Any, Callable
 
 import httpx
 
@@ -13,6 +14,9 @@ from archibald.exceptions import (
     TokenExpiredError,
     TokenMissingError,
 )
+
+if TYPE_CHECKING:
+    from archibald.models.edit_result_item import EditResultItem
 
 _ESRI_CODE_MAP: dict[int, type[ArcGISError]] = {
     498: TokenExpiredError,
@@ -62,6 +66,45 @@ def is_outcome_unknown(exc: Exception) -> bool:
     if isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)):
         return False
     return isinstance(exc, (httpx.TransportError, ValueError, KeyError, TimeoutError))
+
+
+def failed_items(
+    exc: Exception,
+    object_ids: list[int],
+    *,
+    outcome_unknown: bool,
+    status_url: str | None = None,
+) -> list[EditResultItem]:
+    """Build one failed EditResultItem per ID from a single request failure.
+
+    .. deprecated::
+        Internal to applyEdits and attachments; will be removed in 2.0. Use
+        ``failure_error`` for the error dict.
+
+    Args:
+        exc: Exception raised by the request.
+        object_ids: ID to report on each item, one item per ID.
+        outcome_unknown: Whether the server may have applied the request
+            anyway; ignored for ESRI error envelopes.
+        status_url: Async job status URL to report on each item, if any.
+
+    Returns:
+        List of ``success=False`` items in ``object_ids`` order, each carrying
+        the error dict from ``failure_error``.
+    """
+    from archibald.models.edit_result_item import EditResultItem
+
+    warnings.warn(
+        "failed_items is deprecated and will be removed in 2.0.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return [
+        EditResultItem._from_exception(
+            exc, object_id=oid, outcome_unknown=outcome_unknown, status_url=status_url
+        )
+        for oid in object_ids
+    ]
 
 
 def failure_error(
