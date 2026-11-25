@@ -342,10 +342,11 @@ Screening rules are pure functions `(text, ctx) -> Rejection | None`, keyed by n
 - [x] 1.2 Refactor: `errors.failure_error()` (D10a).
       - Envelope `ArcGISError` → its error dict (`{**error, "status_url": ...}` only when given);
         otherwise the dict `_from_exception` used to build.
-      - `EditResultItem._from_exception` builds its error with `failure_error`. `failed_items` was
-        **deleted**: it was a model factory living in `errors.py` (the cause of the import cycle).
-        Its callers (`apply_edits.py`, `attachments.py` ×2) call `_from_exception` directly, and
-        `errors.py` no longer imports models.
+      - `EditResultItem._from_exception` builds its error with `failure_error`. `failed_items` is
+        **deprecated** (shipped in 1.3.0, public by name; removal in 2.0): it was a model factory
+        living in `errors.py` (the cause of the import cycle). Its callers (`apply_edits.py`,
+        `attachments.py` ×2) call `_from_exception` directly; the deprecated wrapper keeps a
+        function-local `EditResultItem` import until 2.0.
       - No shared item superclass: edit and geocode items share only `error`. Revisit a base
         class for the located items (`crs` + `to_shapely()`) in Phases 4–6.
       - Tests: `TestFailedItems` became `TestFailureError` (same cases; the per-ID ordering test
@@ -471,7 +472,8 @@ Screening rules are pure functions `(text, ctx) -> Rejection | None`, keyed by n
       - min_score;
       - geocode → `layer.query(geometry=item.to_shapely(), in_sr=item.crs)`.
 - [ ] 7.3 CHANGELOG `Unreleased`: `Added`, plus `Changed` for the `LayerCapabilityError` parent and
-      the `query` geometry param. This can also be done per phase as separate `docs(changelog)`
+      the `query` geometry param, plus `Deprecated`: "`archibald.errors.failed_items()` emits
+      `DeprecationWarning` and will be removed in 2.0; use `failure_error()` for the error dict." This can also be done per phase as separate `docs(changelog)`
       commits.
 - [ ] 7.4 `scripts/smoke_test_geocode.py` against a City locator.
 - [ ] 7.5 `tests/integration/test_geocode_service.py` (respx, `@pytest.mark.integration`).
@@ -533,6 +535,7 @@ Screening rules are pure functions `(text, ctx) -> Rejection | None`, keyed by n
 | 2026-11-25 | Phase 1 detailed | none (no code) | Phase 1 bullets expanded. Frame helpers go to `serializers/_frames.py`, not `models/` (models are one class per module; serializers already holds module-level pandas helpers). Their direct tests move to `tests/serializers/test_frames.py` instead of keeping delegate methods. |
 | 2026-11-25 | 1.1 | `feat/geocode-foundations` c707441, e240954 | Exceptions added and exported; `TestHierarchy` reworked with ids. `RejectedAddressError` stays under `InvalidParameterError`. |
 | 2026-11-25 | 1.2 | `feat/geocode-foundations` bc10489, 28e1d72 | `failure_error` added; `failed_items` deleted (callers use `_from_exception`), so `errors.py` imports no models. Superclass for items rejected for now. |
+| 2026-11-25 | 1.2 follow-up | `feat/geocode-foundations` cd60130, 11b4c20 | `failed_items` restored as a deprecated wrapper instead of removed (shipped in 1.3.0; mirrors the `merge`/`from_esri_response` precedent). CHANGELOG entry queued in 7.3. |
 
 ## 11. Discovery tooling
 
